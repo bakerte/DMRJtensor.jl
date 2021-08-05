@@ -94,35 +94,6 @@ import LinearAlgebra
   include(join([filepath,"DMRG.jl"]))
   export DMRG
 
-  
-  include(join([filepath,"krylovblock.jl"]))
-  export krylovblock
-  include(join([filepath,"multiDMRG.jl"]))
-  export multiDMRG
-
-
-  include(join([filepath,"parallelDMRG.jl"]))
-  export parallelDMRG
-
-  include(join([filepath,"time.jl"]))
-  export mpstime
-#=
-  include(join([filepath,"infinite.jl"]))
-  export infinite
-=#
-  include(join([filepath,"classicalTN.jl"]))
-  export classicalTN
-#=
-  #student projects
-  include(join([filepath,"CQED.jl"]))
-  export CQED
-#  include(join([filepath,"DMFT.jl"]))
-#  export DMFT
-=#
-  include(join([filepath,"tJboson.jl"]))
-  export tJboson
-
-
 end
 
 using .DMRjulia
@@ -144,23 +115,3 @@ using .optimizeMPS
 
 
 using .DMRG
-
-
-using .krylovblock
-using .multiDMRG
-
-using .parallelDMRG
-
-
-
-using .tensornetwork
-using .classicalTN
-
-using .mpstime
-#=
-using .infinite
-
-using .CQED
-#using .DMFT
-=#
-using .tJboson
