@@ -14,7 +14,7 @@ include(join([path,"DMRjulia.jl"]))
 
 Ns = 10 #number of sites in MPS
 
-@composeQNs "fermion" U1 U1 #general format for quantum number initialization: U1 and Zn{x} also defined
+@makeQNs "fermion" U1 U1 #general format for quantum number initialization: U1 and Zn{x} also defined
 Qlabels = [[fermion(0,0),fermion(1,1),fermion(1,-1),fermion(2,0)]] #quantum number labels for Hubbard model
 
 Ne = 10 #number of electrons
