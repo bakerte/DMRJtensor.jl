@@ -1,12 +1,12 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.1
+#                              v1.0
 #
 #########################################################################
-# Made by Thomas E. Baker (2018)
+# Made by Thomas E. Baker (2020)
 # See accompanying license with this program
-# This code is native to the julia programming language (v1.1.0) or (v1.5)
+# This code is native to the julia programming language (v1.5.4+)
 #
 
 println("_________  _________ _       _ _")
@@ -17,35 +17,34 @@ println("| |/ /| |  | || |\\ \\| | |_| | | | (_| |")
 println("|___/ \\_|  |_/\\_| \\_| |\\__,_|_|_|\\__,_|")
 println("                   _/ |                ")
 println("                  |__/                 ")
-println("version 0.1")
-println("(made for julia v1.1.1+ (May 16, 2019), see included license)")
-println("Documentation: http://arxiv.org/abs/1911.11566 (introduction article)",)
-println("          and <<coming soon!>>",)
-println("Code: https://github.com/bakerte/dmrjulia",)
+println("version 1.0")
+println("(made for julia v1.5.4+ (March 11, 2021), see included license)")
+println()
+println("Code: https://github.com/bakerte/dmrjulia ")
+println()
+println("Documentation: T.E. Baker, S. Desrosiers, M. Tremblay, M.P. Thompson \"Méthodes de calcul avec réseaux de tenseurs en physique\" Canadian Journal of Physics 99, 4 (2021)")
+println("                 [ibid. \"Basic tensor network computations in physics\" https://arxiv.org/abs/1911.11566]")
+println("          and  T.E. Baker, M.P. Thompson \"\" arxiv: 2106.XXXX (basics of the library)")
+println("          and  T.E. Baker, A. Foley \"\" arxiv: 2106.XXXX (computations with Abelian quantum numbers)")
+#println("          and  (algorithms for DMRG)")
+#println("          and  (advanced tensor network algorithms)")
+#println("          and  (classical tensor network algorithms)")
 println("Funding for this program is graciously provided by:")
 println("   + Institut quantique (Université de Sherbrooke)")
+println("   + Département de physique, Université de Sherbrooke")
 println("   + Canada First Research Excellence Fund (CFREF)")
+println("   + Institut Transdisciplinaire d'Information Quantique (INTRIQ)")
+println("   + US-UK Fulbright Commission (Bureau of Education and Cultural Affairs from the United States Department of State)")
+println("   + Department of Physics, University of York")
 
 import LinearAlgebra
 
+println("Running the julia kernel with --check-bounds=no can decrease runtimes by 20%")
 juliathreads = Threads.nthreads()
-println("julia threads: ",juliathreads)
+println("julia threads: ",juliathreads,"    (modify with 'export JULIA_NUM_THREADS=')")
 LinearAlgebra.BLAS.set_num_threads(juliathreads)
-println("BLAS threads (set in DMRjulia.jl): ",juliathreads)
+#println("BLAS threads (set in DMRjulia.jl): ",juliathreads)
 #println("BLAS threads: ",ccall((:openblas_get_num_threads64_, Base.libblas_name), Cint, ()))
-println()
-println("Notes: v1.1.1 is faster (x2-3) than v1.2/1.3 (regression on parallelization: https://github.com/JuliaLang/julia/issues/32701)")
-println("  ---> Fixed! as of v1.5rc1 (June 26, 2020)")
-println("       Running the julia kernel with --check-bounds=no can decrease runtimes by 20%")
-println()
-
-println("This version (v0.1) computes the ground state, more methods are being documented and will be released soon")
-println("Timeline for full release of the library:")
-println("  + August-September 2020: Full documentation of ground-state")
-println("  + August-November 2020: Full release of time and other methods for the MPS")
-println("  + ~January 2021: More advanced solvers")
-println("Troubleshooting? Email: thomas.baker@usherbrooke.ca ")
-
 println()
 
 module DMRjulia
@@ -75,6 +74,11 @@ import LinearAlgebra
   include(join([filepath,"MPmaker.jl"]))
   export MPmaker
 
+
+
+  include(join([filepath,"tensornetwork.jl"]))
+  export tensornetwork
+
   filepath = "algs/"
 
   include(join([filepath,"optimizeMPS.jl"]))
@@ -84,8 +88,40 @@ import LinearAlgebra
   include(join([filepath,"Krylov.jl"]))
   export Krylov
 
+
+
+
   include(join([filepath,"DMRG.jl"]))
   export DMRG
+
+  
+  include(join([filepath,"krylovblock.jl"]))
+  export krylovblock
+  include(join([filepath,"multiDMRG.jl"]))
+  export multiDMRG
+
+
+  include(join([filepath,"parallelDMRG.jl"]))
+  export parallelDMRG
+
+  include(join([filepath,"time.jl"]))
+  export mpstime
+#=
+  include(join([filepath,"infinite.jl"]))
+  export infinite
+=#
+  include(join([filepath,"classicalTN.jl"]))
+  export classicalTN
+#=
+  #student projects
+  include(join([filepath,"CQED.jl"]))
+  export CQED
+#  include(join([filepath,"DMFT.jl"]))
+#  export DMFT
+=#
+  include(join([filepath,"tJboson.jl"]))
+  export tJboson
+
 
 end
 
@@ -100,7 +136,31 @@ using .Opt
 using .MPutil
 using .MPmaker
 
+
 using .Krylov
 
 using .optimizeMPS
+
+
+
 using .DMRG
+
+
+using .krylovblock
+using .multiDMRG
+
+using .parallelDMRG
+
+
+
+using .tensornetwork
+using .classicalTN
+
+using .mpstime
+#=
+using .infinite
+
+using .CQED
+#using .DMFT
+=#
+using .tJboson
