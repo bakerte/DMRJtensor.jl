@@ -51,7 +51,7 @@ Columns 3 and 4: couplings in a XXZ model
     hereQS = convert(Int64,2*spinmag+1)
     QS = cld(hereQS,2)
 
-    @composeQNs "spin" U1
+    @makeQNs "spin" U1
     Qlabels = [[spin(i) for i = QS:-2:-QS]]
     qmpo = makeqMPO(mpo,Qlabels)
     compressMPO!(qmpo)
