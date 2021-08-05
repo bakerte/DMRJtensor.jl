@@ -1,12 +1,12 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.1
+#                              v1.0
 #
 #########################################################################
-# Made by Thomas E. Baker (2018)
+# Made by Thomas E. Baker (2020)
 # See accompanying license with this program
-# This code is native to the julia programming language (v1.1.0) or (v1.5)
+# This code is native to the julia programming language (v1.5.4+)
 #
 
 """
@@ -18,21 +18,14 @@ See also: [`decompositions`](@ref)
 """
 module contractions
 using ..tensor
-using ..QN
-using ..Qtensor
-using ..Qtask
 import LinearAlgebra
 
-#       +------------------------+
-#>------|    Matrix multiply     |---------<
-#       +------------------------+
-
   """
-      blas_pick(C,D[,Z,alpha=,beta=])
+      libmult(C,D[,Z,alpha=,beta=])
   Chooses the best matrix multiply function for tensor contraction (dense tensor or sub-block)
   + Outputs alpha * C * D (+ beta * Z)
   """
-  function blas_pick(C::Array{W,2},D::Array{X,2},tempZ::Array{P,2}...;alpha::Number=1.,beta::Number=1.) where {W <: Number, X <: Number, P <: Number}
+  function libmult(C::Array{W,2},D::Array{X,2},tempZ::Array{P,2}...;alpha::Number=1.,beta::Number=1.) where {W <: Number, X <: Number, P <: Number}
     if length(tempZ) == 0
       if (eltype(C) == eltype(D)) && !(eltype(C) <: Integer)
         temp_alpha = typeof(alpha) <: eltype(C) ?  alpha : convert(eltype(C),alpha)
@@ -52,29 +45,41 @@ import LinearAlgebra
     end
     return retMat
   end
+  export libmult
 
-#=  """
-      scalarcontractor(A,B,conjA,conjB[,alpha=])
+#       +------------------------+
+#>------|    Matrix multiply     |---------<
+#       +------------------------+
 
-  Contract to a scalar; accepts conjugation on `A` (`conjA`) and `B` (`conjB`); accepts Qtensors
-  """=#
-  function scalarcontractor(A::AbstractArray,B::AbstractArray,conjA::Bool,conjB::Bool;alpha::Number=1.)
-    thissize = prod(size(A))
-    cA = conjA ? conj(A) : A
-    cB = conjB ? conj(B) : B
-    rA = reshape(cA,thissize)
-    rB = reshape(cB,thissize)
-    return alpha * sum(i->rA[i]*rB[i],1:thissize)
+  """
+      matrixequiv(X,Lsize,Rsize)
+
+  Reshapes tensor `X` into an `Lsize` x `Rsize` matrix
+  """
+  function matrixequiv(X::W,Lsize::intType,Rsize::intType) where W <: Union{AbstractArray,denstens}
+    return matrixequiv!(copy(X),Lsize,Rsize)
   end
 
-  function scalarcontractor(A::Number,B::P,conjA::Bool,conjB::Bool;alpha::Number=1.) where P <: Union{Number,TensType}
-    mA = conjA ? conj(A) : A
-    mB = conjB ? conj(B) : B
-    return mA * mB * alpha
+  """
+      matrixequiv!(X,Lsize,Rsize)
+
+  Reshapes tensor `X` into an `Lsize` x `Rsize` matrix in-place
+  """
+  function matrixequiv!(X::AbstractArray,Lsize::intType,Rsize::intType)
+    return reshape!(X,Lsize,Rsize)
   end
 
-  function scalarcontractor(A::TensType,B::Number,conjA::Bool,conjB::Bool;alpha::Number=1.)
-    return scalarcontractor(B,A,conjB,conjA;alpha=1.)
+  function matrixequiv!(X::denstens,Lsize::intType,Rsize::intType)
+    return reshape!(X.T,Lsize,Rsize)
+  end
+
+  function permutedims_2matrix!(X::AbstractArray,vec::Tuple,Lsize::intType,Rsize::intType)
+    xM = permutedims(X, vec)
+    return reshape!(xM,Lsize,Rsize)
+  end
+
+  function permutedims_2matrix!(X::denstens,vec::Tuple,Lsize::intType,Rsize::intType)
+    return permutedims_2matrix!(makeArray(X),vec,Lsize,Rsize)
   end
 
   """
@@ -82,232 +87,111 @@ import LinearAlgebra
 
   Forms the matrix-equivlanet of a tensor defined by `Lvec` indices forming the rows and `Rvec` indices forming the columns; toggle conjugate (`conjvar`)
   """
-  function prepareT(A::AbstractArray,Lvec::Array{intType,1},Rvec::Array{intType,1},conjvar::Bool)
-    vec = vcat(Lvec,Rvec)
+  function prepareT(A::P,Lvec::Tuple,Rvec::Tuple,conjvar::Bool) where P <: Union{AbstractArray,denstens}
+    vec = (Lvec...,Rvec...)
     Lsize = length(Lvec) > 0 ? prod(a->size(A,a),Lvec) : 1
     Rsize = length(Rvec) > 0 ? prod(a->size(A,a),Rvec) : 1
 
-    currTens = conjvar ? conj(A) : A
-    temp = !issorted(vec) ? permutedims(currTens,vec) : currTens
-    return reshape(temp,Lsize,Rsize)
-  end
+    issort = true
+    a = 1
+    while issort && a < length(Lvec)
+      a += 1
+      issort = Lvec[a-1] < Lvec[a]
+    end
+    if length(Rvec) > 0 && length(Lvec) > 0
+      issort = issort && Lvec[end] < Rvec[1]
+      a = 1
+    end
+    while issort && a < length(Rvec)
+      a += 1
+      issort = Rvec[a-1] < Rvec[a]
+    end
 
-  function arbTens(AB::Array{W,2},L::intType...) where W <: Number
-    return reshape(AB,L...)
+    if issort
+      if eltype(A) <: Complex && conjvar
+        out = matrixequiv(A,Lsize,Rsize)
+      else
+        out = matrixequiv!(A,Lsize,Rsize)
+      end
+    else
+      out = permutedims_2matrix!(A,vec,Lsize,Rsize)
+    end
+    if conjvar
+      conj!(out)
+    end
+    return out
   end
 
   """
-      mastercontractor(A,iA,B,iB,conjA,conjB[,Z,alpha=,beta=])
+    corecontractor(A,iA,B,iB,conjA,conjB,Z...[,alpha=,beta=])
 
   Primary contraction function.  Contracts `A` along indices `iA` to `B` along `iB`; toggle conjugation (`conjA` and `conjB`)
   """
-  function mastercontractor(A::AbstractArray,iA::Array{intType,1},B::AbstractArray,iB::Array{intType,1},
-                            conjA::Bool,conjB::Bool,Z::AbstractArray...;alpha::Number=1.,beta::Number=1.)
-    notvecA = setdiff([i for i = 1:ndims(A)],iA)
+  function corecontractor(conjA::Bool,conjB::Bool,A::P,iA::X,B::R,iB::Y,
+                          Z::S...;alpha::Number=1.,beta::Number=1.) where {X <: intvecType,Y <: intvecType,P <: Union{AbstractArray,denstens}, R <: Union{AbstractArray,denstens}, S <: Union{AbstractArray,denstens}}
+    notvecA = findnotcons(ndims(A),iA)
     C = prepareT(A,notvecA,iA,conjA)
-    notvecB = setdiff([i for i = 1:ndims(B)],iB)
+    notvecB = findnotcons(ndims(B),iB) 
     D = prepareT(B,iB,notvecB,conjB)
 
     if length(Z) > 0
       tempZ = reshape(Z[1],size(C,1),size(D,2))
-      CD = blas_pick(C,D,tempZ...,alpha=alpha,beta=beta)
+      CD = libmult(C,D,tempZ...,alpha=alpha,beta=beta)
     else
-      CD = blas_pick(C,D,alpha=alpha,beta=beta)
+      CD = libmult(C,D,alpha=alpha,beta=beta)
     end
 
-    notvecAsize = [size(A,w) for w in notvecA]
-    notvecBsize = [size(B,w) for w in notvecB]
-    outdims = ndims(A) + ndims(B) - length(iA) - length(iB)
-    AAsizes = Array{intType,1}(undef,outdims)
-    counter = 0
-    @simd for a = 1:length(notvecAsize)
-      counter += 1
-      AAsizes[counter] = notvecAsize[a]
+    AAsizes = ()
+    for w = 1:length(notvecA)
+      AAsizes = (AAsizes...,size(A,notvecA[w]))
     end
-    @simd for a = 1:length(notvecBsize)
-      counter += 1
-      AAsizes[counter] = notvecBsize[a]
+    for w = 1:length(notvecB)
+      AAsizes = (AAsizes...,size(B,notvecB[w]))
     end
-    return arbTens(CD,AAsizes...)
+    return CD,AAsizes
   end
 
-#       +------------------------+
-#>------| Quantum number version |---------<
-#       +------------------------+
+  """
+      maincontractor(A,iA,B,iB,conjA,conjB[,Z,alpha=,beta=])
 
-  function scalarcontractor(A::qarray,B::qarray,conjA::Bool,conjB::Bool;alpha::Number=1.)
-    quickout = 0.
-    if A.T == B.T
-      thisA = conjA ? conj(A.T) : A.T
-      thisB = conjB ? conj(B.T) : B.T
-      @simd for i = 1:size(thisA,1)
-        quickout += alpha * thisA[i] * thisB[i]
-      end
-    else
-      sortTensors!(A,B)
-      thisA = conjA && !(eltype(A.T) <: Real) ? conj(A.T) : A.T
-      thisB = conjB && !(eltype(B.T) <: Real) ? conj(B.T) : B.T
-      i,j = 1,1
-      while i <= size(A.ind,1) && j <= size(B.ind,1)
-        if A.ind[i] < B.ind[j]
-          i += 1
-        elseif A.ind[i] > B.ind[j]
-          j += 1
-        else #if A.ind[i] == B.ind[j]
-          quickout += alpha * thisA[i] * thisB[j]
-          i += 1
-          j += 1
-        end
-      end
-    end
-    return quickout
+  Primary contraction function.  Contracts `A` along indices `iA` to `B` along `iB`; toggle conjugation (`conjA` and `conjB`)
+  """
+  function maincontractor(conjA::Bool,conjB::Bool,A::AbstractArray,iA::X,B::AbstractArray,iB::Y,
+                            Z::AbstractArray...;alpha::Number=1.,beta::Number=1.) where {X <: intvecType,Y <: intvecType}
+    CD,AAsizes = corecontractor(conjA,conjB,A,iA,B,iB,Z...,alpha=alpha,beta=beta)
+    return reshape(CD,AAsizes)
   end
 
-  function mastercontractor(QtensA::Qtens{T,Q},vecA::Array{intType,1},QtensB::Qtens{R,Q},vecB::Array{intType,1},
-                            conjA::Bool,conjB::Bool,Z::Qtens{S,Q}...;alpha::Number=1.,
-                            beta::Number=1.) where {T <: Number, R <: Number, S <: Number, Q <: Qnum}    
-      if QtensA === QtensB && (conjA || conjB)
-        QtensB = copy(QtensA)
-      end
+  """
+      maincontractor(A,iA,B,iB,conjA,conjB[,Z,alpha=,beta=])
 
-
-      numthreads = Threads.nthreads()
-      firstout = resQtensInfo(QtensA,vecA,QtensB,vecB,numthreads)
-      conA,notconA,conB,notconB,sizeAA,nrowsA,ncolsA,nrowsB,ncolsB,currpos = firstout
-
-      Axypos = makeXYpos(QtensA,notconA,conA,currpos)
-      Bxypos = makeXYpos(QtensB,conB,notconB,currpos)
-
-      zeroQN = Q()
-
-      sumALsizes = length(notconA) > 0 ? prod(a->length(QtensA.QnumSum[a]),notconA) : 1
-      sumBRsizes = length(notconB) > 0 ? prod(a->length(QtensB.QnumSum[a]),notconB) : 1
-      twoLR = sumALsizes < sumBRsizes
-      
-      if twoLR
-        out = sumBlockInfo(QtensA,conA,notconA,conjA,sumALsizes,QtensB,currpos,ncolsA,conjB)
-        notconQnumSumA,conQnumSumA,conQnumSumB,notconQnumSumB,innerfinalxy,innercountsizes,qvec = out
-      else
-        out = sumBlockInfo(QtensB,conB,notconB,conjB,sumBRsizes,QtensA,currpos,nrowsB,conjA)
-        notconQnumSumB,conQnumSumB,conQnumSumA,notconQnumSumA,innerfinalxy,innercountsizes,qvec = out
-      end
-
-      if size(notconA,1) == 0
-        Afinalxy = intType[i for i = 1:size(QtensA.ind, 1)]
-        Acountsizes = intType[1]
-        AfinalQN = ones(intType, size(QtensA.ind, 1))
-        notconQnumSumA = Q[zeroQN]
-      else
-        Afinalxy,Acountsizes,AfinalQN = QBlock(QtensA,currpos,nrowsA,notconQnumSumA,notconA,QtensA.flux,qvec)
-      end
-      if size(notconB,1) == 0
-        Bfinalxy = intType[i for i = 1:size(QtensB.ind, 1)]
-        Bcountsizes = intType[1]
-        BfinalQN =  ones(intType, size(QtensB.ind, 1))
-        notconQnumSumB = Q[zeroQN]
-      else
-        Bfinalxy,Bcountsizes,BfinalQN = QBlock(QtensB,currpos,ncolsB,notconQnumSumB,notconB,QtensB.flux,qvec)
-      end
-
-      numElA = 0
-      numElB = 0
-      fullA = true
-      fullB = true
-      subblocksizes = zeros(intType,length(Acountsizes))
-      for x = 1:length(Acountsizes)
-        if innercountsizes[x] > 0
-          subblocksizes[x] = Acountsizes[x]*Bcountsizes[x]
-          numElA += Acountsizes[x]*innercountsizes[x]
-          numElB += innercountsizes[x]*Bcountsizes[x]
-        else
-          fullA = false
-          fullB = false
-        end
-      end
-      totRetSize = sum(subblocksizes)
-
-      retType = typeof(T(1)*R(1)) #size(QtensA.T,1) > 0 && size(QtensB.T,1) > 0 ? typeof(QtensA.T[1]*QtensB.T[1]) : Float64
-      newT = Array{retType,1}(undef,totRetSize)
-      newinds = Array{intType,1}(undef,totRetSize)
-
-      fullA = numElA == length(QtensA.ind) && fullA
-      fullB = numElB == length(QtensB.ind) && fullB
-
-      typeA,typeB = eltype(QtensA.T),eltype(QtensB.T)
-
-      if length(Z) != 0
-        altmaxindZ = size(Z[1].T,1)
-        altZbin = intType[w for w = 1:altmaxindZ]
-        Zxypos = makeXYpos(Z[1],[i for i = 1:size(notconA,1)],[i for i = 1:size(notconB,1)],currpos)
-        ZLinds = [i for i = 1:size(notconA,1)]
-        ZRinds = [i+size(notconA,1) for i = 1:size(notconB,1)]
-        conQnumSumZL = notconQnumSumA
-        conQnumSumZR = notconQnumSumB
-        ZLfinalxy,ZLcountsizes,ZLfinalQN = QBlock(Z[1],currpos,nrowsA,conQnumSumZL,ZLinds,zeroQN,qvec)
-        ZRfinalxy,ZRcountsizes,ZRfinalQN = QBlock(Z[1],currpos,ncolsB,conQnumSumZR,ZRinds,Z[1].flux,qvec)
-      end
-
-
-
-
-      newflux = conjA ? inv(QtensA.flux) : QtensA.flux
-      newflux += conjB ? inv(QtensB.flux) : QtensB.flux
-      newQtens = makenewQtens(retType[],intType[],QtensA,QtensB,conA,notconA,conB,notconB,sizeAA,newflux,conjA,conjB)
-
-
-      let fullA = fullA, typeA = typeA, fullB = fullB, typeB = typeB, numthreads = numthreads, Acountsizes = Acountsizes, Bcountsizes = Bcountsizes, 
-          innercountsizes = innercountsizes, QtensA = QtensA, QtensB = QtensB, Axypos = Axypos, Bxypos = Bxypos, AfinalQN = AfinalQN, BfinalQN = BfinalQN, 
-          nrowsA = nrowsA, newT = newT, newinds = newinds, alpha = alpha, beta = beta
-        #moderate memory increase when using parallelization like this...replace the "#=Threads.@threads=#" with "#=#=Threads.@threads=#=#" if this is an issue
-        Threads.@threads for x = 1:size(Acountsizes,1)
-          if Acountsizes[x] != 0 && innercountsizes[x] != 0 && Bcountsizes[x] != 0
-
-            submatA,retArows = loadSubmat(Acountsizes,Acountsizes,innercountsizes,numthreads,QtensA,Afinalxy,innerfinalxy,Axypos,AfinalQN,x,1,fullA,typeA)
-            submatB,retBcols = loadSubmat(Bcountsizes,innercountsizes,Bcountsizes,numthreads,QtensB,innerfinalxy,Bfinalxy,Bxypos,BfinalQN,x,2,fullB,typeB)
-
-            if conjA
-              conj!(submatA)
-            end
-            if conjB
-              conj!(submatB)
-            end
-
-            if length(Z) == 0
-              newmat = blas_pick(submatA,submatB,alpha=alpha)
-            else
-              submatZ = zeros(eltype(QtensZ.T),Acountsizes[x],Bcountsizes[x])
-              retZrows = QNsearch(submatZ,Z[1].T,ZLfinalxy,ZRfinalxy,Zxypos,1,ZLfinalQN,x,ZLcountsizes)
-              newmat = blas_pick(submatA,submatB,submatZ,alpha=alpha,beta=beta)
-            end
-
-            subcounter = x == 1 ? 0 : sum(y->subblocksizes[y],1:x-1)
-            retsubBlock!(nrowsA,retArows,retBcols,newT,newinds,newmat,subcounter)
-          end
-        end
-      end
-
-      newQtens.T = newT
-      newQtens.ind = newinds
-
-
-      return newQtens
+  Primary contraction function.  Contracts `A` along indices `iA` to `B` along `iB`; toggle conjugation (`conjA` and `conjB`)
+  """
+  function maincontractor(conjA::Bool,conjB::Bool,A::tens{X},iA::Tuple,B::tens{Y},iB::Tuple,
+                          Z::tens{W}...;alpha::Number=1.,
+                          beta::Number=1.) where {X <: Number, Y <: Number, W <: Number}
+    CD,AAsizes = corecontractor(conjA,conjB,A,iA,B,iB,Z...,alpha=alpha,beta=beta)
+    outType = typeof(X(1)*Y(1))
+    nelem = prod(size(CD))
+    return tens{outType}(AAsizes,reshape(CD,nelem))
   end
+  export maincontractor
 
 #       +----------------------------+
 #>------| Contraction function calls |---------<
 #       +----------------------------+
 
-  const TensNum = Union{Number,TensType}
-
   """
       contract(A[,B,alpha=])
-  Contracts to (alpha * A * B and returns a scalar output
+  Contracts to (alpha * A * B and returns a scalar output...if only `A` is specified, then the norm is evaluated
 
   See also: [`ccontract`](@ref) [`contractc`](@ref) [`ccontractc`](@ref)
   """
-  function contract(A::Q,B::R;alpha::Number=1.) where {Q <: TensNum,R <: TensNum}
+  function contract(A::Q,B::R;alpha::Number=1.) where {Q <: TensType,R <: TensType}
     mA,mB = checkType(A,B)
-    return scalarcontractor(mA,mB,false,false,alpha=alpha)
+    vec_in = ntuple(i->i,ndims(mA)) #[i for i = 1:ndims(mA)]
+    C = contract(mA,vec_in,mB,vec_in,alpha=alpha)
+    return searchindex(C,1,1)
   end
 
   """
@@ -316,9 +200,11 @@ import LinearAlgebra
 
   See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
   """
-  function ccontract(A::Q,B::R;alpha::Number=1.) where {Q <: TensNum,R <: TensNum}
+  function ccontract(A::Q,B::R;alpha::Number=1.) where {Q <: TensType,R <: TensType}
     mA,mB = checkType(A,B)
-    return scalarcontractor(mA,mB,true,false,alpha=alpha)
+    vec_in = ntuple(i->i,ndims(mA)) #[i for i = 1:ndims(mA)]
+    C = ccontract(mA,vec_in,mB,vec_in,alpha=alpha)
+    return searchindex(C,1,1)
   end
 
   """
@@ -327,9 +213,11 @@ import LinearAlgebra
 
   See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
   """
-  function contractc(A::Q,B::R;alpha::Number=1.) where {Q <: TensNum,R <: TensNum}
+  function contractc(A::Q,B::R;alpha::Number=1.) where {Q <: TensType,R <: TensType}
     mA,mB = checkType(A,B)
-    return scalarcontractor(mA,mB,false,true,alpha=alpha)
+    vec_in = ntuple(i->i,ndims(mA)) #[i for i = 1:ndims(mA)]
+    C = contractc(mA,vec_in,mB,vec_in,alpha=alpha)
+    return searchindex(C,1,1)
   end
 
   """
@@ -338,26 +226,28 @@ import LinearAlgebra
 
   See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
   """
-  function ccontractc(A::Q,B::R;alpha::Number=1.) where {Q <: TensNum,R <: TensNum}
+  function ccontractc(A::Q,B::R;alpha::Number=1.) where {Q <: TensType,R <: TensType}
     mA,mB = checkType(A,B)
-    return scalarcontractor(mA,mB,true,true,alpha=alpha)
+    vec_in = ntuple(i->i,ndims(mA)) #[i for i = 1:ndims(mA)]
+    C = ccontractc(mA,vec_in,mB,vec_in,alpha=alpha)
+    return searchindex(C,1,1)
   end
 
 
 
-  function contract(A::Q;alpha::Number=1.) where {Q <: TensNum}
+  function contract(A::Q;alpha::Number=1.) where {Q <: TensType}
     return contract(A,A,alpha=alpha)
   end
 
-  function ccontract(A::Q;alpha::Number=1.) where {Q <: TensNum}
+  function ccontract(A::Q;alpha::Number=1.) where {Q <: TensType}
     return ccontract(A,A,alpha=alpha)
   end
 
-  function contractc(A::Q;alpha::Number=1.) where {Q <: TensNum}
+  function contractc(A::Q;alpha::Number=1.) where {Q <: TensType}
     return contractc(A,A,alpha=alpha)
   end
 
-  function ccontractc(A::Q;alpha::Number=1.) where {Q <: TensNum}
+  function ccontractc(A::Q;alpha::Number=1.) where {Q <: TensType}
     return ccontractc(A,A,alpha=alpha)
   end
 
@@ -377,9 +267,9 @@ import LinearAlgebra
 
   See also: [`ccontract`](@ref) [`contractc`](@ref) [`ccontractc`](@ref)
   """
-  function contract(A::X,iA::O,B::Y,iB::P,Z::W...;alpha::Number=1.,beta::Number=1.) where {X <: TensType, Y <: TensType, W <: TensType, O <: intvecType, P <: intvecType}
+  function contract(A::TensType,iA::O,B::TensType,iB::P,Z::TensType...;alpha::Number=1.,beta::Number=1.) where {O <: intvecType, P <: intvecType}
     mA,mB = checkType(A,B)
-    return mastercontractor(mA,convIn(iA),mB,convIn(iB),false,false,Z...,alpha=alpha,beta=beta)
+    return maincontractor(false,false,mA,convIn(iA),mB,convIn(iB),Z...,alpha=alpha,beta=beta)
   end
 
   """
@@ -388,9 +278,9 @@ import LinearAlgebra
 
   See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
   """
-  function ccontract(A::X,iA::O,B::Y,iB::P,Z::W...;alpha::Number=1.,beta::Number=1.) where {X <: TensType, Y <: TensType, W <: TensType, O <: intvecType, P <: intvecType}
+  function ccontract(A::TensType,iA::O,B::TensType,iB::P,Z::TensType...;alpha::Number=1.,beta::Number=1.) where {O <: intvecType, P <: intvecType}
     mA,mB = checkType(A,B)
-    return mastercontractor(mA,convIn(iA),mB,convIn(iB),true,false,Z...,alpha=alpha,beta=beta)
+    return maincontractor(true,false,mA,convIn(iA),mB,convIn(iB),Z...,alpha=alpha,beta=beta)
   end
 
   """
@@ -399,9 +289,9 @@ import LinearAlgebra
 
   See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
   """
-  function contractc(A::X,iA::O,B::Y,iB::P,Z::W...;alpha::Number=1.,beta::Number=1.) where {X <: TensType, Y <: TensType, W <: TensType, O <: intvecType, P <: intvecType}
+  function contractc(A::TensType,iA::O,B::TensType,iB::P,Z::TensType...;alpha::Number=1.,beta::Number=1.) where {O <: intvecType, P <: intvecType}
     mA,mB = checkType(A,B)
-    return mastercontractor(mA,convIn(iA),mB,convIn(iB),false,true,Z...,alpha=alpha,beta=beta)
+    return maincontractor(false,true,mA,convIn(iA),mB,convIn(iB),Z...,alpha=alpha,beta=beta)
   end
 
   """
@@ -410,17 +300,18 @@ import LinearAlgebra
 
   See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
   """
-  function ccontractc(A::X,iA::O,B::Y,iB::P,Z::W...;alpha::Number=1.,beta::Number=1.) where {X <: TensType, Y <: TensType, W <: TensType, O <: intvecType, P <: intvecType}
+  function ccontractc(A::TensType,iA::O,B::TensType,iB::P,Z::TensType...;alpha::Number=1.,beta::Number=1.) where {O <: intvecType, P <: intvecType}
     mA,mB = checkType(A,B)
-    return mastercontractor(mA,convIn(iA),mB,convIn(iB),true,true,Z...,alpha=alpha,beta=beta)
+    return maincontractor(true,true,mA,convIn(iA),mB,convIn(iB),Z...,alpha=alpha,beta=beta)
   end
 
   """
       contract(order,A,iA,B,iB[,Z,alpha=,beta=])
   Permutes result of [`contract`](@ref) to `order`
   """
-  function contract(order::L,A::X,iA::O,B::Y,iB::P,Z::W...;alpha::Number=1.,beta::Number=1.) where {X <: TensType, Y <: TensType, W <: TensType, O <: intvecType, P <: intvecType, L <: intvecType}
-    newT = contract(A,iA,B,iB,Z...,alpha=alpha,beta=beta)
+  function contract(order::L,A::TensType,iA::O,B::TensType,iB::P,Z::TensType...;alpha::Number=1.,beta::Number=1.) where {O <: intvecType, P <: intvecType, L <: intvecType}
+    mA,mB = checkType(A,B)
+    newT = contract(mA,iA,mB,iB,Z...,alpha=alpha,beta=beta)
     return permutedims!(newT,convIn(order))
   end
 
@@ -428,7 +319,7 @@ import LinearAlgebra
       ccontract(order,A,iA,B,iB[,Z,alpha=,beta=])
   Permutes result of [`ccontract`](@ref) to `order`
   """
-  function ccontract(order::L,A::X,iA::O,B::Y,iB::P,Z::W...;alpha::Number=1.,beta::Number=1.) where {X <: TensType, Y <: TensType, W <: TensType, O <: intvecType, P <: intvecType, L <: intvecType}
+  function ccontract(order::L,A::TensType,iA::O,B::TensType,iB::P,Z::TensType...;alpha::Number=1.,beta::Number=1.) where {O <: intvecType, P <: intvecType, L <: intvecType}
     mA,mB = checkType(A,B)
     newT = ccontract(mA,iA,mB,iB,Z...,alpha=alpha,beta=beta)
     return permutedims!(newT,convIn(order))
@@ -438,7 +329,7 @@ import LinearAlgebra
       contractc(order,A,iA,B,iB[,Z,alpha=,beta=])
   Permutes result of [`contractc`](@ref) to `order`
   """
-  function contractc(order::L,A::X,iA::O,B::Y,iB::P,Z::W...;alpha::Number=1.,beta::Number=1.) where {X <: TensType, Y <: TensType, W <: TensType, O <: intvecType, P <: intvecType, L <: intvecType}
+  function contractc(order::L,A::TensType,iA::O,B::TensType,iB::P,Z::TensType...;alpha::Number=1.,beta::Number=1.) where {O <: intvecType, P <: intvecType, L <: intvecType}
     mA,mB = checkType(A,B)
     newT = contractc(mA,iA,mB,iB,Z...,alpha=alpha,beta=beta)
     return permutedims!(newT,convIn(order))
@@ -448,12 +339,11 @@ import LinearAlgebra
       ccontractc(order,A,iA,B,iB[,Z,alpha=,beta=])
   Permutes result of [`ccontractc`](@ref) to `order`
   """
-  function ccontractc(order::L,A::X,iA::O,B::Y,iB::P,Z::W...;alpha::Number=1.,beta::Number=1.) where {X <: TensType, Y <: TensType, W <: TensType, O <: intvecType, P <: intvecType, L <: intvecType}
+  function ccontractc(order::L,A::TensType,iA::O,B::TensType,iB::P,Z::TensType...;alpha::Number=1.,beta::Number=1.) where {O <: intvecType, P <: intvecType, L <: intvecType}
     mA,mB = checkType(A,B)
     newT = ccontractc(mA,iA,mB,iB,Z...,alpha=alpha,beta=beta)
     return permutedims!(newT,convIn(order))
   end
-
   export contract,ccontract,contractc,ccontractc
 
   """
@@ -491,114 +381,168 @@ import LinearAlgebra
 
 
 
+  #       +------------------------+
+  #>------| Quantum number version |---------<
+  #       +------------------------+
 
 
+  using ..QN
+  using ..Qtensor
+  using ..Qtask
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#         +-----------------+
-#>--------|  Contractions   |------<
-#         +-----------------+
-
-  import ..contractions.scalarcontractor
-  """
-    scalarcontractor(A,B,conjA,conjB[,alpha=])
-
-  Contract to a scalar; accepts conjugation on `A` (`conjA`) and `B` (`conjB`); accepts Qtensors
-  """
-  function scalarcontractor(A::denstens,B::denstens,conjA::Bool,conjB::Bool;alpha::Number=1.)
-    if conjA && conjB
-      P = conj(sum(i->A.T[i]*B.T[i],1:length(A.T)))
-    elseif conjA
-      P = sum(i->conj(A.T[i])*B.T[i],1:length(A.T))
-    elseif conjB
-      P = sum(i->A.T[i]*conj(B.T[i]),1:length(A.T))
-    else
-      P = sum(i->A.T[i]*B.T[i],1:length(A.T))
+  function remQN(Qvec::Array{Array{Q,1},1},vec::intvecType,conjvar::Bool) where Q <: Qnum
+    remAQ = Array{Array{Q,1},1}(undef,length(vec))
+    for q = 1:length(vec)
+      #=@inbounds=# remAQ[q] = Q[copy(Qvec[vec[q]][j]) for j = 1:length(Qvec[vec[q]])]
     end
-    return alpha * P
+    if conjvar
+      for q = 1:length(remAQ)
+        for j = 1:length(remAQ[q])
+          #=@inbounds=# inv!(remAQ[q][j])
+        end
+      end
+    end
+    return remAQ
   end
 
-  import ..contractions.prepareT
-  """
-      prepareT(A,Lvec,Rev,conjvar)
+  function computeQsum(A::Qtens{W,Q},Ablocks::Array{intType,1},LR::intType,Aqind::intType,conjvar::Bool) where {W <: Number, Q <: Qnum}
+    Asum = Q()
+    for w = 1:length(Ablocks)
+      @inbounds pos = Ablocks[w]
+      @inbounds index = A.ind[Aqind][LR][w,1] + 1
+      @inbounds Qnumber = A.QnumMat[pos][index]
+      @inbounds add!(Asum,getQnum(pos,index,A.QnumMat,A.QnumSum))
+    end
+    if conjvar
+      inv!(Asum)
+    end
+    return Asum
+  end
 
-  Forms the matrix-equivlanet of a tensor defined by `Lvec` indices forming the rows and `Rvec` indices forming the columns; toggle conjugate (`conjvar`)
-  """
-  function prepareT(A::denstens,Lvec::Array{intType,1},Rvec::Array{intType,1},conjvar::Bool)
-    vec = vcat(Lvec,Rvec)
-    if issorted(vec)
-      if conjvar
-        X = conj(A)
+
+  #  import Base.Threads.@spawn
+
+  const one = (1,)
+  const two = (2,)
+
+  function maincontractor(conjA::Bool,conjB::Bool,QtensA::Qtens{W,Q},vecA::Tuple,QtensB::Qtens{R,Q},vecB::Tuple,Z::Qtens{S,Q}...;alpha::Number=1.,beta::Number=1.) where {W <: Number, R <: Number, S <: Number, Q <: Qnum}
+      if QtensA === QtensB && ((conjA && W <: Complex) || (conjB && R <: Complex))
+        QtensB = copy(QtensA)
+      end
+      
+
+      conA,notconA = getinds(QtensA,vecA)
+      conB,notconB = getinds(QtensB,vecB)
+
+      taskA = Array{qarray,1}(undef,2)
+      #=Threads.@threads=# for w = 1:2
+        if w == 1
+          taskA[w] = changeblock(QtensA,notconA,conA,leftflux=true)
+        else
+          taskA[w] = changeblock(QtensB,conB,notconB,leftflux=false)
+        end
+      end
+
+      A = taskA[1]
+      B = taskA[2]
+
+
+      commonblocks = matchblocks((conjA,conjB),A,B)
+
+
+      if length(Z) > 0
+        Zone = [i for i = 1:length(notconA)]
+        Ztwo = [i + length(notconA) for i = 1:length(notconB)]
+        Zed = changeblock(Z[1],Zone,Ztwo)
+        Zcommonblocks = matchblocks((conjA,false),A,Zed)
       else
-        X = A
+        Zed = Z
       end
-    else
-      X = permutedims(A,vec)
-      if conjvar
-        conj!(X)
+
+      outType = typeof(W(1) * R(1))
+
+      numQNs = length(commonblocks)
+      outTens = Array{tens{outType},1}(undef,numQNs)
+
+      newrowcols = Array{Array{Array{intType,2},1},1}(undef,numQNs)
+      newQblocksum = Array{Array{Q,1},1}(undef,numQNs)
+
+      Ablocks = A.currblock[1]
+      Bblocks = B.currblock[2]
+
+#      let A = A, B = B, outTens = outTens, vecA = vecA, vecB = vecB, numQNs = numQNs, conjA = conjA, conjB = conjB, commonblocks = commonblocks, alpha = alpha, beta = beta, Zed = Zed
+        Threads.@threads for q = 1:numQNs
+          Aqind = commonblocks[q][1]
+          Bqind = commonblocks[q][2]
+
+          if length(Z) > 0
+            Zqind = Zcommonblocks[q][2]
+            resT = maincontractor(conjA,conjB,A.T[Aqind],two,B.T[Bqind],one,alpha=alpha,beta=beta,Zed.T[Zqind]...)
+          else
+            resT = maincontractor(conjA,conjB,A.T[Aqind],two,B.T[Bqind],one,alpha=alpha)
+          end
+
+          outTens[q] = tens{outType}(resT)
+
+          newrowcols[q] = [A.ind[Aqind][1],B.ind[Bqind][2]]
+
+          Asum = computeQsum(A,Ablocks,1,Aqind,conjA)
+          Bsum = computeQsum(B,Bblocks,2,Bqind,conjB)
+          newQblocksum[q] = [Asum,Bsum]
+        end
+#      end
+
+      remAQ = A.QnumMat[notconA] #remQN(A.QnumMat,notconA,conjA)
+      remBQ = B.QnumMat[notconB] #remQN(B.QnumMat,notconB,conjB)
+      newQnumMat = vcat(remAQ,remBQ)
+
+      sumAQ = remQN(A.QnumSum,notconA,conjA)
+      sumBQ = remQN(B.QnumSum,notconB,conjB)
+      newQnumSum = vcat(sumAQ,sumBQ)
+
+      notvecA = findnotcons(ndims(A),vecA)
+      notvecB = findnotcons(ndims(B),vecB)
+
+#      println(QtensA.size)
+
+#      println(QtensA.size[notvecA])
+#      println(QtensB.size[notvecB])
+      newsize = [Array{intType,1}(undef,length(QtensA.size[notvecA[w]])) for w = 1:length(notvecA)]
+      newsize = vcat(newsize,[Array{intType,1}(undef,length(QtensB.size[notvecB[w]])) for w = 1:length(notvecB)])
+      counter = 0
+      for w = 1:length(newsize)
+        for a = 1:length(newsize[w])
+          counter += 1
+          newsize[w][a] = counter
+        end
       end
-    end
-    Lsize = length(Lvec) > 0 ? prod(a->size(A,a),Lvec) : 1
-    Rsize = length(Rvec) > 0 ? prod(a->size(A,a),Rvec) : 1
-    return reshape(X.T,Lsize,Rsize)
+
+      keepers = [size(outTens[q],1) > 0 && size(outTens[q],2) > 0 for q = 1:length(outTens)]
+
+      newflux = conjA ? inv(QtensA.flux) : copy(QtensA.flux)
+      newflux += conjB ? inv(QtensB.flux) : copy(QtensB.flux)
+
+      newcurrblocks = [[i for i = 1:length(notconA)],[i + length(notconA) for i = 1:length(notconB)]]
+
+      if sum(keepers) < length(keepers)
+        newT = outTens[keepers]
+        newinds = newrowcols[keepers]
+        newQblocks = newQblocksum[keepers]
+      else
+        newT = outTens
+        newinds = newrowcols
+        newQblocks = newQblocksum
+      end
+
+      newQtensOutput = Qtens{outType,Q}(newsize,newT,newinds,newcurrblocks,newQblocks,newQnumMat,newQnumSum,newflux)
+
+      return newQtensOutput
   end
 
-  import ..contractions.blas_pick
-  """
-      mastercontractor(A,iA,B,iB,conjA,conjB[,Z,alpha=,beta=])
 
-  Primary contraction function.  Contracts `A` along indices `iA` to `B` along `iB`; toggle conjugation (`conjA` and `conjB`)
-  """
-  function mastercontractor(A::tens{X},iA::Array{intType,1},B::tens{Y},iB::Array{intType,1},
-                          conjA::Bool,conjB::Bool,Z::tens{W}...;alpha::Number=1.,
-                          beta::Number=1.) where {X <: Number, Y <: Number, W <: Number}
-    notvecA = setdiff([i for i = 1:ndims(A)],iA)
-    C = prepareT(A,notvecA,iA,conjA)
-    notvecB = setdiff([i for i = 1:ndims(B)],iB)
-    D = prepareT(B,iB,notvecB,conjB)
-
-    if length(Z) > 0
-      tempZ = reshape(Z[1],size(C,1),size(D,2))
-      CD = blas_pick(C,D,tempZ...,alpha=alpha,beta=beta)
-    else
-      CD = blas_pick(C,D,alpha=alpha,beta=beta)
-    end
-
-    notvecAsize = [size(A,w) for w in notvecA]
-    notvecBsize = [size(B,w) for w in notvecB]
-    AAsizes = vcat(notvecAsize,notvecBsize)
-    outType = typeof(X(1)*Y(1))
-    nelem = prod(size(CD))
-    return tens{outType}(AAsizes,reshape(CD,nelem))
-  end
+#         +-----------------+
+#>--------|  Check contract |------<
+#         +-----------------+
 
 
   function checkcontract(A::X,iA::O,B::Y,iB::P,Z::W...;alpha::Number=1.,beta::Number=1.) where {X <: TensType, Y <: TensType, W <: TensType, O <: intvecType, P <: intvecType}
@@ -614,14 +558,17 @@ import LinearAlgebra
       checkflux(mA)
       checkflux(mB)
       for a = 1:length(iA)
+        AQNs = recoverQNs(iA[a],A)
+        BQNs = recoverQNs(iB[a],B)
         println("contracted index $a")
-        if mA.QnumMat[iA[a]] == mB.QnumMat[iB[a]]
-          println("equal quantum numbers on indices on index ",iA[a]," of A and index ",iB[a]," of B")
+        if AQNs[iA[a]] == inv.(BQNs[iB[a]])
+          println("matching quantum numbers on indices on index ",iA[a]," of A and index ",iB[a]," of B")
         else
-          error("unequal quantum numbers on indices on index ",iA[a]," of A and index ",iB[a]," of B")
+          error("unmatching quantum numbers on indices on index ",iA[a]," of A and index ",iB[a]," of B")
         end
       end
     end
     nothing
   end
+  export checkcontract
 end

@@ -1,12 +1,12 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.1
+#                              v1.0
 #
 #########################################################################
-# Made by Thomas E. Baker (2018)
+# Made by Thomas E. Baker (2020)
 # See accompanying license with this program
-# This code is native to the julia programming language (v1.1.0) or (v1.5)
+# This code is native to the julia programming language (v1.1.1+)
 #
 
 """
@@ -24,9 +24,9 @@ import LinearAlgebra
     + equivalent: spinOps(s=0.5), spinOps(0.5)
   """
   function spinOps(;s=0.5)
-    QS = convert(Int64,2*s+1) #number of quantum states
+    states = convert(Int64,2*s+1) #number of quantum states
 
-    O = zeros(Float64,QS,QS) #zero matrix
+    O = zeros(Float64,states,states) #zero matrix
     Id = copy(O) + LinearAlgebra.I #identity matrix
     oz = copy(O) # z operator
     op = copy(O) # raising operator
@@ -42,17 +42,19 @@ import LinearAlgebra
 
     return ox,oy,oz,op,om,O,Id
   end
+  
   function spinOps(a::Float64)
     return spinOps(s=a)
   end
+  export spinOps
 
   """
       fermionOps()
   Make fermion operators
   """
   function fermionOps()
-    QS = 4 #fock space size
-    O = zeros(Float64,QS,QS) #zero matrix
+    states = 4 #fock space size
+    O = zeros(Float64,states,states) #zero matrix
     Id = copy(O)+LinearAlgebra.I #identity
 
     Cup = copy(O) #annihilate (up)
@@ -73,6 +75,7 @@ import LinearAlgebra
 
     return Cup,Cdn,Nup,Ndn,Ndens,F,O,Id
   end
+  export fermionOps
 
   """
       tJOps()
@@ -81,15 +84,15 @@ import LinearAlgebra
   function tJOps()
     #many of the Hubbard operators can be truncated
     Cup,Cdn,Nup,Ndn,Ndens,F,O,Id = fermionOps()
-    QS = 3 #fock space size
-    Cup = Cup[1:QS,1:QS]
-    Cdn = Cdn[1:QS,1:QS]
-    Nup = Nup[1:QS,1:QS]
-    Ndn = Ndn[1:QS,1:QS]
-    Ndens = Ndens[1:QS,1:QS]
-    F = F[1:QS,1:QS]
-    O = O[1:QS,1:QS]
-    Id = Id[1:QS,1:QS]
+    states = 3 #fock space size
+    Cup = Cup[1:states,1:states]
+    Cdn = Cdn[1:states,1:states]
+    Nup = Nup[1:states,1:states]
+    Ndn = Ndn[1:states,1:states]
+    Ndens = Ndens[1:states,1:states]
+    F = F[1:states,1:states]
+    O = O[1:states,1:states]
+    Id = Id[1:states,1:states]
   
     Sz = copy(O) #z-spin operator
     Sz[2,2] = 0.5
@@ -101,6 +104,5 @@ import LinearAlgebra
   
    return Cup,Cdn,Nup,Ndn,Ndens,F,Sz,Sp,Sm,O,Id
   end
-
-  export  spinOps,fermionOps,tJOps
+  export tJOps
 end

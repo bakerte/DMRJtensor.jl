@@ -1,12 +1,12 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.1
+#                              v1.0
 #
 #########################################################################
-# Made by Thomas E. Baker (2018)
+# Made by Thomas E. Baker (2020)
 # See accompanying license with this program
-# This code is native to the julia programming language (v1.1.0) or (v1.5)
+# This code is native to the julia programming language (v1.1.1+)
 #
 
 """
@@ -19,51 +19,16 @@ See also: [`Qtask`](@ref)
 module Qtensor
 using ..tensor
 using ..QN
-using SparseArrays
 import LinearAlgebra
 
-  """
-      qarray
-
-  Abstract type for either Qtensors
-
-  See also: [`Qtens`](@ref)
-  """
-  abstract type qarray end
-  export qarray
-
-  """
-      TensType
-
-  Abstract type for either Qtensors or AbstractArrays (dense tensors)
-
-  See also: [`Qtens`](@ref)
-  """
-  const TensType = Union{qarray,denstens,AbstractArray}
-  export TensType
-
+  import .tensor.checkType
   """
       checkType(A,B)
   
   Checks types between `A` and `B` to make uniform (ex: Array and denstens converts to two denstens)
   """
-  function checkType(A::R,B::S) where {R <: Union{Number,TensType}, S <: Union{Number,TensType}}
-    if typeof(A) <: denstens || typeof(B) <: denstens
-      if typeof(A) <: denstens && !(typeof(B) <: denstens)
-        mA = A
-        mB = tens(typeof(B) <: Union{qarray,Array} ? B : Array(B))
-      elseif !(typeof(A) <: denstens) && typeof(B) <: denstens
-        mA = tens(typeof(A) <: Union{qarray,Array} ? A : Array(A))
-        mB = B
-      else
-        mA = A
-        mB = B
-      end
-    else
-      mA = typeof(A) <: Union{qarray,Array} ? A : Array(A)
-      mB = typeof(B) <: Union{qarray,Array} ? B : Array(B)
-    end
-    return mA,mB
+  function checkType(A::qarray,B::qarray)
+    return A,B
   end
   export checkType
 
@@ -74,7 +39,6 @@ import LinearAlgebra
 
   # Fields:
   + `size::Array{intType,1}`: size of base tensor (unreshaped)
-  + `Qsize::Array{Array{intType,1},1}`: stores original indices of the vector as a vector of vectors, ex: [[1 2],[3]] means that 1 and 2 were combined
   + `T::Array{Z,1}`: Array containing non-zero blocks' values of the tensor
   + `ind::Array{intType,1}`: indices of the stored values
   + `QnumMat::Array{Array{Q,1},1}`: quantum numbers on each index
@@ -82,17 +46,18 @@ import LinearAlgebra
   + `flux::Q`: total quantum number flux on tensor
   + `conjugated::Bool`: toggle to conjugate tensor without flipping all fluxes
 
-  See also: [`Qnum`](@ref) [`convertTensor`](@ref) [`checkflux`](@ref)
+  See also: [`Qnum`](@ref) [`makedens`](@ref) [`checkflux`](@ref)
   """
-  mutable struct Qtens{Z <: Number,Q <: Qnum} <: qarray
-    size::Array{intType,1} #the size of the tensor if it were represented densely
-    Qsize::Array{Array{intType,1},1} #stores original indices of the vector as a vector of vectors, ex: [[1 2],[3]] means that 1 and 2 were combined
+  mutable struct Qtens{W <: Number,Q <: Qnum} <: qarray
+    size::Array{Array{intType,1},1} #the size of the tensor if it were represented densely
     #^This is an array since it can change on reshape
-    T::Array{Z,1}
-    ind::Array{intType,1}
-    QnumMat::Array{Array{Q,1},1} #quantum numbers on each index
+    T::Array{tens{W},1}
+    ind::Array{Array{Array{intType,2},1},1}
+    currblock::Array{Array{intType,1},1}
+    Qblocksum::Array{Array{Q,1},1}
+    QnumMat::Array{Array{intType,1},1} #quantum numbers on each index
     QnumSum::Array{Array{Q,1},1} #summary of indices on each index
-    flux::Q #sum of QNs on all other indices, acts like an extra index with an inward arrow (that is never contractd over)
+    flux::Q #flux = sum of other indices
   end
   export Qtens
 
@@ -106,59 +71,160 @@ import LinearAlgebra
   end
  
   """
-      Qtens(Qlabels[,arrows,Type=])
+      Qtens(Qlabels[,arrows,datatype=])
 
   Creates empty `Qtens` with array type `Type` (default Float64), quantum number labels given by `Qlabels` and arrow convention `arrows`; can be conjugated (`conjugated`)
   """
-  function Qtens(Qlabels::Array{Array{W,1},1}, arrows::U...;Type::DataType=Float64)::qarray where {W <: Qnum, U <: Union{Bool,Array{Bool,1}}}
+  function Qtens(Qlabels::Array{Array{Q,1},1}, flux::Q, arrows::U...;datatype::DataType=Float64,currblock::Array{Array{intType,1},1}=equalblocks(Qlabels))::qarray where {Q <: Qnum, U <: Union{Bool,Array{Bool,1}}}
     if length(arrows) > 0
-      QnumMat = [arrows[1][a] ? Qlabels[a] : inv.(Qlabels[a]) for a = 1:length(arrows[1])]
+      QnumMat = Array{Q,1}[arrows[1][a] ? Qlabels[a] : inv.(Qlabels[a]) for a = 1:length(arrows[1])]
     else
       QnumMat = Qlabels
     end
 
-    T = Type[]
-    ind = intType[]
-    flux = typeof(QnumMat[1][1])()
-    return Qtens(T, ind, QnumMat, flux)
+    T = tens{datatype}[]
+    ind = Array{Array{intType,1},1}[]
+    return Qtens(T,ind,currblock,QnumMat, flux)
+  end
+
+  function Qtens(Qlabels::Array{Array{Q,1},1}, arrows::U...;datatype::DataType=Float64,currblock::Array{Array{intType,1},1}=equalblocks(Qlabels))::qarray where {Q <: Qnum, U <: Union{Bool,Array{Bool,1}}}
+    flux = Q()
+    return Qtens(Qlabels, flux, arrows...,currblock = currblock,datatype=datatype)
   end
 
   """
-      Qtens(T,ind,QnumMat[,arrows])
+      Qtens(T,ind,currblock,QnumMat[,arrows])
 
   constructor for Qtensor with non-zero values `T`, indices `ind`, quantum numbers `QnumMat`; optionally assign `arrows` for indices or conjugate the tensor (`conjugated`)
+
+  If `currblock` is not known, provide a set of tensors `T` of size 1x(dimension of the tensor) and set currblock = [[1],[2,3,4,5...]]
   """
-  function Qtens(T::Array{Z,1}, ind::Array{intType,1}, QnumMat::Array{Array{Q,1},1},
-                  arrows::U...;conjugated::Bool=false)::qarray where {Z <: Number,Q <: Qnum, U <: Union{Bool,Array{Bool,1}}}
+  function Qtens(T::Array{tens{Z},1}, ind::Array{Array{Array{intType,1},1},1}, currblock::Array{Array{intType,1},1}, 
+                  QnumMat::Array{Array{Q,1},1},arrows::U...;conjugated::Bool=false)::qarray where {Z <: Number,Q <: Qnum, U <: Union{Bool,Array{Bool,1}}}
     if length(ind) > 0
-      currpos = ind2pos(ind[1])
       if length(arrows) == 0
-        thisQN = [QnumMat[a][currpos[a]] for a = 1:length(QnumMat)]
+        thisQN = [QnumMat[a][ind[1][a]] for a = 1:length(QnumMat)]
       else
-        thisQN = [arrows[1][a] ? QnumMat[a][currpos[a]] : inv(QnumMat[a][currpos[a]]) for a = 1:length(QnumMat)]
+        thisQN = [arrows[1][a] ? QnumMat[a][ind[1][a]] : inv(QnumMat[a][ind[1][a]]) for a = 1:length(QnumMat)]
       end
       flux = sum(thisQN)
     else
       flux = Q()
     end
-    newsize = [length(QnumMat[a]) for a = 1:length(QnumMat)]
-    return Qtens{Z,Q}(newsize,[[i] for i = 1:size(QnumMat, 1)], T, ind, QnumMat, unique.(QnumMat), flux)
+    newsize = [[i] for i = 1:length(QnumMat)] #ntuple(a->length(QnumMat[a]),length(QnumMat))
+    Qblocksum = Array{Q,1}[]
+    finalQnumMat, QnumSum = convertQnumMat(QnumMat)
+    return Qtens{Z,Q}(newsize, T, ind, currblock, Qblocksum, finalQnumMat, QnumSum, flux)
   end
 
   """
-      Qtens(T,ind,QnumMat,flux[,arrows])
+      Qtens(T,ind,currblock,QnumMat,flux[,arrows])
 
   constructor for Qtensor with non-zero values `T`, indices `ind`, total flux `flux`, quantum numbers `QnumMat`; optionally assign `arrows` for indices or conjugate the tensor (`conjugated`)
+
+  If `currblock` is not known, provide a set of tensors `T` of size 1x(dimension of the tensor) and set currblock = [[1],[2,3,4,5...]]
   """
-  function Qtens(T::Array{Z,1}, ind::Array{intType,1}, QnumMat::Array{Array{Q,1},1},
+  function Qtens(T::Array{tens{Z},1}, ind::Array{Array{Array{intType,1},1},1}, currblock::Array{Array{intType,1},1}, QnumMat::Array{Array{Q,1},1},
                   flux::Q,arrows::U...)::qarray where {Z <: Number,Q <: Qnum, U <: Union{Bool,Array{Bool,1}}}
     if length(arrows) == 0
       newQnumMat = QnumMat
     else
       newQnumMat = [arrows[1][a] ? QnumMat[a] : inv.(QnumMat[a]) for a = 1:length(QnumMat)]
     end
-    newsize = [length(QnumMat[a]) for a = 1:length(QnumMat)]
-    return Qtens{Z,Q}(newsize,[[i] for i = 1:size(QnumMat, 1)], T, ind, newQnumMat, unique.(newQnumMat), flux)
+    newsize = [[i] for i = 1:length(newQnumMat)]
+    Qblocksum = Array{Q,1}[]
+
+    finalQnumMat,QnumSum = convertQnumMat(newQnumMat)
+    return Qtens{Z,Q}(newsize, T, ind, currblock, Qblocksum, finalQnumMat, unique.(QnumSum), flux)
+  end
+
+  function convertQnumMat(QnumMat::Array{Array{Q,1},1}) where Q <: Qnum
+    QnumSum = unique.(QnumMat)
+    return convertQnumMat(QnumMat,QnumSum),QnumSum
+  end
+
+  function convertQnumMat(QnumMat::Array{Array{Q,1},1},QnumSum::Array{Array{Q,1},1}) where Q <: Qnum
+    finalQnumMat = [Array{intType,1}(undef,length(QnumMat[i])) for i = 1:length(QnumMat)]
+    for i = 1:length(QnumMat)
+      for w = 1:length(QnumMat[i])
+        y = 0
+        notmatchingQN = true
+        while notmatchingQN
+          y += 1
+          notmatchingQN = QnumMat[i][w] != QnumSum[i][y]
+        end
+        finalQnumMat[i][w] = y
+      end
+    end
+    return finalQnumMat
+  end
+  export convertQnumMat
+
+  """
+    equalblocks(A)
+
+  Proposes a block structure that makes the matrix equivalent approximate equal in both number of rows and columns
+  """
+  function equalblocks(A::Array{Array{Q,1},1}) where Q <: Qnum
+    sizes = ntuple(q->length(A[q]),length(A))
+    return equalblocks(sizes)
+  end
+
+  function equalblocks(sizes::Tuple) where Q <: Qnum
+    row = sizes[1]
+    column = prod(sizes) ÷ row
+    i = 1
+    while row < column && i < length(sizes) - 1
+      i += 1
+      row *= sizes[i]
+      column ÷= sizes[i]
+    end
+    return [[w for w = 1:i],[w for w = i+1:length(sizes)]]
+  end
+
+  function equalblocks(A::qarray)
+    Rsize = A.size
+    sizes = ntuple(q->prod(w->length(A.QnumMat[w]),Rsize[q]),length(Rsize))
+    return equalblocks(sizes)
+  end
+
+  function recoverQNs(q::Integer,QnumMat::Array{Array{intType,1},1},QnumSum::Array{Array{Q,1},1}) where Q <: Qnum
+    finalQnumMat = Array{Q,1}(undef,length(QnumMat[q]))
+    for i = 1:length(QnumMat[q])
+      finalQnumMat[i] = getQnum(q,i,QnumMat,QnumSum)
+    end
+    return finalQnumMat
+  end
+
+  function recoverQNs(q::Integer,Qt::Qtens{W,Q}) where {W <: Number, Q <: Qnum}
+    return recoverQNs(q,Qt.QnumMat,Qt.QnumSum)
+  end
+  export recoverQNs
+
+  function fullQnumMat(QnumMat::Array{Array{intType,1},1},QnumSum::Array{Array{Q,1},1}) where Q <: Qnum
+    finalQnumMat = [recoverQNs(q,QnumMat,QnumSum) for q = 1:length(QnumMat)]
+    return finalQnumMat
+  end
+
+  function fullQnumMat(Qt::Qtens{W,Q}) where {W <: Number, Q <: Qnum}
+    return fullQnumMat(Qt.QnumMat,Qt.QnumSum)
+  end
+  export fullQnumMat
+
+  """
+      Qtens(operator,QnumMat[,Arrows,zero=])
+
+  Creates a dense `operator` as a Qtensor with quantum numbers `QnumMat` on each index (`Array{Array{Q,1},1}`) according to arrow convention `Arrows` and all elements equal to `zero` are not included (default 0)
+  """
+  function Qtens(optens::denstens,Qtensor::qarray;zero::Number=0.,currblock::Array{Array{intType,1},1}=Qtensor.currblock)
+    Op = makeArray(optens)
+    finalQnumMat = fullQnumMat(Qtensor.QnumMat,Qtensor.QnumSum)
+    return Qtens(Op,finalQnumMat,zero=zero,currblock=currblock)
+  end
+
+  function Qtens(optens::AbstractArray,Qtensor::qarray;zero::Number=0.,currblock::Array{Array{intType,1},1}=Qtensor.currblock)
+    finalQnumMat = fullQnumMat(Qtensor.QnumMat,Qtensor.QnumSum)
+    return Qtens(optens,finalQnumMat,zero=zero,currblock=currblock)
   end
 
   """
@@ -166,42 +232,160 @@ import LinearAlgebra
 
   Creates a dense `operator` as a Qtensor with quantum numbers `QnumMat` on each index (`Array{Array{Q,1},1}`) according to arrow convention `Arrows` and all elements equal to `zero` are not included (default 0)
   """
-  function Qtens(operator::AbstractArray,Qlabels::Array{Array{Q,1},1},Arrows::U...;zero::Number=0.) where {Q <: Qnum, U <: Union{Bool,Array{Bool,1}}}
-    if length(Arrows) > 0
-      QnumMat = [Arrows[1][a] ? Qlabels[a] : inv.(Qlabels[a]) for a = 1:length(Qlabels)]
-    else
-      QnumMat = Qlabels
-    end
-    coords = findall(x->abs(x)>zero,operator)
-    thisrank = ndims(operator)
-    thisflux = sum(a->QnumMat[a][coords[1][a]],1:thisrank)
-    newsize = intType[size(operator,a) for a = 1:thisrank]
-    newT = Array{eltype(operator),1}(undef,length(coords))
-    newpos = Array{intType,1}(undef,length(coords))
-    let coords = coords, thisrank=thisrank, operator = operator,newsize = newsize, newT = newT, newpos = newpos
-      Threads.@threads  for w = 1:length(coords)
-        currpos = [coords[w][p] for p = 1:thisrank]
-        newT[w] = operator[currpos...]
-        newpos[w] = pos2ind(currpos,newsize)
+  function Qtens(Op::R,Qlabels::Array{Array{Q,1},1},Arrows::U...;zero::Number=0.,currblock::Array{Array{intType,1},1}=equalblocks(Qlabels),leftflux::Bool=false,datatype::DataType=eltype(Op)) where {Q <: Qnum, W <: Number, R <: Union{denstens,AbstractArray}, U <: Union{Bool,Array{Bool,1}}}
+    theseArrows = typeof(Arrows) <: Bool ? Arrows : (Arrows[1]...,)
+    newQnumMat = [theseArrows[q] ? Qlabels[q] : inv.(Qlabels[q]) for q = 1:length(Qlabels)]
+    return Qtens(Op,newQnumMat;zero=zero,currblock=currblock,leftflux=leftflux,datatype=datatype)
+  end
+
+
+  function Qtens(Op::R,Qlabels::Array{Array{Q,1},1},Arrows::U...;zero::Number=0.,currblock::Array{Array{intType,1},1}=equalblocks(Qlabels),leftflux::Bool=false,datatype::DataType=eltype(Op)) where {Q <: Qnum, W <: Number, R <: Union{denstens,AbstractArray}, U <: Union{Bool,Array{Bool,1}}}
+    theseArrows = typeof(Arrows) <: Bool ? Arrows : (Arrows[1]...,)
+    newQnumMat = [theseArrows[q] ? Qlabels[q] : inv.(Qlabels[q]) for q = 1:length(Qlabels)]
+    return Qtens(Op,newQnumMat;zero=zero,currblock=currblock,leftflux=leftflux,datatype=datatype)
+  end
+
+  function Qtens(Qlabels::Array{Array{Q,1},1},Op::R...;zero::Number=0.,currblock::Array{Array{intType,1},1}=equalblocks(Qlabels),leftflux::Bool=false,datatype::DataType=eltype(Op)) where {Q <: Qnum, W <: Number, R <: Union{denstens,AbstractArray}, U <: Union{Bool,Array{Bool,1}}}
+    return ntuple(w->Qtens(Op[w],Qlabels,zero=zero,currblock=currblock,leftflux=leftflux,datatype=datatype),length(Op))
+  end
+
+  function Qtens(Op::R,Qlabels::Array{Array{Q,1},1};zero::Number=0.,currblock::Array{Array{intType,1},1}=equalblocks(Qlabels),leftflux::Bool=false,datatype::DataType=eltype(Op)) where {Q <: Qnum, W <: Number, R <: Union{denstens,AbstractArray}}
+    pLinds = currblock[1]
+    pRinds = currblock[2]
+
+#    println(pLinds)
+#    println(pRinds)
+
+    sizes = size(Op)
+
+    Op_mat = reshape(makeArray(Op),[pLinds,pRinds])
+  
+    pos = makepos(length(sizes))
+    currval = 0
+    saveval = 0
+    savepos = Int64[]
+    for x = 1:length(Op_mat)
+      position_incrementer!(pos,sizes)
+      if abs(Op_mat[x]) > currval
+        currval = abs(Op_mat[x])
+        saveval = x
+        savepos = copy(pos)
       end
     end
-    newQtens = Qtens(newT,newpos,QnumMat,thisflux)
-    return newQtens
+    x = saveval
+    pos = savepos
+    invflux = sum(w->Qlabels[w][pos[w]],1:length(pos))
+
+    outtype = eltype(Op_mat)
+    Qt = Qtens(Qlabels,datatype=outtype)
+
+
+    Qt.flux = copy(invflux)
+    Qt.currblock = currblock
+  
+    Lsizes = sizes[pLinds]
+    Rsizes = sizes[pRinds]
+  
+    Lsize = prod(Lsizes)
+    Rsize = prod(Rsizes)
+    LR = Lsize < Rsize
+    if LR
+      QNsummary = multi_indexsummary(Qt,pLinds)
+      leftSummary = QNsummary
+      rightSummary = inv.(QNsummary)
+      
+      Qt.Qblocksum = [[copy(leftSummary[q]),copy(rightSummary[q])] for q = 1:length(QNsummary)]
+    else
+      QNsummary = multi_indexsummary(Qt,pRinds)
+      leftSummary = inv.(QNsummary)
+      rightSummary = QNsummary
+
+      Qt.Qblocksum = [[copy(leftSummary[q]),copy(rightSummary[q])] for q = 1:length(QNsummary)]
+    end
+   
+    leftQNs,Lbigtosub,rows,Lindexes = QnumList(Qt,pLinds,leftSummary)
+    rightQNs,Rbigtosub,columns,Rindexes = QnumList(Qt,pRinds,rightSummary)
+
+
+    newblocks = [Array{outtype,2}(undef,rows[g],columns[g]) for g = 1:length(QNsummary)]
+
+    permindexes = vcat(pLinds,pRinds)
+  
+    for y = 1:size(Op_mat,2)
+      for x = 1:size(Op_mat,1)
+        newx,newy = x,y
+        if leftQNs[newx] != 0
+        end
+        if rightQNs[newy] != 0
+        end
+        if leftQNs[newx] != 0 && rightQNs[newy] != 0 && leftSummary[leftQNs[newx]] + rightSummary[rightQNs[newy]] == Qt.flux
+          thisT = newblocks[leftQNs[newx]]
+          thisT[Lbigtosub[newx],Rbigtosub[newy]] = Op_mat[x,y]
+        end
+      end
+    end
+
+
+    commonblocks = matchblocks((false,false),Qt,Qt,ind=(1,2),matchQN=Qt.flux)
+
+    keepers = Array{Bool,1}(undef,length(newblocks))
+    for q = 1:length(commonblocks)
+      keepq = commonblocks[q][1]
+      keepers[keepq] = true && (size(newblocks,1) > 0 && size(newblocks,2) > 0)
+    end
+
+    newind = Array{Array{Array{intType,2},1},1}(undef,length(commonblocks))
+    newQblocks = Array{Array{Q,1},1}(undef,length(commonblocks))
+    for q = 1:length(commonblocks)
+      Aqind = commonblocks[q][1]
+      Bqind = commonblocks[q][2]
+
+      if size(Lindexes[Aqind],2) > 0 && size(Rindexes[Bqind],2) > 0
+        newind[q] = [Lindexes[Aqind],Rindexes[Bqind]]
+        #make this the standard and comment out the previous determination of Qblocksum
+        if Qt.flux != Q()
+          newQblocks[q] = [Q(),Q()]
+          for i = 1:2
+            offset = i == 1 ? 0 : size(newind[q][i],1)
+
+            for a = 1:size(newind[q][i],1)
+              index = newind[q][i][a,1] + 1
+              add!(newQblocks[q][i],getQnum(offset + a,index,Qt))
+            end
+          end
+        end
+      else
+        keepers[q] = false
+      end
+    end
+    if Qt.flux != Q()
+      Qt.Qblocksum = newQblocks[keepers]
+    else
+      Qt.Qblocksum = Qt.Qblocksum[keepers]
+    end
+
+    Qt.ind = newind[keepers] #[[Lindexes[w],Rindexes[w]] for w = 1:length(newblocks)]
+
+    temp = newblocks[keepers]
+    Qt.T = [tens(temp[g]) for g = 1:length(temp)]
+    return Qt
   end
 
   """
-      Qtens(newsize,T,ind,QnumMat,flux[,arrows])
+      Qtens(newsize,T,ind,currblock,QnumMat,flux[,arrows])
 
   constructor for Qtensor with unreshaped size of `newsize`, non-zero values `T`, indices `ind`, total flux `flux`, quantum numbers `QnumMat`; optionally assign `arrows` for indices or conjugate the tensor (`conjugated`)
   """
-  function Qtens(newsize::Array{intType,1},T::Array{Z,1}, ind::Array{intType,1}, QnumMat::Array{Array{Q,1},1},
-    flux::Q,arrows::U...)::qarray where {Z <: Number,Q <: Qnum, U <: Union{Bool,Array{Bool,1}}} #, Arrows::Array{Bool,1})::qarray where {Z <: Number,Q <: Qnum}
+  function Qtens(newsize::Tuple,T::Array{tens{Z},1}, ind::Array{intType,1}, currblock::Array{Array{intType,1},1}, QnumMat::Array{Array{Q,1},1},
+                 flux::Q,arrows::U...)::qarray where {Z <: Number,Q <: Qnum, U <: Union{Bool,Array{Bool,1}}}
     if length(arrows) == 0
       newQnumMat = QnumMat
     else
       newQnumMat = [arrows[1][a] ? QnumMat[a] : inv.(QnumMat[a]) for a = 1:length(QnumMat)]
     end
-  return Qtens{Z,Q}(newsize,[[i] for i = 1:size(QnumMat, 1)], T, ind, newQnumMat, unique.(newQnumMat), flux)#, Arrows)
+    newQblocksum = Array{Q,1}[]
+    finalQnumMat,QnumSum = convertQnumMat(newQnumMat)
+    return Qtens{Z,Q}(newsize, T, ind, currblock, newQblocksum, finalQnumMat,QnumSum, flux)
   end
 
   """
@@ -212,6 +396,18 @@ import LinearAlgebra
   function Qtens(operator::AbstractArray,Qlabels::Array{Q,1},Arrows::U...;zero::Number=0.) where {Q <: Qnum, U <: Union{Bool,Array{Bool,1}}}
     return Qtens(operator,[Qlabels for a = 1:ndims(operator)],Arrows...,zero=zero)
   end
+
+  """
+     Qtens(A)
+
+  `A` is a Qtensor; makes shell of a Qtensor with only meta-data (no blocks, no row reductions); used mainly for copies
+  """
+  function Qtens(A::Qtens{W,Q}) where {W <: Number, Q <: Qnum}
+    return Qtens{W,Q}(A.size, Array{tens{W},1}[],
+                      Array{Array{Array{intType,1},1},1}[], Array{intType,1}[], Array{Q,1}[], A.QnumMat, A.QnumSum, A.flux)
+  end
+
+
 
   import Base.rand
   """
@@ -224,126 +420,131 @@ import LinearAlgebra
   end
 
   function rand(Qlabels::Array{Array{Q,1},1}, arrows::Array{Bool,1})::qarray where Q <: Qnum
-    newQlabels = Array{W,1}[arrows[a] ? Qlabels[a] : inv.(Qlabels[a]) for a = 1:length(arrows)]
+    newQlabels = Array{Q,1}[arrows[a] ? Qlabels[a] : inv.(Qlabels[a]) for a = 1:length(arrows)]
     return rand(newQlabels)
   end
 
-  function rand(Qlabels::Array{Array{Q,1},1})::qarray where Q <: Qnum
-    return Qtens(Qtens(Qlabels))
+
+  function basesize(Qtensor::qarray)
+    return basesize(Qtensor.QnumMat)
   end
 
-  function rand(currQtens::qarray)::qarray where W <: Qnum
-    return Qtens(currQtens)
+  function basesize(Qlabels::Array{Array{Q,1},1}) where Q <: Union{Qnum,intType}
+    return ntuple(i->length(Qlabels[i]),length(Qlabels))
+  end
+  export basesize
+
+  function basedims(Qtensor::qarray)
+    return length(Qtensor.QnumMat)
+  end
+
+
+
+  function rand(Qlabels::Array{Array{Q,1},1};currblock::Array{Array{intType,1},1}=equalblocks(Qlabels),datatype::DataType=Float64,leftflux::Bool=true,blockfct::Function=rand)::qarray where Q <: Qnum
+    Linds = currblock[1]
+    Rinds = currblock[2]
+
+    Qtensor = Qtens(Qlabels)
+
+    truesize = basesize(Qlabels)
+    #some repeated code...could combine into one function
+  
+    Lsizes = truesize[Linds]
+    Rsizes = truesize[Rinds]
+  
+    Lsize = prod(Lsizes)
+    Rsize = prod(Rsizes)
+    LR = Lsize < Rsize
+    if LR
+      QNsummary = multi_indexsummary(Qtensor,Linds)
+      leftSummary = QNsummary
+      rightSummary = inv.(QNsummary)
+    else
+      QNsummary = multi_indexsummary(Qtensor,Rinds)
+      leftSummary = inv.(QNsummary)
+      rightSummary = QNsummary
+    end
+
+    Qtensor.Qblocksum = [[copy(leftSummary[q]),copy(rightSummary[q])] for q = 1:length(QNsummary)]
+    
+    leftQNs,Lbigtosub,rows,Lindexes,Rbigtosub,columns,Rindexes = QnumList(Qtensor,LR,Linds,Rinds,leftSummary,rightSummary)
+
+    Qtensor.ind = Array{Array{Array{intType,2},1},1}(undef,length(QNsummary))
+    Qtensor.T = Array{tens{datatype},1}(undef,length(QNsummary))
+    for q = 1:length(QNsummary)
+      Qtensor.ind[q] = [Lindexes[q],Rindexes[q]]
+
+      newblock = blockfct(datatype,rows[q],columns[q])
+      Qtensor.T[q] = tens(newblock)
+    end
+    Qtensor.currblock = currblock
+  
+    return Qtensor
+  end
+
+  function rand(currQtens::qarray)::qarray
+    return rand(currQtens.QnumMat)
   end
 
   function rand(A::AbstractArray)
-    return rand(size(A)...)
+    return rand(eltype(A),size(A)...)
   end
 
-  function rand(A::denstens)
-    return tens(rand(size(A)...))
+  function rand(A::tens{W}) where W <: Number
+    return tens{W}(rand(W,size(A)...))
   end
 
+
+
+  import Base.zeros
+  function zeros(Qlabels::Array{Array{Q,1},1};currblock::Array{Array{intType,1},1}=equalblocks(Qlabels),datatype::DataType=Float64,leftflux::Bool=true,blockfct::Function=rand)::qarray where Q <: Qnum
+    return rand(Qlabels,currblock=currblock,datatype=datatype,leftflux=leftflux,blockfct=zeros)
+  end
+
+  function zeros(datatype::DataType,Qlabels::Array{Array{Q,1},1};currblock::Array{Array{intType,1},1}=equalblocks(Qlabels),leftflux::Bool=true,blockfct::Function=rand)::qarray where Q <: Qnum
+    return rand(Qlabels,currblock=currblock,datatype=datatype,leftflux=leftflux,blockfct=zeros)
+  end
+
+  function zeros(currQtens::Qtens{W,Q}) where {W <: Number, Q <: Qnum}
+    return rand(currQtens.QnumMat,blockfct=zeros,datatype=W)
+  end
+
+  function zeros(A::AbstractArray)
+    return zeros(eltype(A),size(A)...)
+  end
+
+  function zeros(A::tens{W}) where W <: Number
+    return tens{W}(zeros(W,size(A)...))
+  end
+
+  import Base.zero
+    """Like the default function zero(t::Array), return an object with the same properties containing only zeros."""
+  function zero(Qt::qarray)
+    return zeros(Qt)
+  end
+
+  import .tensor.convertTens
   """
-      convertQtens(T,Qt)
+      convertTens(T,Qt)
 
   Convert Qtensor `Qt` to type `T`
   """
-  function convertQtens(T::DataType, Qt::Qtens{Z,Q})::qarray where {Z <: Number, Q <: Qnum}
-    return Qtens{T,Q}(copy(Qt.size),copy(Qt.Qsize),convert(Array{T,1}, Qt.T),copy(Qt.ind),
+  function convertTens(T::DataType, Qt::Qtens{Z,Q})::qarray where {Z <: Number, Q <: Qnum}
+    newsize = [copy(Qt.size[i]) for i = 1:length(Qt.size)]
+    newQblocksum = [copy(Qt.Qblocksum[i]) for i = 1:length(Qt.Qblocksum)]
+    return Qtens{T,Q}(newsize,tens{T}.(Qt.T),copy(Qt.ind),copy(Qt.currblock),newQblocksum,
                       copy(Qt.QnumMat),copy(Qt.QnumSum),copy(Qt.flux))
    end
-  export convertQtens
+  export convertTens
 
-import ..tensor.checkflux
-"""
-    checkflux(Qt[,silent=])
-
-Debug tool: checks all non-zero elements obey flux conditions in Qtensor (`Qt`); print element by element with `silent`
-"""
-function checkflux(Qt::Qtens;silent::Bool = true)
-  totflux = Qt.flux
-  condition = true
-  totsize = prod(Qt.size)
-  uniques = unique(Qt.ind)
-  if size(uniques,1) != size(Qt.ind,1)
-    error("duplicate integers")
-  end
-  for i = 1:size(Qt.ind, 1)
-    if isnan(Qt.ind[i])
-      error("index $i is not a number")
-    end
-    if Qt.ind[i] == Inf
-      error("index $i is infinity")
-    end
-    thispos = ind2pos(Qt.ind[i], Qt.size)
-
-    checkQN = sum(a->Qt.QnumMat[a][thispos[a]], 1:size(thispos, 1))
-    if !silent
-      theseQNs = [Qt.QnumMat[a][thispos[a]] for a = 1:size(thispos, 1)]
-      println("showing: ",i," ", Qt.ind[i], " ", thispos, " ", theseQNs," sum = ", checkQN, " for a flux of ", Qt.flux)
-    end
-    if totflux != checkQN
-      theseQNs = [Qt.QnumMat[a][thispos[a]] for a = 1:size(thispos, 1)]
-      println("problem! ",i," ", Qt.ind[i], " ", thispos, " ", theseQNs, " ", checkQN, " for a flux of ", Qt.flux)
-      condition = false
-    end
-  end
-  if condition
-    checkSum = unique.(Qt.QnumSum)
-    for i = 1:size(checkSum,1)
-      if size(checkSum[i],1) != size(Qt.QnumSum[i],1)
-        error("bad summary (inequivalent elements...perhaps not a full summary) on index $i !")
-      end
-      unique(Qt.QnumSum[i]) == checkSum[i]
-      if size(checkSum[i],1) != size(Qt.QnumSum[i],1)
-        error("non-matching summary on index $i !")
-      end
-    end
-      println("PASSED \n")
-    else
-      error("problems \n")
-    end
-    nothing
-  end
-  export checkflux
-
-  function checkflux(Qt::AbstractArray;silent::Bool = true)
-    nothing
-  end
-
-  import .tensor.convertTensor
+  import Base.copy!
   """
-      convertTensor(Qt)
+      copy!(Qt)
 
-  converts Qtensor (`Qt`) to dense array
+  Copies a Qtensor; `deepcopy` is inherently not type stable, so this function should be used instead; `copy!` refers to all fields except `Qsize` as pointers
   """
-  function convertTensor(Qt::qarray)::AbstractArray
-    A = zeros(eltype(Qt.T), Qt.size...)
-    numthreads = Threads.nthreads()
-    currpos = Array{Int64,1}[Array{intType,1}(undef,length(Qt.size)) for i = 1:numthreads]
-    let A = A, Qt = Qt, currpos = currpos
-      Threads.@threads for i = 1:size(Qt.ind, 1)
-        thisthread = Threads.threadid()
-        ind2pos!(currpos,thisthread,Qt.ind,i, Qt.size)
-        A[currpos[thisthread]...] = Qt.T[i]
-      end
-    end
-    return reshape(A, size(Qt)...)
-  end
-
-  function convertTensor(Qt::AbstractArray)
-    return Qt
-  end
-
-  import .tensor.to_Array
-  """
-    to_Array(Qt)
-
-  See: [`convertTensor`](@ref)
-  """
-  function to_Array(T::Qtens)
-    return convertTensor(T)
+  function copy!(Qt::Qtens{T,Q}) where {T <: Number, Q <: Qnum}
+    return Qtens{T,Q}(Qt.size,Qt.T,Qt.ind,Qt.currblock,Qt.Qblocksum,Qt.QnumMat,Qt.QnumSum,Qt.flux)
   end
 
   import Base.copy
@@ -352,778 +553,787 @@ function checkflux(Qt::Qtens;silent::Bool = true)
 
   Copies a Qtensor; `deepcopy` is inherently not type stable, so this function should be used instead
   """
-  function copy(Qt::Qtens{T,Q}) where {T <: Number, Q <: Qnum}
-    copyQtQsize = Array{intType,1}[copy(Qt.Qsize[a]) for a = 1:length(Qt.Qsize)]
-    return Qtens{T,Q}(copy(Qt.size),copyQtQsize,copy(Qt.T),copy(Qt.ind),
-                      copy(Qt.QnumMat),copy(Qt.QnumSum),copy(Qt.flux))
-  end
-
-  """
-      showQtens(Qt[,show=])
-
-  Prints fields of the Qtensor (`Qt`) out to a number of elements `show`; can also be called with `print` or `println`
-
-  See also: [`Qtens`](@ref) [`print`](@ref) [`println`](@ref)
-  """
-  function showQtens(Qtens::qarray;show::intType = 4)
-    println("printing Qtens of type: ", typeof(Qtens))
-    println("size = ", convert(Array{intType,1}, Qtens.size))
-    println("Qsize = ", convert(Array{Array{intType,1},1}, Qtens.Qsize))
-    maxshow = min(show, size(Qtens.T, 1))
-    maxBool = show < size(Qtens.T, 1)
-    println("T = ", Qtens.T[1:maxshow], maxBool ? "..." : "")
-    println("inds = ", convert(Array{intType,1}, Qtens.ind)[1:maxshow], maxBool ? "..." : "")
-    println("QnumMat = ")
-    for i = 1:size(Qtens.QnumMat, 1)
-      maxshow = min(show, size(Qtens.QnumMat[i], 1))
-      maxBool = show < size(Qtens.QnumMat[i], 1)
-      println(i, ": ", Qtens.QnumMat[i][1:maxshow], maxBool ? "..." : "")
-    end
-    println("QnumSum = ")
-    for i = 1:size(Qtens.QnumSum, 1)
-      maxshow = min(show, size(Qtens.QnumSum[i], 1))
-      maxBool = show < size(Qtens.QnumSum[i], 1)
-      println(i, ": ", Qtens.QnumSum[i][1:maxshow], maxBool ? "..." : "")
-    end
-    println("flux = ", Qtens.flux)
-    nothing
-  end
-  export showQtens
-
-  import Base.print
-  """
-      print(A[,show=])
-
-  Idential to `showQtens`
-
-  See also: [`showQtens`](@ref) [`println`](@ref)
-  """
-  function print(A::qarray...;show::intType = 4)
-    showQtens(A, show = show)
-    nothing
-  end
-
-  import Base.println
-  """
-      println(A[,show=])
-
-  Idential to `showQtens`
-
-  See also: [`showQtens`](@ref) [`print`](@ref)
-  """
-  function println(A::qarray;show::intType = 4)
-    showQtens(A, show = show)
-    print("\n")
-    nothing
-  end
-
-###################################################
-###################################################
-###################################################
-
-  """
-      ind2zeropos(x,S)
-
-  Converts an index `x` to a zero-indexed position vector with total size `S`
-
-  See also: [`ind2zeropos`](@ref) [`ind2pos`](@ref) [`ind2pos!`](@ref) [`zeropos2ind`](@ref) [`pos2ind`](@ref) [`pos2ind!`](@ref)
-  """
-  @inline function ind2zeropos(x::intType,S::Array{X,1}) where X <: Integer
-    currpos = Array{intType,1}(undef, size(S,1))
-    currpos[1] = x-1
-    @simd for j = 1:length(S)-1
-      currpos[j+1] = fld(currpos[j],S[j])
-      currpos[j] %= S[j]
-    end
-    currpos[size(S,1)] %= S[size(S,1)]
-    return currpos
-  end
-  export ind2zeropos
-
-  """
-      ind2zeropos!(currpos,thisthread,x,i,S)
-
-  in-place converts an index `x[i]` to a zero-indexed position vector with total size `S` stored in `currpos` (parallelized to `thisthread` worker)
-
-  See also: [`ind2zeropos`](@ref) [`ind2pos`](@ref) [`ind2pos!`](@ref) [`zeropos2ind`](@ref) [`pos2ind`](@ref) [`pos2ind!`](@ref)
-  """
-  @inline function ind2zeropos!(currpos::Array{Array{Int64,1},1},thisthread::Integer,x::Array{intType,1},i::Integer,S::Array{Int64,1})
-    currpos[thisthread][1] = x[i] - 1
-    @simd for k = 1:size(S, 1) - 1
-      currpos[thisthread][k + 1] = fld(currpos[thisthread][k], S[k])
-      currpos[thisthread][k] %= S[k]
-    end
-    currpos[thisthread][size(S, 1)] %= S[size(S, 1)]
-    nothing
-  end
-  export ind2zeropos!
-
-  """
-      ind2pos(x,S)
-
-  Converts an index `x` to a one-indexed position vector with total size `S`
-
-  See also: [`ind2zeropos`](@ref) [`ind2pos`](@ref) [`ind2pos!`](@ref) [`zeropos2ind`](@ref) [`pos2ind`](@ref) [`pos2ind!`](@ref)
-  """
-  @inline function ind2pos(x::intType,S::Array{X,1}) where X <: Integer
-    return ind2zeropos(x,S) .+ 1
-  end
-  export ind2pos
-
-  import ..tensor.pos2ind
-  """
-      pos2ind(reorder,x,S)
-
-  Reorders (according to `reorder`) and converts a position vector `currpos` to a one-indexed index based on size `S`
-
-  See also: [`ind2zeropos`](@ref) [`ind2pos`](@ref) [`ind2pos!`](@ref) [`zeropos2ind`](@ref) [`pos2ind`](@ref) [`pos2ind!`](@ref)
-  """
-  @inline function pos2ind(reorder::Array{X,1},currpos::R,S::Array{Y,1}) where R <: Union{Array{X,1},NTuple{N,X} where N} where X <: Integer where Y <: Integer
-    x = 0
-    @simd for i = length(S):-1:2
-      x += currpos[reorder[i]]-1
-      x *= S[reorder[i-1]]
-    end
-    return currpos[reorder[1]]+x
-  end
-
-  """
-      zeropos2ind(x,S)
-
-  Converts a position vector `currpos` to a one-indexed index based on size `S`
-
-  See also: [`ind2zeropos`](@ref) [`ind2pos`](@ref) [`ind2pos!`](@ref) [`zeropos2ind`](@ref) [`pos2ind`](@ref) [`pos2ind!`](@ref)
-  """
-  @inline function zeropos2ind(currpos::R,S::Array{Y,1}) where R <: Union{Array{X,1},NTuple{N,X} where N} where X <: Integer where Y <: Integer
-    x = 0
-    @simd for i = length(S):-1:2
-      x += currpos[i]
-      x *= S[i-1]
-    end
-    return currpos[1]+x+1
-  end
-  export zeropos2ind
-
-  """
-    zeropos2ind(reorder,x,S)
-
-  Reorders (according to `reorder`) and converts a position vector `currpos` to a zero-indexed index based on size `S`
-
-  See also: [`ind2zeropos`](@ref) [`ind2pos`](@ref) [`ind2pos!`](@ref) [`zeropos2ind`](@ref) [`pos2ind`](@ref) [`pos2ind!`](@ref)
-  """
-  @inline function zeropos2ind(vec::Array{Y,1},currpos::R,S::Array{Y,1}) where R <: Union{Array{X,1},NTuple{N,X} where N} where X <: Integer where Y <: Integer
-    x = 0
-    @simd for i = length(S):-1:2
-      x += currpos[reorder[i]]
-      x *= S[reorder[i-1]]
-    end
-    return currpos[reorder[1]]+x+1
-  end
-  export zeropos2ind
-
-  """
-      ind2pos!(currpos,index,S)
-
-  converts `index` to a position stored in `currpos` with tensor size `S`
-
-  #Arguments:
-  +`currpos::Array{Z,1}`: input position
-  +`index::intType`: index to convert
-  +`S::Array{W,1}`: size of tensor to convert from
-
-  See also: [`ind2zeropos`](@ref) [`ind2pos`](@ref) [`ind2pos!`](@ref) [`zeropos2ind`](@ref) [`pos2ind`](@ref) [`pos2ind!`](@ref)
-  """
-  @inline function ind2pos!(currpos::Array{X,1},index::intType,S::Array{Z,1}) where X <: Integer where Y <: Integer where Z <: Integer
-    currpos[1] = index-1
-    @simd for j = 1:size(S,1)-1
-      currpos[j+1] = fld(currpos[j],S[j])
-      currpos[j] = (currpos[j]) % S[j] + 1
-    end
-    currpos[size(S,1)] = currpos[size(S,1)] % S[size(S,1)] + 1
-    nothing
-  end
-
-  """
-      ind2pos!(currpos,x,index,S)
-
-  converts `x[index]` to a position stored in `currpos` with tensor size `S`
-
-  #Arguments:
-  +`currpos::Array{Z,1}`: input position
-  +`x::Array{Y,1}`: vector of intput integers to convert
-  +`index::intType`: index of input position of `x`
-  +`S::Array{W,1}`: size of tensor to convert from
-
-  See also: [`ind2zeropos`](@ref) [`ind2pos`](@ref) [`ind2pos!`](@ref) [`zeropos2ind`](@ref) [`pos2ind`](@ref) [`pos2ind!`](@ref)
-  """
-  @inline function ind2pos!(currpos::Array{X,1},x::Array{Y,1},index::intType,S::Array{Z,1}) where X <: Integer where Y <: Integer where Z <: Integer
-    currpos[1] = x[index]-1
-    @simd for j = 1:size(S,1)-1
-      currpos[j+1] = fld(currpos[j],S[j])
-      currpos[j] = (currpos[j]) % S[j] + 1
-    end
-    currpos[size(S,1)] = currpos[size(S,1)] % S[size(S,1)] + 1
-    nothing
-  end
-
-  """
-      ind2pos!(currpos,k,x,index,S)
-
-  converts `x[index]` to a position stored in `currpos` (parallelized) with tensor size `S`
-
-  #Arguments:
-  +`currpos::Array{Z,1}`: input position
-  +`k::intType`: current thread for `currpos`
-  +`x::Array{Y,1}`: vector of intput integers to convert
-  +`index::intType`: index of input position of `x`
-  +`S::Array{W,1}`: size of tensor to convert from
-
-  See also: [`ind2zeropos`](@ref) [`ind2pos`](@ref) [`ind2pos!`](@ref) [`zeropos2ind`](@ref) [`pos2ind`](@ref) [`pos2ind!`](@ref)
-  """
-  @inline function ind2pos!(currpos::Array{Array{X,1},1},k::intType,x::Array{Y,1},index::intType,S::Array{Z,1}) where X <: Integer where Y <: Integer where Z <: Integer
-    currpos[k][1] = x[index]-1
-    @simd for j = 1:size(S,1)-1
-      currpos[k][j+1] = fld(currpos[k][j],S[j])
-      currpos[k][j] = (currpos[k][j]) % S[j] + 1
-    end
-    currpos[k][size(S,1)] = currpos[k][size(S,1)] % S[size(S,1)] + 1
-  #  ind2pos!(currpos[k],x[index],S)
-    nothing
-  end
-
-  """
-      ind2pos!(currpos,k,index,S)
-
-  converts `index` to a position stored in `currpos` (parallelized) with tensor size `S`
-
-  #Arguments:
-  +`currpos::Array{Z,1}`: input position
-  +`k::intType`: current thread for `currpos`
-  +`index::intType`: input position
-  +`S::Array{W,1}`: size of tensor to convert from
-
-  See also: [`ind2zeropos`](@ref) [`ind2pos`](@ref) [`ind2pos!`](@ref) [`zeropos2ind`](@ref) [`pos2ind`](@ref) [`pos2ind!`](@ref)
-  """
-  @inline function ind2pos!(currpos::Array{Array{X,1},1},k::intType,index::intType,S::Array{Z,1}) where X <: Integer where Y <: Integer where Z <: Integer
-    currpos[k][1] = index-1
-    @simd for j = 1:size(S,1)-1
-      currpos[k][j+1] = fld(currpos[k][j],S[j])
-      currpos[k][j] = (currpos[k][j]) % S[j] + 1
-    end
-    currpos[k][size(S,1)] = currpos[k][size(S,1)] % S[size(S,1)] + 1
-    nothing
-  end
-  export ind2pos!
-
-  """
-      pos2ind!(currpos,x,j,S)
-
-  converts `currpos` with tensor size `S` to integer to be stored in `x[j]`
-
-  #Arguments:
-  +`currpos::Array{Z,1}`: input position
-  +`x::Array{Y,1}`: output vector
-  +`j::intType`: element of output vector to store resulting integer
-  +`S::Array{W,1}`: size of tensor to convert from
-
-  See also: [`ind2zeropos`](@ref) [`ind2pos`](@ref) [`ind2pos!`](@ref) [`zeropos2ind`](@ref) [`pos2ind`](@ref) [`pos2ind!`](@ref)
-  """
-  @inline function pos2ind!(currpos::Array{Y,1},x::Array{X,1},j::intType,S::Array{Z,1}) where X <: Integer where Y <: Integer where Z <: Integer
-    x[j] = currpos[size(S,1)]-1
-    @simd for i = size(S,1)-1:-1:2
-      x[j] *= S[i]
-      x[j] += currpos[i]-1
-    end
-    x[j] *= S[1]
-    x[j] += currpos[1]
-    nothing
-  end
-
-  """
-      pos2ind!(currpos,k,x,j,S)
-
-  converts `currpos` (parallelized) with tensor size `S` to integer to be stored in `x[j]`
-
-  #Arguments:
-  +`currpos::Array{Z,1}`: input position
-  +`k::intType`: current thread for `currpos`
-  +`x::Array{Y,1}`: output vector
-  +`j::intType`: element of output vector to store resulting integer
-  +`S::Array{W,1}`: size of tensor to convert from
-
-  See also: [`ind2zeropos`](@ref) [`ind2pos`](@ref) [`ind2pos!`](@ref) [`zeropos2ind`](@ref) [`pos2ind`](@ref) [`pos2ind!`](@ref)
-  """
-  @inline function pos2ind!(currpos::Array{Array{Y,1},1},k::intType,x::Array{X,1},j::intType,S::Array{Z,1}) where X <: Integer where Y <: Integer where Z <: Integer
-    x[j] = pos2ind(currpos[k],S)
-    nothing
-  end
-
-  """
-      pos2ind!(order,currpos,x,j,S)
-
-  converts `currpos` with tensor size `S` to integer to be stored in `x[j]` and also reorders according to `order`
-
-  #Arguments:
-  +`order::Array{X,1}`: reorders input vector
-  +`currpos::Array{Z,1}`: input position
-  +`x::Array{Y,1}`: output vector
-  +`j::intType`: element of output vector to store resulting integer
-  +`S::Array{W,1}`: size of tensor to convert from
-
-  See also: [`ind2zeropos`](@ref) [`ind2pos`](@ref) [`ind2pos!`](@ref) [`zeropos2ind`](@ref) [`pos2ind`](@ref) [`pos2ind!`](@ref)
-  """
-  @inline function pos2ind!(order::Array{X,1},currpos::Array{Z,1},x::Array{Y,1},j::intType,S::Array{W,1}) where W <: Integer where X <: Integer where Y <: Integer where Z <: Integer
-    x[j] = pos2ind(order,currpos,S)
-    nothing
-  end
-  export pos2ind!
-
-  """
-    zeropos2ind!(reorder,currpos,thisthread,x,i,,S)
-
-  Reorders (according to `reorder`) and converts a position vector `currpos` to a zero-indexed index `x[i]` based on size `S` (all in-place)
-
-  See also: [`ind2zeropos`](@ref) [`ind2pos`](@ref) [`ind2pos!`](@ref) [`zeropos2ind`](@ref) [`pos2ind`](@ref) [`pos2ind!`](@ref)
-  """
-  @inline function zeropos2ind!(order::Array{W,1},currpos::Array{Array{W,1},1},
-              thisthread::Integer,x::Array{W,1},i::Integer,S::Array{W,1}) where W <: Integer
-    x[i] = currpos[thisthread][order[size(S,1)]]
-    @simd for j = size(S,1)-1:-1:2
-      x[i] *= S[order[j]]
-      x[i] += currpos[thisthread][order[j]]
-    end
-    x[i] *= S[order[1]]
-    x[i] += currpos[thisthread][order[1]]+1
-    nothing
-  end
-  export zeropos2ind!
-
-  """
-      quicksort!(T)
-
-  Sorts `T` with a quicksort algorithm
-
-  See also: [`sort!`](@ref)
-  """
-  function quicksort!(T::Array{W,1}) where W <: Real
-    sort!(T)
-    nothing
-  end
-
-  """
-      quicksort!(lo,high,T)
-
-  Sorts `T` between elements `lo` and `high` with a quicksort algorithm
-
-  See also: [`sort!`](@ref)
-  """
-  function quicksort!(lo::intType,high::intType,T::AbstractArray)
-    sort!(T,lo,high,Base.Sort.QuickSort,Base.Forward)
-    nothing
-  end
-
-  """
-      quicksort!(T,lo,high)
-
-  Sorts `T` between elements `lo` and `high` with a quicksort algorithm
-
-  See also: [`partition`](@ref)
-  """
-  function quicksort!(T::Array{X,1},lo::intType,high::intType) where {X<: Number}
-    quicksort!(T,lo,high)
-    nothing
-  end
-
-  """
-      quicksort!(T,pos)
-
-  Sorts `pos` and orders `T` accordinly
-
-  See also: [`partition`](@ref)
-  """
-  function quicksort!(T::Array{W,1},pos::Array{X,1}) where {W <: Number,X<: Integer}
-    lo = 1
-    high = size(pos,1)
-    if (lo < high)
-      p = partition(T,pos,lo,high)
-      quicksort!(T,pos,lo,p)
-      quicksort!(T,pos,p+1,high)
-    end
-    nothing
-  end
-
-  """
-      quicksort!(T,pos,lo,high)
-
-  Sorts `pos` between `lo` and `high` and orders `T` accordingly
-
-  See also: [`partition`](@ref)
-  """
-  function quicksort!(T::Array{W,1},pos::Array{X,1},lo::intType,high::intType) where {W <: Number,X <: Integer}
-    if (lo < high)
-      p = partition(T,pos,lo,high)
-      quicksort!(T,pos,lo,p)
-      quicksort!(T,pos,p+1,high)
-    end
-    nothing
-  end
-
-  """
-      partition!(T,pos,lo,high)
-
-  Exchanges values beween `lo` and `high` in `pos` and orders `T` accordingly
-
-  See also: [`quicksort!`](@ref)
-  """
-  function partition(T::Array{W,1},pos::Array{X,1},lo::intType,high::intType) where {W <: Number,X <: Integer}
-    pivot = pos[cld(lo+high,2)]
-    i = lo
-    j = high
-
-    while i <= j
-      while (pos[i] < pivot)
-        i += 1
-      end
-      while (pos[j] > pivot)
-        j -= 1
-      end
-      if (i <= j)
-        pos[i],pos[j] = pos[j],pos[i]
-        T[i],T[j] = T[j],T[i]
-        i += 1
-        j -= 1
-      end
-    end
-    return j
-  end
-
-  """
-      quicksort!(T,xpos,ypos,lo,high)
-
-  Sorts `ypos` between `lo` and `high` and orders `T` and `xpos` accordingly
-
-  See also: [`partition`](@ref)
-  """
-  function quicksort!(T::Array{W,1},xpos::Array{X,1},ypos::Array{X,1},lo::intType,high::intType) where {W <: Number,X <: Integer}
-    if (lo < high)
-      p = partition(T,xpos,ypos,lo,high)
-      quicksort!(T,xpos,ypos,lo,p)
-      quicksort!(T,xpos,ypos,p+1,high)
-    end
-    nothing
-  end
-
-  """
-      partition!(T,xpos,ypos,lo,high)
-
-  Exchanges values beween `lo` and `high` in `ypos` and orders `T` and `xpos` accordingly
-
-  See also: [`quicksort!`](@ref)
-  """
-  function partition(T::Array{W,1},xpos::Array{X,1},ypos::Array{X,1},lo::intType,high::intType) where {W <: Number,X <: Integer}
-    pivot = ypos[cld(lo+high,2)]
-    i = lo
-    j = high
-
-    while i <= j
-      while (ypos[i] < pivot)
-          i += 1
-      end
-      while (ypos[j] > pivot)
-          j -= 1
-      end
-      if (i <= j)
-        xpos[i],xpos[j] = xpos[j],xpos[i]
-        T[i],T[j] = T[j],T[i]
-        ypos[i],ypos[j] = ypos[j],ypos[i]
-        i += 1
-        j -= 1
-      end
-    end
-    return j
-  end
-
-
-  """
-      quicksort!(T,inds,xpos,ypos,lo,high)
-
-  Sorts `ypos` between `lo` and `high` and orders `T`, `inds`, and `xpos` accordingly
-
-  See also: [`partition`](@ref)
-  """
-  function quicksort!(T::Array{W,1},inds::Array{intType,1},xpos::Array{X,1},ypos::Array{X,1},lo::intType,high::intType) where {W <: Number,X <: Integer}
-    if (lo < high)
-      p = partition(T,inds,xpos,ypos,lo,high)
-      quicksort!(T,inds,xpos,ypos,lo,p)
-      quicksort!(T,inds,xpos,ypos,p+1,high)
-    end
-    nothing
-  end
-
-  """
-      partition!(T,inds,xpos,ypos,lo,high)
-
-  Exchanges values beween `lo` and `high` in `ypos` and orders `T`, `inds`, and `xpos` accordingly
-
-  See also: [`quicksort!`](@ref)
-  """
-  function partition(T::Array{W,1},inds::Array{intType,1},xpos::Array{X,1},ypos::Array{X,1},lo::intType,high::intType) where {W <: Number,X <: Integer}
-    pivot = ypos[cld(lo+high,2)]
-    i = lo
-    j = high
-
-    while i <= j
-      while (ypos[i] < pivot)
-          i += 1
-      end
-      while (ypos[j] > pivot)
-          j -= 1
-      end
-      if (i <= j)
-        xpos[i],xpos[j] = xpos[j],xpos[i]
-        T[i],T[j] = T[j],T[i]
-        inds[i],inds[j] = inds[j],inds[i]
-        ypos[i],ypos[j] = ypos[j],ypos[i]
-        i += 1
-        j -= 1
-      end
-    end
-    return j
-  end
-
-
-  """
-      quicksort!(T,inds,xpos,ypos,QNs,lo,high)
-
-  Sorts `ypos` between `lo` and `high` and orders `T`, `inds`, and `xpos` accordingly
-
-  See also: [`partition`](@ref)
-  """
-  function quicksort!(T::Array{W,1},inds::Array{intType,1},xpos::Array{X,1},ypos::Array{X,1},
-                      QNs::Array{intType,1},lo::intType,high::intType) where {W <: Number,X <: Integer}
-    if (lo < high)
-      p = partition(T,inds,xpos,ypos,QNs,lo,high)
-      quicksort!(T,inds,xpos,ypos,QNs,lo,p)
-      quicksort!(T,inds,xpos,ypos,QNs,p+1,high)
-    end
-    nothing
-  end
-
-  """
-      partition!(T,inds,xpos,ypos,lo,high)
-
-  Exchanges values beween `lo` and `high` in `ypos` and orders `T`, `inds`, and `xpos` accordingly
-
-  See also: [`quicksort!`](@ref)
-  """
-  function partition(T::Array{W,1},inds::Array{intType,1},xpos::Array{X,1},ypos::Array{X,1},
-                      QNs::Array{intType,1},lo::intType,high::intType) where {W <: Number,X <: Integer}
-    pivot = QNs[cld(lo+high,2)]
-    i = lo
-    j = high
-
-    while i <= j
-      while (QNs[i] < pivot)
-          i += 1
-      end
-      while (QNs[j] > pivot)
-          j -= 1
-      end
-      if (i <= j)
-        xpos[i],xpos[j] = xpos[j],xpos[i]
-        T[i],T[j] = T[j],T[i]
-        inds[i],inds[j] = inds[j],inds[i]
-        ypos[i],ypos[j] = ypos[j],ypos[i]
-        QNs[i],QNs[j] = QNs[j],QNs[i]
-        i += 1
-        j -= 1
-      end
-    end
-    return j
-  end
-
-  export quicksort!
-
-  import Base.unique!
-  """
-      unique!(B)
-
-  finds unique elements but reorders input vector
-
-  See also: [`unique`](@ref)
-  """
-  function unique!(B::Array{W,1}#=,start::intType,final::intType=#) where W <: Qnum
-    quicksort!(1,length(B),B)
-    uniqueQNs = W[copy(B[1])] #W[copy(B[start])]
-    for a = 2:length(B) #start+1:final
-      if B[a-1] != B[a]
-        push!(uniqueQNs,copy(B[a]))
-      end
-    end
-    return uniqueQNs
-  end
-
-  import Base.unique
-  """
-      unique!(B)
-
-  finds unique elements without generating a new array to be sorted over (i.e., does not reorder to input vector)
-
-  See also: [`unique!`](@ref)
-  """
-  function unique(T::Array{W,1}) where W <: Qnum
-    B = copy(T)
-    return unique!(B)
+  function copy(Qt::Qtens{W,Q}) where {W <: Number, Q <: Qnum}
+    newsize = [copy(Qt.size[i]) for i = 1:length(Qt.size)]
+    copyQtT = [copy(Qt.T[q]) for q = 1:length(Qt.T)]
+    copyQtind = [[copy(Qt.ind[q][1]),copy(Qt.ind[q][2])] for q = 1:length(Qt.ind)]
+    newcurrblock = [copy(Qt.currblock[1]),copy(Qt.currblock[2])]
+    newQblocksum = [copy(Qt.Qblocksum[i]) for i = 1:length(Qt.Qblocksum)]
+    newQnumSum = [copy(Qt.QnumSum[i]) for i = 1:length(Qt.QnumSum)]
+    return Qtens{W,Q}(newsize,copyQtT,copyQtind,newcurrblock,
+                      newQblocksum,copy(Qt.QnumMat),newQnumSum,copy(Qt.flux))
   end
 
 ####################################################
 ####################################################
-####################################################
 
-  import Base.getindex
-  """
-      A[:,3:6,2,[1,2,4,8]]
+function QnumList(Qt::Qtens{W,Q},LR::Bool,pLinds::Array{intType,1},pRinds::Array{intType,1},
+                  leftSummary::Array{Q,1},rightSummary::Array{Q,1}) where {W <: Number, Q <: Qnum}
+  if LR
+    leftQNs,Lbigtosub,rows,Lindexes = QnumList(Qt,pLinds,leftSummary)
+    Rbigtosub,columns,Rindexes = smallQnumList(Qt,pRinds,rightSummary)
+  else
+    Lbigtosub,rows,Lindexes = smallQnumList(Qt,pLinds,leftSummary)
+    leftQNs,Rbigtosub,columns,Rindexes = QnumList(Qt,pRinds,rightSummary)
+  end
+  return leftQNs,Lbigtosub,rows,Lindexes,Rbigtosub,columns,Rindexes
+end
 
-  Finds selected elements of a Qtensor or dense tensor;
+function QnumList(Qtens::Qtens{W,Q},vec::Array{Int64,1},QnumSummary::Array{Q,1}) where {W <: Number, Q <: Qnum}
+
+  ninds = length(vec)
+  truesize = basesize(Qtens)
+  sizes = ntuple(a->truesize[vec[a]],ninds)
+  QnumMat = Qtens.QnumMat
+  QnumSum = Qtens.QnumSum
+
+  return QnumList_worker(sizes,QnumMat,QnumSum,vec,QnumSummary)
+end
+
+function QnumList_worker(sizes::NTuple{G,intType},QnumMat::Array{Array{intType,1},1},QnumSum::Array{Array{Q,1},1},
+                         vec::Array{intType,1},QnumSummary::Array{Q,1}) where {Q <: Qnum, G}
+  ninds = length(vec)
+  #=
+  if ninds == 0
+    matchingQNs = [1]
+    returnvector = [1]
+    QNblocksizes = [1]
+    saveindexes = reshape([1],1,1)
+  else
+    =#
+    pos = makepos(ninds)
+
+    numElements = prod(sizes)
+    matchingQNs = Array{intType,1}(undef,numElements)
+
+    numQNs = length(QnumSummary)
+
+    keepbools = [[false for i = 1:numElements] for q = 1:numQNs]
+    longsaveindexes = Array{intType,2}(undef,length(vec),numElements)
+
+    returnvector = Array{intType,1}(undef,numElements)
+    QNblocksizes = zeros(intType,numQNs)
+
+    startQN = Q()
+    currQN = Q()
+    for y = 1:numElements
+      position_incrementer!(pos,sizes)
+      copy!(currQN,startQN)
+      for b = 1:ninds
+        @inbounds add!(currQN,getQnum(vec[b],pos[b],QnumMat,QnumSum))
+      end
+      notmatchQNs = true
+      q = 0
+      while (q < numQNs) && notmatchQNs
+        q += 1
+        @inbounds notmatchQNs = currQN != QnumSummary[q]
+      end
+
+      if notmatchQNs
+        @inbounds matchingQNs[y] = 0
+        @inbounds returnvector[y] = 0
+      else
+
+        @inbounds matchingQNs[y] = q
+
+        @inbounds QNblocksizes[q] += 1
+        @inbounds returnvector[y] = QNblocksizes[q]
+
+        keepbools[q][y] = true
+        @simd for r = 1:length(pos)
+          @inbounds longsaveindexes[r,y] = pos[r] - 1
+        end
+
+      end
+    end
+
+    saveindexes = Array{Array{intType,2},1}(undef,numQNs)
+    for q = 1:numQNs
+      @inbounds saveindexes[q] = longsaveindexes[:,keepbools[q]]
+    end
+#  end
+
+  return matchingQNs,returnvector,QNblocksizes,saveindexes
+end
+
+function smallQnumList(Qtens::Qtens{W,Q},vec::Array{Int64,1},QnumSummary::Array{Q,1}) where {W <: Number, Q <: Qnum}
+  ninds = length(vec)
+  truesize = basesize(Qtens)
+  sizes = ntuple(a->truesize[vec[a]],ninds)
+  QnumMat = Qtens.QnumMat
+  QnumSum = Qtens.QnumSum
+
+  return smallQnumList_worker(sizes,QnumMat,QnumSum,vec,QnumSummary)
+end
+
+function smallQnumList_worker(sizes::NTuple{G,intType},QnumMat::Array{Array{intType,1},1},QnumSum::Array{Array{Q,1},1},
+                              vec::Array{intType,1},QnumSummary::Array{Q,1}) where {Q <: Qnum, G}
+  ninds = length(vec)
+
+  pos = makepos(ninds)
+
+  numElements = prod(sizes)
+  matchingQNs = Array{intType,1}(undef,numElements)
+
+  numQNs = length(QnumSummary)
+
+  keepbools = [[false for i = 1:numElements] for q = 1:numQNs]
+  longsaveindexes = Array{intType,2}(undef,length(vec),numElements)
+
+  returnvector = Array{intType,1}(undef,numElements)
+  QNblocksizes = zeros(intType,numQNs)
+
+
+  startQN = Q()
+  currQN = Q()
+  for y = 1:numElements
+    position_incrementer!(pos,sizes)
+    copy!(currQN,startQN)
+    for b = 1:ninds
+      @inbounds add!(currQN,getQnum(vec[b],pos[b],QnumMat,QnumSum))
+    end
+    notmatchQNs = true
+    q = 0
+    while (q < numQNs) && notmatchQNs
+      q += 1
+      @inbounds notmatchQNs = currQN != QnumSummary[q]
+    end
+
+    if notmatchQNs
+      @inbounds returnvector[y] = 0
+    else
+      @inbounds QNblocksizes[q] += 1
+      @inbounds returnvector[y] = QNblocksizes[q]
+
+      @inbounds keepbools[q][y] = true
+      @simd for r = 1:length(pos)
+        @inbounds longsaveindexes[r,y] = pos[r] - 1
+      end
+    end
+  end
+
+
+  saveindexes = Array{Array{intType,2},1}(undef,numQNs)
+  for q = 1:numQNs
+    @inbounds saveindexes[q] = longsaveindexes[:,keepbools[q]]
+  end
+
+  return returnvector,QNblocksizes,saveindexes
+end
+
+  function multi_indexsummary(Qt::Qtens{W,Q},vec::Array{intType,1}) where {W <: Number, Q <: Qnum, N}
+    QnumSum = Qt.QnumSum
+    if length(vec) == 1
+      Qsumvec = QnumSum[vec[1]]
+      out = Qsumvec
+      #=
+    elseif length(vec) == 0
+      Qsumvec = [Q()]
+      out = Qsumvec
+      =#
+    else
+      ninds = length(vec)
+      QsumSizes = [length(QnumSum[vec[a]]) for a = 1:ninds]
+      Qsumel = prod(QsumSizes)
+      Qsumvec = Array{Q,1}(undef,Qsumel)
+
+      counter = 0
+
+      pos = makepos(ninds)
+
+      zeroQN = Q()
+      currQN = Q()
+      for g = 1:Qsumel
+        position_incrementer!(pos,QsumSizes)
+        copy!(currQN,zeroQN)
+
+        for b = 1:ninds
+          @inbounds add!(currQN,QnumSum[vec[b]][pos[b]])
+        end
+        addQ = true
+        w = 0
+        while w < counter && addQ
+          w += 1
+          addQ = currQN != Qsumvec[w]
+        end
+        if addQ
+          counter += 1
+          Qsumvec[counter] = copy(currQN)
+        end
+      end
+      out = Qsumvec[1:counter]
+    end
+    return out
+  end
+  export multi_indexsummary
+
+  function changeblock(Qt::Qtens{W,Q},Linds::Array{intType,1},
+                        Rinds::Array{intType,1};leftflux::Bool=true) where {W <: Number, Q <: Qnum}
+    return changeblock(Qt,[Linds,Rinds],leftflux=leftflux)
+  end
+
+  function findsizes(Qt::Qtens{W,Q},Linds::Array{intType,1}) where {W <: Number, Q <: Qnum}
+    nind = length(Linds)
+    Lnonzero = nind > 0
+    Lsize = Lnonzero ? prod(Linds) : 1
+    return Lsize,nind,Lnonzero
+  end
   
-  #Note:
-  + Any modification to the output of this function can make the orignal tensor invalid.
-    If the orignal tensor is needed and you need to operate on the resulting tensor of this function, 
-    do a copy of one of the two before hand. This will decouple them.
-  + (For Qtensors): Always returns a Qtensor.  If you want one element, use the searchindex function below
+  function changeblock(Qt::Qtens{W,Q},newblock::Array{Array{intType,1},1};
+                       leftflux::Bool=true) where {W <: Number, Q <: Qnum}
+    if Qt.currblock == newblock
+      newQt = Qt
+    else
 
-  See also: [`searchindex`](@ref)
-  """
-  function getindex(C::Q, a::genColType...) where {Q <: qarray}
-    return getindex!(C, a...)
-  end
-
-  import ..tensor.getindex!
-  function getindex!(C::AbstractArray, a::genColType...) #::AbstractArray
-    return getindex(C, a...)
-  end
-
-  function getindex!(C::Q, a::genColType...) where {Q <: qarray}
-    condition = true
-    for p = 1:length(a)
-      condition = condition && (typeof(a[p]) <: Colon)
-      condition = condition && (typeof(a[p]) <: UnitRange && length(a[p]) == size(C,p))
-    end
-    if condition
-      return C
-    end
-
-    rangeArgs = intType[]
-    integerArgs = intType[]
-    for i = 1:size(a, 1)
-      if typeof(a[i]) <: Integer
-        push!(integerArgs, i)
-      else
-        push!(rangeArgs,i)
-      end
-    end
-    # transform the colons in actual ranges
-    # because the "in" operator and length function cannot be used on raw colons
-    ap = []
-    for (dim,val) in enumerate(a)
-      if typeof(a[dim]) <: Colon
-        push!(ap, 1:C.size[dim])
-      else
-        push!(ap,a[dim])
-      end
-    end
-    checksort = Array{Bool,1}(undef,size(a,1))
-    for i = 1:size(a,1)
-      if typeof(a[i]) <: Array || (typeof(a[i]) <: UnitRange && a[i][1] != 1)
-        checksort[i] = false
-      else
-        checksort[i] = true
-      end
-    end
-    numthreads = Threads.nthreads()
-    ##identify the elements of T and inds that must be kept.
-    #can't parallelize super easily as there is a push!
-    keep = Array{Bool,1}(undef,length(C.ind))
-    pos = Array{intType,1}[Array{intType,1}(undef,size(C.size,1)) for i = 1:numthreads]
-    let C = C, keep = keep, pos = pos, ap = ap
-      Threads.@threads    for i = 1:size(C.ind,1)
-        ind = C.ind[i]
-        keep[i] = true
-        thisthread = Threads.threadid()
-        ind2pos!(pos,thisthread,ind,C.size)
-    
-        holdint = 0
-        while keep[i] && holdint < size(pos[thisthread],1)
-          holdint += 1
-          keep[i] = keep[i] && (pos[thisthread][holdint] in ap[holdint])
+      xsorted = issorted(Qt.currblock[1])
+      if !xsorted
+        xorder = sortperm(Qt.currblock[1])
+        sort!(Qt.currblock[1])
+        for q = 1:length(Qt.ind)
+          Qt.ind[q][1] = Qt.ind[q][1][xorder,:]
         end
       end
-    end
-    newT = C.T[keep]
-    newinds = C.ind[keep]
-    ##
-    aprange = ap[rangeArgs]
-    newsize = intType[length(ranges) for ranges in aprange]
-    ##index must be recomputed. the tensor changed size. this means the result of this function cannot be modified without
-    # modifying the original tensor
-    # solving this difficulty must involve making the qtensor aware of shared ressources...
-    o_pos = Array{intType,1}[Array{intType,1}(undef,size(C.size,1)) for i = 1:numthreads]
-    t_pos = Array{intType,1}[Array{intType,1}(undef,size(rangeArgs,1)) for i = 1:numthreads]
-    let newinds = newinds, o_pos = o_pos, t_pos = t_pos, rangeArgs = rangeArgs, checksort = checksort, newsize = newsize, ap = ap
-      Threads.@threads    for b = 1:size(newinds,1)
-        ind = newinds[b]
-        thisthread = Threads.threadid()
-        ind2pos!(o_pos,thisthread,ind,C.size)
-        @simd for k = 1:size(rangeArgs,1)
-          thisind = rangeArgs[k]
-          t_pos[thisthread][k] = o_pos[thisthread][thisind]
+
+      ysorted = issorted(Qt.currblock[2])
+      if !ysorted
+        yorder = sortperm(Qt.currblock[2])
+        sort!(Qt.currblock[2])
+        for q = 1:length(Qt.ind)
+          Qt.ind[q][2] = Qt.ind[q][2][yorder,:]
         end
-        for i = 1:size(t_pos[thisthread],1)
-          if !checksort[i]
-            t_pos[thisthread][i] = findfirst(x -> x==t_pos[thisthread][i],(aprange)[i])[1]
+      end
+
+
+      Linds = newblock[1]
+      Lsize,Lnind,Lnonzero = findsizes(Qt,Linds)
+      Rinds = newblock[2]
+      Rsize,Rnind,Rnonzero = findsizes(Qt,Rinds)
+
+      ninds = Lnind + Rnind
+
+      if Lnonzero && Rnonzero
+
+        LR = Lsize < Rsize
+        if LR
+          QNsummary = multi_indexsummary(Qt,Linds)
+          leftSummary = QNsummary
+          rightSummary = inv.(QNsummary)
+          for q = 1:length(rightSummary)
+            add!(rightSummary[q],Qt.flux)
+          end
+        else
+          QNsummary = multi_indexsummary(Qt,Rinds)
+          leftSummary = inv.(QNsummary)
+          rightSummary = QNsummary
+          for q = 1:length(leftSummary)
+            add!(leftSummary[q],Qt.flux)
           end
         end
-        newinds[b] = pos2ind(t_pos[thisthread],newsize)
-      end
-    end
-    ##
-    newQsize = Array{intType,1}[intType[i] for i = 1:size(newsize, 1)]
-    newQnumMat = Array{typeof(C.flux),1}[Qnlist[arange] for (Qnlist, arange) in zip(C.QnumMat[rangeArgs], a[rangeArgs])]
-    newflux = C.flux
-    if size(integerArgs,1) > 0
-      for k in integerArgs
-          newflux += inv(C.QnumMat[k][a[k]])
-      end
-    end
-    newQnumSum = unique.(newQnumMat)
-    return Qtens{eltype(newT),typeof(newflux)}(newsize, newQsize, newT, newinds, newQnumMat, newQnumSum, newflux)
-  end
-  export getindex!
+        newQblocksum = [[copy(leftSummary[q]),copy(rightSummary[q])] for q = 1:length(QNsummary)]
 
-  import ..tensor.searchindex
+        leftQNs,Lbigtosub,rows,Lindexes,Rbigtosub,columns,Rindexes = QnumList(Qt,LR,Linds,Rinds,leftSummary,rightSummary)
+      else
+
+        QNsummary = [Q()]
+        if Rnonzero
+          leftSummary = QNsummary
+          rightSummary = inv.(QNsummary)
+          thisflux = leftflux ? inv(Qt.flux) : Qt.flux
+          for q = 1:length(rightSummary)
+            add!(rightSummary[q],Qt.flux)
+          end
+        else
+          leftSummary = inv.(QNsummary)
+          rightSummary = QNsummary
+          for q = 1:length(leftSummary)
+            add!(leftSummary[q],Qt.flux)
+          end
+        end
+        newQblocksum = [[copy(leftSummary[q]),copy(rightSummary[q])] for q = 1:length(QNsummary)]
+
+        LR = Rnonzero
+        if Lnonzero
+          Lbigtosub,rows,Lindexes = smallQnumList(Qt,Linds,leftSummary)
+          leftQNs = [1]
+          Rbigtosub,columns,Rindexes = [1],[1],[reshape([1],1,1)]
+        else
+          Lbigtosub,rows,Lindexes = [1],[1],[reshape([1],1,1)]
+          leftQNs = [1]
+          Rbigtosub,columns,Rindexes = smallQnumList(Qt,Rinds,rightSummary)
+        end
+      end
+
+      newQt = reblock(Qt,newblock,newQblocksum,LR,QNsummary,leftQNs,ninds,Linds,Rinds,Lindexes,Rindexes,rows,columns,Lbigtosub,Rbigtosub)
+    end
+    return newQt
+  end
+  export changeblock
+
+
+
+  @inline function AAzeropos2ind(currpos::Array{X,1},S::NTuple{P,X},selector::NTuple{G,X}) where X <: Integer where G where P
+    if G > 0
+      x = 0
+      @simd for i = G:-1:2
+        @inbounds x += currpos[selector[i]]
+        @inbounds x *= S[selector[i-1]]
+      end
+      @inbounds x += 1 + currpos[selector[1]]
+    else
+      x = 1
+    end
+    return x
+  end
+
+  @inline function innerloadpos!(y::intType,Rorigsize::intType,thispos::Array{intType,1},thiscurrblock_two::Array{intType,1},thisind_two::Array{intType,2})
+    @simd for i = 1:Rorigsize
+      @inbounds thispos[thiscurrblock_two[i]] = thisind_two[i,y]
+    end
+    nothing
+  end
+
+  @inline function innerloop(x::intType,y::intType,newblocks::Array{Array{W,2},1},inputval::W,leftQNs::Array{intType,1},LRpos::Bool,basesize::NTuple{P,intType},thispos::Array{intType,1},#thisthread::intType,
+            thisind_one::Array{intType,2},thisind_one_sizetwo::intType,Linds::NTuple{Z,intType},Lbigtosub::Array{intType,1},
+            Rinds::NTuple{G,intType},Rbigtosub::Array{intType,1}) where {P, Z, G, W <: Number}
+
+    smallx = AAzeropos2ind(thispos,basesize,Linds)
+    smally = AAzeropos2ind(thispos,basesize,Rinds)
+      
+    @inbounds newq = leftQNs[LRpos ? smallx : smally]
+    @inbounds xval = Lbigtosub[smallx]
+    @inbounds yval = Rbigtosub[smally]
+
+    setindex!(newblocks[newq],inputval,xval,yval)
+    nothing
+  end
+
+  function double_loop(newblocks::Array{Array{W,2},1},thisTens::Array{W,1},leftQNs::Array{intType,1},LRpos::Bool,basesize::NTuple{P,intType},posvecs::Array{Array{intType,1},1},#thisthread::intType,
+            thisind_one::Array{intType,2},thisind_one_sizetwo::intType,Lorigsize::intType,thiscurrblock_one::Array{intType,1},Linds::NTuple{Z,intType},Lbigtosub::Array{intType,1},
+            thisind_two::Array{intType,2},thisind_two_sizetwo::intType,Rorigsize::intType,thiscurrblock_two::Array{intType,1},Rinds::NTuple{G,intType},Rbigtosub::Array{intType,1};minelements::Integer=50) where {P, Z, G, W <: Number}
+  if thisind_two_sizetwo > minelements
+    Threads.@threads for y = 1:thisind_two_sizetwo
+      thisthread = Threads.threadid()
+      thispos = posvecs[thisthread]
+      innerloadpos!(y,Rorigsize,thispos,thiscurrblock_two,thisind_two)
+
+      z = thisind_one_sizetwo * (y-1)
+
+      for x = 1:thisind_one_sizetwo
+        inputval = thisTens[x + z]
+
+        innerloadpos!(x,Lorigsize,thispos,thiscurrblock_one,thisind_one)
+        
+        innerloop(x,y,newblocks,inputval,leftQNs,LRpos,basesize,thispos,
+                thisind_one,thisind_one_sizetwo,Linds,Lbigtosub,Rinds,Rbigtosub)
+      end
+    end
+  else    
+    for y = 1:thisind_two_sizetwo
+      thisthread = Threads.threadid()
+      thispos = posvecs[thisthread]
+      innerloadpos!(y,Rorigsize,thispos,thiscurrblock_two,thisind_two)
+
+      z = thisind_one_sizetwo * (y-1)
+
+      for x = 1:thisind_one_sizetwo
+        inputval = thisTens[x + z]
+
+        innerloadpos!(x,Lorigsize,thispos,thiscurrblock_one,thisind_one)
+        
+        innerloop(x,y,newblocks,inputval,leftQNs,LRpos,basesize,thispos,
+                thisind_one,thisind_one_sizetwo,Linds,Lbigtosub,Rinds,Rbigtosub)
+      end
+    end
+  end
+    nothing
+  end
+
+  function reblock(Qt::Qtens{W,Q},newcurrblocks::Array{Array{intType,1},1},newQblocksum::Array{Array{Q,1},1},
+                   LR::Bool,QNsummary::Array{Q,1},leftQNs::Array{intType,1},ninds::intType,
+                   Linds::Array{intType,1},Rinds::Array{intType,1},Lindexes::Array{Array{intType,2},1},
+                   Rindexes::Array{Array{intType,2},1},rows::Array{intType,1},columns::Array{intType,1},
+                   Lbigtosub::Array{intType,1},Rbigtosub::Array{intType,1};effZero::Float64=1E-13) where {W <: Number, Q <: Qnum, G <: Union{Array{intType,1},Tuple}, P <: Union{Array{intType,1},Tuple}}
+
+    fulltens = sum(q->length(Qt.T[q]),1:length(Qt.T)) == sum(q->rows[q]*columns[q],1:length(rows))
+    newblocks = Array{Array{W,2},1}(undef,length(QNsummary))
+    keepblocks = Array{Bool,1}(undef,length(QNsummary))
+    for q = 1:length(QNsummary)
+      keepblocks[q] = rows[q] > 0 && columns[q] > 0
+      if keepblocks[q]
+        if fulltens
+          newblocks[q] = Array{W,2}(undef,rows[q],columns[q])
+        else
+          newblocks[q] = zeros(W,rows[q],columns[q])
+        end
+      end
+    end
+
+    nQNs = length(Qt.ind)
+
+    numthreads = Threads.nthreads()
+    posvecs = [ones(intType,length(Qt.QnumMat)) for q = 1:numthreads]
+
+    Lorigsize = length(Qt.currblock[1])
+    Rorigsize = length(Qt.currblock[2])
+
+    thiscurrblock_one = Qt.currblock[1]
+    thiscurrblock_two = Qt.currblock[2]
+
+    tup_Linds = (Linds...,)
+    tup_Rinds = (Rinds...,)
+
+    basesize = ntuple(i->length(Qt.QnumMat[i]),length(Qt.QnumMat))
+
+    for q = 1:nQNs
+
+      thisTens = Qt.T[q].T
+
+      thisind = Qt.ind[q]
+
+      thisind_one_sizeone = size(Qt.ind[q][1],1)
+      thisind_one_sizetwo = size(Qt.ind[q][1],2)
+      thisind_one = Qt.ind[q][1]
+
+
+      thisind_two_sizeone = size(Qt.ind[q][2],1)
+      thisind_two_sizetwo = size(Qt.ind[q][2],2)
+      thisind_two = Qt.ind[q][2]
+
+        double_loop(newblocks,thisTens,leftQNs,LR,basesize,posvecs,
+                    thisind_one,thisind_one_sizetwo,Lorigsize,thiscurrblock_one,tup_Linds,Lbigtosub,
+                    thisind_two,thisind_two_sizetwo,Rorigsize,thiscurrblock_two,tup_Rinds,Rbigtosub)
+    end
+    outTens = Array{tens{W},1}(undef,sum(keepblocks))
+    newrowcols = Array{Array{Array{intType,2},1},1}(undef,length(outTens))
+
+
+    count = 0
+    for q = 1:length(keepblocks)
+      if keepblocks[q]
+        count += 1
+        thisq = count
+        outTens[thisq] = tens{W}(newblocks[q])
+        newrowcols[thisq] = [Lindexes[q],Rindexes[q]]
+      end
+    end
+    
+    finalQblocksum = newQblocksum[keepblocks]
+    return Qtens{W,Q}(Qt.size,outTens,newrowcols,newcurrblocks,finalQblocksum,Qt.QnumMat,Qt.QnumSum,Qt.flux)
+  end
+
+
+####################################################
+####################################################
+
+  function newindexsizeone!(Qt::Qtens{W,Q},S::intType...) where {W <: Number, Q <: Qnum}
+    size_ones = 0
+    for w = 1:length(S)
+      size_ones += S[w] == 1
+    end
+    base_ones = 0
+    for w = 1:length(Qt.QnumMat)
+      base_ones += length(Qt.QnumMat[w]) == 1
+    end
+
+    newindices = size_ones - base_ones
+
+    if  newindices > 0
+      for q = 1:length(Qt.ind)
+        Qt.ind[q][2] = vcat(Qt.ind[q][2],zeros(intType,newindices,size(Qt.ind[q][2],2)))
+      end
+      newinds = [length(Qt.QnumMat) + w for w = 1:newindices]
+      Qt.currblock[2] = vcat(Qt.currblock[2],newinds)
+
+      newindex = [[Q()] for w = 1:newindices]
+      Qt.QnumSum = vcat(Qt.QnumSum,newindex)
+      newQnum = [[1] for w = 1:newindices]
+      Qt.QnumMat = vcat(Qt.QnumMat,newQnum)
+    end
+    nothing
+  end
+  export newindexsizeone!
+
+  import ..tensor.reshape!
   """
-      searchindex(C,a...)
+      reshape!(M,a...[,merge=])
 
-  Find element of `C` that corresponds to positions `a`
+  In-place reshape for Qtensors (otherwise makes a copy); can also make Qtensor unreshapable with `merge`, joining all grouped indices together
+
+  # Warning
+  If the Qtensor size is (10,1,2) and we want to reshape in to a (10,2) tensor, this algorithm will reshape to a 
+  [[1,2],[3]] be default instead of [[1],[2,3]], so beware.
+
+  See also: [`reshape`](@ref)
   """
-  function searchindex(C::qarray,a::intType...)::Number
-    thispos = intType[a[i] for i = 1:length(a)]
-    #all the index are integers
-    target_ind = pos2ind(thispos,C.size)
-    j = 0
-    retval = 1E-42
-    while j < size(C.ind, 1) && retval == 1E-42
-      j += 1
-      if C.ind[j] == target_ind
-        retval = C.T[j]
+  function reshape!(Qt::Qtens{W,Q}, S::intType...;merge::Bool=false)::qarray where {W <: Number, Q <: Qnum}
+    Rsize = recoverShape(Qt,S...)
+    outQt = reshape!(Qt,Rsize,merge=merge)
+    newindexsizeone!(outQt,S...)
+    return outQt
+  end
+
+  function (reshape!(Qt::Array{W,N},S::intType...;merge::Bool=false)::Array{W,length(S)}) where W <: Number where N
+    return reshape(Qt,S...)
+  end
+
+  function reshape!(Qt::Qtens{W,Q}, newQsize::Array{Array{intType,1},1};merge::Bool=false)::qarray where {W <: Number, Q <: Qnum}
+    Qt.size = newQsize
+    if merge
+      outQt = mergereshape!(Qt)
+    else
+      outQt = Qt
+    end
+    return outQt
+  end
+
+  function reshape!(Qt::Qtens{W,Q}, newQsize::Array{intType,1}...;merge::Bool=false)::qarray where {W <: Number, Q <: Qnum}
+    return reshape!(Qt,[newQsize[i] for i = 1:length(newQsize)],merge=merge)
+  end
+    
+  function (reshape!(Qt::Array{W,N}, newQsize::Array{Array{intType,1},1};merge::Bool=false)::Array{W,length(newQsize)}) where W <: Number where N
+    return reshape!(Qt,intType[prod(a->size(Qt, a), newQsize[i]) for i = 1:size(newQsize, 1)]...,merge=merge)
+  end
+  
+  function (reshape!(Qt::Array{W,N}, newQsize::Array{intType,1}...;merge::Bool=false)::Array{W,length(newQsize)}) where W <: Number where N
+    return reshape(Qt, intType[newQsize...])
+  end
+
+  import Base.reshape
+  """
+      reshape!(M,a...[,merge=])
+
+  Reshape for Qtensors (makes a copy); can also make Qtensor unreshapable with `merge`, joining all grouped indices together
+
+  # Warning
+  If the Qtensor size is (10,1,2) and we want to reshape in to a (10,2) tensor, this algorithm will reshape to a 
+  [[1,2],[3]] be default instead of [[1],[2,3]], so beware.
+
+  See also: [`reshape!`](@ref)
+  """
+  function reshape(Qt::Qtens{W,Q}, S::intType...;merge::Bool=false)::qarray where {W <: Number, Q <: Qnum}
+    return reshape!(copy(Qt),S...,merge=merge)
+  end
+
+  function reshape(Qt::Qtens{W,Q}, newQsize::Array{Array{intType,1},1};merge::Bool=false) where {W <: Number, Q <: Qnum}
+    return reshape!(copy(Qt), newQsize...,merge=merge)
+  end
+  
+  function reshape(Qt::Qtens{W,Q}, newQsize::Array{intType,1}...;merge::Bool=false) where {W <: Number, Q <: Qnum}
+    return reshape!(copy(Qt), newQsize...,merge=merge)
+  end
+
+  function (reshape(Qt::Array{W,N}, newQsize::Array{Array{intType,1},1};merge::Bool=false)::Array{W,length(newQsize)}) where W <: Number where N
+#    totdim = sum(w->length(newQsize[w])>0,1:length(newQsize))
+    M = Array{intType,1}(undef,length(newQsize))
+    counter = 0
+    for g = 1:length(newQsize)
+      counter += 1
+      if length(newQsize[g]) > 0
+        M[counter] = prod(b->size(Qt,b),newQsize[g])
+      else
+        M[counter] = 1
       end
     end
-    return retval
+    return reshape(deepcopy(Qt), M...)
   end
 
-  function searchindex(C::AbstractArray,a::intType...)::Number
-    return C[a...]
+  function getQnum(a::intType,b::intType,QnumMat::Array{Array{intType,1},1},QnumSum::Array{Array{Q,1},1}) where Q <: Qnum
+    Qnumber = QnumMat[a][b]
+    return QnumSum[a][Qnumber]
   end
+
+  function getQnum(a::intType,b::intType,Qt::qarray)
+    return getQnum(a,b,Qt.QnumMat,Qt.QnumSum)
+  end
+  export getQnum
+
+
+  function makenewindsL(LR::intType,newQt::qarray,Qt::qarray,Rsize::Array{Array{intType,1},1},offset::intType)
+    newindsL = [Array{intType,2}(undef,length(newQt.currblock[1]),size(newQt.ind[q][LR],2)) for q = 1:length(newQt.T)]
+    for q = 1:length(newindsL)
+      for x = 1:size(newindsL[q],2)
+        for i = 1:size(newindsL[q],1)
+          val = 0
+          b = i + offset
+          @simd for a = length(Rsize[b]):-1:1
+            index = Rsize[b][a]
+            @inbounds val *= length(Qt.QnumMat[index])
+            @inbounds val += newQt.ind[q][LR][index,x]
+          end
+          @inbounds newindsL[q][i,x] = val
+        end
+      end
+    end
+    return newindsL
+  end
+
+
+  function makenewindsR(LR::intType,newQt::qarray,Qt::qarray,Rsize::Array{Array{intType,1},1},offset::intType)
+    newindsR = [Array{intType,2}(undef,length(newQt.currblock[LR]),size(newQt.ind[q][LR],2)) for q = 1:length(newQt.T)]
+    for q = 1:length(newindsR)
+      for x = 1:size(newindsR[q],2)
+        for i = 1:size(newindsR[q],1)
+          val = 0
+          @inbounds b = i + offset
+          @simd for a = length(Rsize[b]):-1:1
+            @inbounds index = Rsize[b][a]
+            @inbounds val *= length(Qt.QnumMat[index])
+            @inbounds val += newQt.ind[q][LR][a,x]
+          end
+          @inbounds newindsR[q][i,x] = val
+        end
+      end
+    end
+    return newindsR
+  end
+
+  """
+      mergereshape!(M)
+
+  Groups all joined indices together to make one index that is unreshapable.  Dense tensors are unaffected.
+
+  See also: [`reshape!`](@ref)
+  """
+  function mergereshape!(Qt::Qtens{W,Q};currblock::Array{Array{intType,1},1}=equalblocks(Qt)) where {W <: Number, Q <: Qnum}
+    Rsize = Qt.size
+    newdim = length(Rsize)
+
+    newQnumMat = Array{Array{intType,1},1}(undef,newdim)
+    newQnumSum = Array{Array{Q,1},1}(undef,newdim)
+
+    newsizes = ntuple(a->prod(w->length(Qt.QnumMat[w]),Rsize[a]),newdim)
+
+    zeroQN = Q()
+    currQN = Q()
+    truesize = basesize(Qt)
+    for a = 1:length(Rsize)
+      if size(Rsize[a],1) > 1
+
+        sizes = truesize[Rsize[a]]
+        thisflux = a == length(Rsize) ? Qt.flux : zeroQN
+
+        Linds = Rsize[a]
+        vec = Linds
+        QNsummary = multi_indexsummary(Qt,Linds)
+
+
+        ninds = length(vec)
+        pos = makepos(ninds)
+      
+        numElements = prod(sizes)
+        current_QnumMat = Array{intType,1}(undef,numElements)
+
+        startQN = thisflux
+        for y = 1:numElements
+          position_incrementer!(pos,sizes)
+          copy!(currQN,startQN)
+          add!(currQN,getQnum(vec[1],pos[1],Qt))
+          for b = 2:ninds
+            add!(currQN,getQnum(vec[b],pos[b],Qt))
+          end
+          b = 0
+          findmatch = true
+          while findmatch && b < length(QNsummary)
+            b += 1
+            findmatch = QNsummary[b] != currQN
+          end
+          current_QnumMat[y] = b
+        end
+        newQnumMat[a],newQnumSum[a] = current_QnumMat,QNsummary
+
+      else
+        thisind = Rsize[a][1]
+        newQnumMat[a] = Qt.QnumMat[thisind]
+        newQnumSum[a] = Qt.QnumSum[thisind]
+      end
+    end
+
+    Linds = [i for i = 1:Rsize[end][1]-1]
+    Rinds = Rsize[end]
+
+    newQt = changeblock(Qt,Linds,Rinds)
+    newQt.size = [[i] for i = 1:length(Rsize)]
+    merged_currblock = [[i for i = 1:length(Rsize)-1],[length(Rsize)]]
+
+    newQt.currblock = merged_currblock
+
+
+
+
+
+    newindsL = makenewindsL(1,newQt,Qt,Rsize,0)
+    newindsR = makenewindsR(2,newQt,Qt,Rsize,length(newQt.currblock[1]))
+
+    newQt.ind = [[newindsL[q],newindsR[q]] for q = 1:length(newindsL)]
+
+    newQt.QnumMat = newQnumMat
+    newQt.QnumSum = newQnumSum
+
+    return newQt
+  end
+  export mergereshape!
+
+  function mergereshape(Qt::Qtens{W,Q};currblock::Array{Array{intType,1},1}=equalblocks(Qt)) where {W <: Number, Q <: Qnum}
+    cQt = copy(Qt)
+    return mergereshape!(cQt,currblock=currblock)
+  end
+  export mergereshape
+#=
+  function basereshape!(A::Qtens{W,Q},Qlabels::Array{Array{Q,1},1};currblock::Array{Array{intType,1},1}=equalblocks(Qlabels)) where {W <: Number, Q <: Qnum}
+
+    A.ind = #downconvert
+
+    A.currblock = currblock
+    A.size = ntuple(w->length(Qlabels[w]),length(Qlabels))
+    A.QnumMat,A.QnumSum = convertQnumMat(Qlabels)
+    return A
+  end
+  export basereshape!
+
+  function basereshape(A::Qtens{W,Q},Qlabels::Array{Array{Q,1},1};currblock::Array{Array{intType,1},1}=equalblocks(Qlabels)) where {W <: Number, Q <: Qnum}
+    cA = copy(A)
+    return basereshape!(cA,Qlabels,currblock=currblock)
+  end
+=#
+  import ..tensor.unreshape!
+  """
+      unreshape!(Qt,a...)
+
+  In-place, unambiguous unreshaping for Qtensors.  Works identically to reshape for dense tensors
+
+  See also: [`reshape!`](@ref)
+  """
+  function unreshape!(Qt::AbstractArray,sizes::W...) where W <: Integer
+    return reshape!(Qt,sizes...)
+  end
+
+  function unreshape!(Qt::qarray,sizes::W...) where W <: Integer
+    return unreshape(Qt)
+  end
+
+  import ..tensor.unreshape
+  """
+      unreshape(Qt,a...)
+
+  Unambiguous unreshaping for Qtensors.  Works identically to reshape for dense tensors
+  """
+  function unreshape(Qt::qarray)
+    Qt.size = [[i] for i = 1:length(Qt.QnumMat)]
+    return Qt
+  end
+
+  function unreshape(Qt::T,sizes::Array{W,1}) where {W <: Integer, T<: Union{qarray,AbstractArray}}
+    return unreshape(Qt,sizes...)
+  end
+
+  function unreshape(Qt::AbstractArray,sizes::W...) where W <: Integer
+    return reshape(Qt,sizes...)
+  end
+
+  function unreshape(Qt::qarray,sizes::W...) where W <: Integer
+    return unreshape!(copy!(Qt),sizes...)
+  end
+
 
   #get the last index of a Qtensor (ex: A[:,1:end]...defines "end")
   import Base.lastindex
@@ -1136,35 +1346,6 @@ function checkflux(Qt::Qtens;silent::Bool = true)
     return Qtens.size[i]
   end
 
-  """
-      sortTensors!(A...)
-
-  Sort any number of Qtensors `A` accoring to their `ind` field
-
-  See also: [`sortTensors!`](@ref) [`Qtens`](@ref)
-  """
-  function sortTensors!(A::qarray...)
-    for i = 1:size(A, 1)
-      if !issorted(A[i].ind)
-        quicksort!(A[i].T, A[i].ind)
-      end
-    end
-    nothing
-  end
-  export sortTensors!
-
-  """
-      sortTensor!(A...)
-
-  Sort Qtensor `A` accoring to their `ind` field
-
-  See also: [`sortTensors!`](@ref) [`Qtens`](@ref)
-  """
-  function sortTensor!(A::qarray)
-    sortTensors!(A)
-  end
-  export sortTensor!
-
   import .tensor.mult!
   """
       mult!(A,x)
@@ -1173,19 +1354,128 @@ function checkflux(Qt::Qtens;silent::Bool = true)
 
   See also: [`*`](@ref) [`add!`](@ref) [`sub!`](@ref) [`div!`](@ref)
   """
-  function mult!(Qt::qarray, num::Number)::qarray
-    @simd for i = 1:size(Qt.T, 1)
-      Qt.T[i] *= num
-    end
-    return Qt
+  function mult!(A::qarray, num::Number)::qarray
+    return tensorcombination!(A,alpha=num)
   end
 
-  function mult!(Qt::AbstractArray, num::Number) #::AbstractArray
+  function mult!(Qt::AbstractArray, num::Number)
     return Qt * num
   end
 
   function mult!(num::Number, Qt::X)::TensType where X <: TensType
     return mult!(Qt, num)
+  end
+
+  function matchblocks(conjvar::NTuple{G,Bool},operators::qarray...;
+                       ind::NTuple{G,intType}=ntuple(i->i==1 ? 2 : 1,length(operators)),
+                       matchQN::Q=typeof(operators[1].flux)(),nozeros::Bool=true) where {G,Q <: Qnum}
+    zeroQN = Q()
+    A = operators[1]
+    Aind = ind[1]
+
+    LQNs = [conjvar[1] ? inv(A.Qblocksum[q][Aind]) : A.Qblocksum[q][Aind] for q = 1:length(A.Qblocksum)]
+    Aorder = [Array{intType,1}(undef,length(operators)) for q = 1:length(LQNs)]
+    for q = 1:length(LQNs)
+      Aorder[q] = Array{intType,1}(undef,length(operators))
+      Aorder[q][1] = q
+    end
+    matchBool = Array{Bool,1}(undef,length(LQNs))
+
+    numthreads = Threads.nthreads()
+    storeQN = [Q() for i = 1:numthreads]
+
+    for k = 2:length(operators)
+      B = operators[k]
+      Bind = ind[k]
+      RQNs = [conjvar[k] ? inv(B.Qblocksum[q][Bind]) : B.Qblocksum[q][Bind] for q = 1:length(B.Qblocksum)]
+
+      #=Threads.@threads=# for q = 1:length(LQNs)
+        thisthread = Threads.threadid()
+        @inbounds matchBool[q] = false
+        w = 0
+        while w < length(RQNs) && !matchBool[q]
+          @inbounds thisQN = storeQN[thisthread]
+          copy!(thisQN,zeroQN)
+          w += 1
+          @inbounds add!(thisQN,RQNs[w])
+          @inbounds add!(thisQN,LQNs[q])
+          @inbounds matchBool[q] = thisQN == matchQN
+        end
+        @inbounds Aorder[q][k] = matchBool[q] ? w : 0
+      end
+    end
+
+    if nozeros
+      Aorder = Aorder[matchBool]
+    end
+
+    return Aorder
+  end
+  export matchblocks
+
+  import .tensor.tensorcombination!
+  function tensorcombination!(M::Qtens{W,Q}...;alpha::Tuple=ntuple(i->1,length(A)),fct::Function=*)::qarray where {Q <: Qnum, W <: Number}
+    A = tensorcombination!(M[1],alpha=alpha[1])
+    for i = 2:length(M)
+      tensorcombination!(A,M[i],alpha=(1,alpha[i]),fct=fct)
+    end
+    return A
+  end
+
+  function tensorcombination!(M::Qtens{W,Q};alpha::Number=1,fct::Function=*)::qarray where {Q <: Qnum, W <: Number}
+    if !isapprox(alpha[1],1.)
+      #=Threads.@threads=# for q = 1:length(M.T)
+        @simd for i = 1:length(M.T[q])
+          M.T[q].T[i] = fct(M.T[q].T[i],alpha)
+        end
+      end
+    end
+    return M
+  end
+
+
+
+  function tensorcombination!(A::Qtens{W,Q},QtensB::Qtens{W,Q};alpha::Tuple=(1,1),fct::Function=*)::qarray where {Q <: Qnum, W <: Number}
+
+    A = tensorcombination!(A,alpha=alpha[1],fct=fct)
+
+    mult = alpha[2]
+
+    B = changeblock(QtensB,A.currblock)
+
+    commoninds = matchblocks((false,false),A,B,ind=(1,2),matchQN=A.flux)
+
+    #=Threads.@threads=# for q = 1:length(commoninds)
+      Aqind = commoninds[q][1]
+      Bqind = commoninds[q][2]
+      add!(A.T[Aqind],B.T[Bqind],mult)
+    end
+
+    Bcommon = [commoninds[q][2] for q = 1:length(commoninds)]
+    Bleftover = setdiff(1:length(B.T),Bcommon)
+
+    if length(Bleftover) > 0
+      AQblocks = length(A.T)
+      newT = Array{tens{W},1}(undef,AQblocks+length(Bleftover))
+      newind = Array{Array{Array{intType,2},1},1}(undef,length(newT))
+      newQblocksum = Array{Array{Q,1},1}(undef,length(newT))
+      for q = 1:AQblocks
+        newT[q] = A.T[q]
+        newind[q] = A.ind[q]
+        newQblocksum[q] = A.Qblocksum[q]
+      end
+      #=Threads.@threads=# for q = 1:length(Bleftover)
+        addq = Bleftover[q]
+        newT[q+AQblocks] = fct(B.T[addq],mult)
+        newind[q+AQblocks] = B.ind[addq]
+        newQblocksum[q+AQblocks] = B.Qblocksum[addq]
+      end
+      A.T = newT
+      A.ind = newind
+      A.Qblocksum = newQblocksum
+    end
+
+    return A
   end
 
   import .tensor.add!
@@ -1196,32 +1486,8 @@ function checkflux(Qt::Qtens;silent::Bool = true)
 
   See also: [`+`](@ref) [`sub!`](@ref) [`mult!`](@ref) [`div!`](@ref)
   """
-  function add!(A::qarray, B::qarray, mult::Number)::qarray
-    sortTensors!(A, B)
-    i, j = 1, 1
-    iniSizeA = size(A.ind, 1) # size A.ind can change during the loop. we must stop at the current size anyway.
-    while i <= iniSizeA && j <= size(B.ind, 1)
-      if A.ind[i] < B.ind[j]
-        i += 1
-      elseif A.ind[i] > B.ind[j]
-        push!(A.T, mult * B.T[j])
-        push!(A.ind, B.ind[j])
-        j += 1
-      else
-        A.T[i] += mult * B.T[j]
-        i += 1
-        j += 1
-      end
-    end
-    for k = j:size(B.ind, 1)
-      push!(A.T, mult * B.T[k])
-      push!(A.ind, B.ind[k])
-    end
-    return A
-  end
-
-  function add!(A::AbstractArray, B::AbstractArray, mult::Number)::AbstractArray
-    return A + mult!(mult,B)
+  function add!(A::Qtens{W,Q}, QtensB::qarray, mult::Number)::qarray where {Q <: Qnum, W <: Number}
+    return tensorcombination!(A,QtensB,alpha=(1,mult))
   end
 
   function add!(A::X, B::Y)::TensType where {X <: TensType,Y <: TensType}
@@ -1260,10 +1526,7 @@ function checkflux(Qt::Qtens;silent::Bool = true)
   See also: [`/`](@ref) [`add!`](@ref) [`sub!`](@ref) [`mult!`](@ref)
   """
   function div!(A::qarray, num::Number)::qarray
-    @simd for w = 1:size(A.T, 1)
-      A.T[w] /= num
-    end
-    return A
+    return mult!(A,1/num)
   end
 
   function div!(A::AbstractArray, num::Number)::AbstractArray
@@ -1310,7 +1573,7 @@ function checkflux(Qt::Qtens;silent::Bool = true)
   end
 
   function *(Qt::qarray, num::Number)::qarray
-    return mult!(copy(Qt), num)
+    return num * Qt
   end
 
   import LinearAlgebra./
@@ -1345,14 +1608,14 @@ function checkflux(Qt::Qtens;silent::Bool = true)
 
   Takes the square root of a dense tensor (new tensor created) or Qtensor (in-place)
   """
-  function sqrt!(Qt::Qtens)::qarray
-    @simd for a = 1:length(Qt.T)
-      Qt.T[a] = sqrt.(Qt.T[a])
+  function sqrt!(A::qarray)
+    for q = 1:length(A.T)
+      sqrt!(A.T[q])
     end
-    return Qt
+    return A
   end
 
-  function sqrt!(Qt::AbstractArray) #::AbstractArray
+  function sqrt!(Qt::AbstractArray)
     return sqrt(Qt)
   end
   export sqrt!
@@ -1366,22 +1629,15 @@ function checkflux(Qt::Qtens;silent::Bool = true)
 
   See also: [`invmat`](@ref)
   """
-  function invmat!(Qt::qarray;zero::Float64=1E-16)
-#    @assert(size(Qt.QnumMat,1) == 2)
-    for a = 1:size(Qt.T,1)
-      Qt.T[a] = abs(Qt.T[a]) > zero ? 1/Qt.T[a] : 0.
+  function invmat!(A::qarray)
+    for q = 1:length(A.T)
+      invmat!(A.T[q])
     end
-    return Qt
-  end
-
-  function invmat!(Qt::AbstractArray;zero::Float64=1E-16)
-    for a = 1:size(Qt,1)
-      Qt[a,a] = abs(Qt[a,a]) > zero ? 1/Qt[a,a] : 0.
-    end
-    return Qt
+    return A
   end
   export invmat!
 
+  import .tensor.invmat
   """
       invmat(Qt)
 
@@ -1389,10 +1645,23 @@ function checkflux(Qt::Qtens;silent::Bool = true)
 
   See also: [`invmat!`](@ref)
   """
-  function invmat(Qt::TensType)
+  function invmat(Qt::qarray)
     return invmat!(copy(Qt))
   end
   export invmat
+
+  """
+    metricdistance(A[,power=])
+
+  computes the Forebenius norm of all elements in the tensor...equal to L^power norm
+  """
+  function metricdistance(D::Qtens{W,Q};power::Number=1) where {W <: Number, Q <: Qnum}
+    powersums = Array{W,1}(undef,length(D.T))
+    #=Threads.@threads=# for q = 1:length(D.T)
+      powersums[q] = sum(w->D.T[q].T[w]^power,1:length(D.T[q].T))
+    end
+    return sum(powersums)^(1/power)
+  end
 
   import Base.sum
   """
@@ -1400,8 +1669,8 @@ function checkflux(Qt::Qtens;silent::Bool = true)
 
   sum elements of a Qtensor
   """
-  function sum(A::qarray)::Number
-    return sum(A.T)
+  function sum(QtensA::Qtens{W,Q}) where {W <: Number, Q <: Qnum}
+    return metricdistance(QtensA,power=1)
   end
 
   import LinearAlgebra.norm
@@ -1410,8 +1679,8 @@ function checkflux(Qt::Qtens;silent::Bool = true)
 
   Froebenius norm of a Qtensor
   """
-  function norm(A::qarray)::Number
-    return norm(A.T)
+  function norm(QtensA::Qtens{W,Q}) where {W <: Number, Q <: Qnum}
+    return metricdistance(QtensA,power=2)
   end
   export norm
 
@@ -1423,8 +1692,13 @@ function checkflux(Qt::Qtens;silent::Bool = true)
 
   See also: [`Qtens`](@ref)
   """
-  function eltype(A::Qtens{T,Q}) where {T <: Number, Q <: Qnum}
-    return T
+  function eltype(A::Qtens{W,Q}) where {W <: Number, Q <: Qnum}
+    return W
+  end
+
+  import .tensor.elnumtype
+  function elnumtype(A::Qtens{W,Q}) where {W <: Number, Q <: Qnum}
+    return eltype(A)
   end
 
   import LinearAlgebra.conj
@@ -1436,9 +1710,9 @@ function checkflux(Qt::Qtens;silent::Bool = true)
   See also: [`conj!`](@ref)
   """
   function conj(currQtens::qarray)::qarray
-    newQtens = copy(currQtens)
-    conj!(newQtens)
-    return newQtens
+    Qtens = copy(currQtens)
+    conj!(Qtens)
+    return Qtens
   end
 
   import LinearAlgebra.conj!
@@ -1450,11 +1724,22 @@ function checkflux(Qt::Qtens;silent::Bool = true)
   See also: [`conj`](@ref)
   """
   function conj!(currQtens::qarray)
-    currQtens.T = conj!(currQtens.T)
-    currQtens.QnumMat = [inv!.(currQtens.QnumMat[w]) for w = 1:length(currQtens.QnumMat)]
-    currQtens.QnumSum = [unique(currQtens.QnumMat[w]) for w = 1:length(currQtens.QnumMat)]
+    for q = 1:length(currQtens.T)
+      currQtens.T[q] = conj!(currQtens.T[q])
+    end
+    currQtens.QnumSum = [inv!.(currQtens.QnumSum[w]) for w = 1:length(currQtens.QnumSum)]
     currQtens.flux = inv(currQtens.flux)
     return currQtens
+  end
+
+  import LinearAlgebra.ndims
+  """
+      ndims(A)
+
+  number of dimensions of a Qtensor (identical usage to dense `size` call)
+  """
+  function ndims(A::qarray)
+    return length(A.size)
   end
 
   import LinearAlgebra.size
@@ -1465,44 +1750,40 @@ function checkflux(Qt::Qtens;silent::Bool = true)
   gets the size of a Qtensor (identical usage to dense `size` call)
   """
   function size(A::qarray, i::intType)
-    return prod(a->A.size[a], A.Qsize[i])
+    return prod(w->length(A.QnumMat[w]),A.size[i])
   end
 
   function size(A::qarray)
-    newsize = intType[size(A,i) for i = 1:size(A.Qsize, 1)]
-    return newsize
+    return ntuple(w->size(A,w),ndims(A))
   end
 
-  import LinearAlgebra.ndims
-  """
-      ndims(A)
-
-  number of dimensions of a Qtensor (identical usage to dense `size` call)
-  """
-  function ndims(A::qarray)
-    return length(A.Qsize)
-  end
-
-  """
-      permind!(order,x,S)
-  
-  Permutes indices in position vector `x` (with tensor size `S`) according to reordering `order`
-  
-  See also: [`permutedims`](@ref) [`permutedims!`](@ref)
-  """
-  function permind!(order::Array{X,1},x::Array{Y,1},S::Array{Z,1}) where X <: Integer where Y <: Integer where Z <: Integer
-    numthreads = Threads.nthreads()
-    currpos = Array{intType,1}[Array{intType,1}(undef,size(S,1)) for i = 1:numthreads]
-    let currpos = currpos, S = S, x = x, order = order
-      Threads.@threads for i = 1:size(x,1)
-        thisthread = Threads.threadid()
-        ind2zeropos!(currpos,thisthread,x,i,S)
-        zeropos2ind!(order,currpos,thisthread,x,i,S)
+  function recoverShape(Qt::Qtens{W,Q},S::intType...) where {W <: Number, Q <: Qnum}
+    Rsize = Array{Array{intType,1},1}(undef,length(S))
+    count = 1
+    wstart = 1
+    for a = 1:length(Rsize)
+      if count > length(Qt.QnumMat)
+        Rsize[a] = [count]
+        count += 1
+      else
+        currdim = length(Qt.QnumMat[count])
+        while count < length(Qt.QnumMat) && currdim < S[a]
+          count += 1
+          currdim *= length(Qt.QnumMat[count])
+        end
+        while length(Qt.QnumMat) > count && a == length(Rsize) && currdim*length(Qt.QnumMat[count+1]) == S[a] #&& length(Qt.QnumMat[count+1]) == 1
+          count += 1
+        end
+        Rsize[a] = [i for i = wstart:count]
+        count += 1
+        wstart = count
       end
     end
-    nothing
+    return Rsize
   end
-  export permind!
+  export recoverShape
+
+
 
   import Base.permutedims
   """
@@ -1513,9 +1794,9 @@ function checkflux(Qt::Qtens;silent::Bool = true)
   See also: [`permutedims!`](@ref)
   """
   function permutedims(currQtens::Qtens{W,Q}, vec::Array{intType,1}) where {W <: Number, Q <: Qnum}
-    newQtens = copy(currQtens)
-    permutedims!(newQtens, vec)
-    return newQtens
+    Qtens = copy(currQtens)
+    permutedims!(Qtens, vec)
+    return Qtens
   end
 
   import Base.permutedims!
@@ -1526,150 +1807,52 @@ function checkflux(Qt::Qtens;silent::Bool = true)
 
   See also: [`permutedims`](@ref)
   """
-  function permutedims!(currQtens::Qtens{W,Q}, vec::Array{intType,1}) where {W <: Number, Q <: Qnum}
-    if size(currQtens.size, 1) == size(vec, 1)
-      order = vec
-    else
-      order = eltype(vec)[]
-      for i = 1:size(vec, 1)
-        for j = 1:size(currQtens.Qsize[vec[i]], 1)
-          push!(order, currQtens.Qsize[vec[i]][j])
-        end
+  function permutedims!(currQtens::Qtens{W,Q}, vec::Union{NTuple{N,intType},Array{intType,1}}) where {N, W <: Number, Q <: Qnum}
+    Rsize = currQtens.size
+
+    totalordersize = sum(q->length(Rsize[q]),1:length(Rsize))
+    order = Array{intType,1}(undef,totalordersize)
+    counter = 0
+    for i = 1:size(vec, 1)
+      for j = 1:length(Rsize[vec[i]])
+        counter += 1
+        order[counter] = Rsize[vec[i]][j]
       end
     end
-    currQtens.Qsize = currQtens.Qsize[vec]
+
+    permorder = Array{intType,1}(undef,length(order))
+
+    newRsize = Rsize[[vec...]]
     counter = intType[0]
-    for k = 1:length(currQtens.Qsize)
-      for m = 1:length(currQtens.Qsize[k])
+    for k = 1:length(Rsize)
+      for m = 1:length(Rsize[k])
         counter[1] += 1
-        currQtens.Qsize[k][m] = counter[1]
+        permorder[order[counter[1]]] = counter[1]
       end
     end
-    thispos = Array{eltype(currQtens.ind),1}(undef, size(order, 1))
-    permind!(order, currQtens.ind, currQtens.size)
-    currQtens.size = currQtens.size[order]
-    currQtens.QnumMat = currQtens.QnumMat[order]
-    currQtens.QnumSum = currQtens.QnumSum[order]
+
+    counter = 0
+    for w = 1:length(newRsize)
+      for a = 1:length(newRsize[w])
+        counter += 1
+        newRsize[w][a] = counter
+      end
+    end
+
+    currQtens.size = newRsize #ntuple(i->currQtens.size[order[i]],length(order))
+    currQtens.QnumMat = currQtens.QnumMat[[order...]]
+    currQtens.QnumSum = currQtens.QnumSum[[order...]]
+
+    for w = 1:2
+      theseblocks = currQtens.currblock[w]
+      currQtens.currblock[w] = [permorder[theseblocks[i]] for i = 1:length(theseblocks)]
+    end
+
     return currQtens
   end
 
-  function permutedims!(A::AbstractArray, order::Array{intType,1}) #where W <: Integer
+  function permutedims!(A::AbstractArray, order::Union{NTuple{N,intType},Array{intType,1}}) where N
     return permutedims(A, order)
-  end
-
-  """
-      convIn(iA)
-
-  Convert `iA` of type Int64 (ex: 1), Array{Int64,1} ([1,2,3]), or Array{Int64,2}* ([1 2 3]) to Array{Int64,1}
-
-  *- two-dimensional arrays must be size "m x 1"
-  """
-  function convIn(iA::O)::Array{intType,1} where O <: intvecType
-    if O == Array{intType,1}
-      return iA
-    elseif O <: Integer
-      return intType[iA]
-    elseif O <: Array{Integer,2}
-#      @assert(ndims(iA) == 2)
-      return iA[:]
-    elseif O <: Tuple
-      return intType[O[i] for i = 1:length(O)]
-    end
-  end
-  export convIn
-
-  import Base.zero
-    """Like the default function zero(t::Array), return an object with the same properties containing only zeros."""
-  function zero(t::Qtens)
-    return Qtens(copy(t.size),copy(t.Qsize),eltype(t.T)[],eltype(t.ind)[],copy(t.QnumMat),copy(t.QnumSum), copy(t.flux)) 
-  end
-
-  """
-      Idhelper(A,iA)
-
-  generates the size of matrix equivalent of an identity matrix from tensor `A` with indices `iA`
-
-  #Output:
-  +`lsize::Int64`: size of matrix-equivalent of identity operator
-  +`finalsizes::Int64`: size of identity operator
-
-  See also: [`makeId`](@ref) [`trace`](@ref)
-  """
-  function Idhelper(A::TensType,iA::W) where W <: Union{intvecType,Array{Array{intType,1},1}}
-    if typeof(iA) <: intvecType
-      vA = convIn(iA)
-      lsize = size(A,vA[1])
-      finalsizes = [lsize,lsize]
-    else
-      lsize = prod(w->size(A,iA[w][1]),1:length(iA))
-      leftsizes = [size(A,iA[w][1]) for w = 1:length(iA)]
-      rightsizes = [size(A,iA[w][2]) for w = 1:length(iA)]
-      finalsizes = vcat(leftsizes,rightsizes)
-    end
-    return lsize,finalsizes
-  end
-
-  
-  """
-      makeId(A,iA)
-
-  generates an identity matrix from tensor `A` with indices `iA`
-
-  See also: [`trace`](@ref)
-  """
-  function makeId(A::Qtens,iA::W) where W <: Union{intvecType,Array{Array{intType,1},1}}
-    lsize,finalsizes = Idhelper(A,iA)
-    newQnumMat = A.QnumMat[iA]
-    typeA = eltype(A)
-    Id = Qtens(newQnumMat,Type=typeA)
-    Id.ind = intType[i+lsize*(i-1) for i = 1:lsize]
-    Id.T = ones(typeA,length(Id.ind))
-
-    Id.size = finalsizes
-    Id.Qsize = [[i] for i = 1:length(Id.size)]
-    return Id
-  end
-
-  function makeId(A::Array,iA::W) where W <: Union{intvecType,Array{Array{intType,1},1}}
-    lsize,finalsizes = Idhelper(A,iA)
-    Id = zeros(eltype(A),lsize,lsize) + LinearAlgebra.I
-    return reshape(Id,finalsizes...)
-  end
-
-  """
-      makeId(A,iA)
-
-  generates an identity matrix from tensor `A` with indices `iA`
-
-  See also: [`trace`](@ref)
-  """
-  function makeId(A::denstens,iA::W) where W <: Union{intvecType,Array{Array{intType,1},1}}
-    lsize,finalsizes = Idhelper(A,iA)
-    Id = zeros(eltype(A),lsize,lsize) + LinearAlgebra.I
-    return reshape(Id,finalsizes...)
-  end
-  export makeId
-
-  """
-      swapgate(A,iA,B,iB)
-  
-  generates a swap gate (order of indices: in index for `A`, in index for `B`, out index for `A`, out index for `B`) for `A` and `B`'s indices `iA` and `iB`
-  """
-  function swapgate(A::TensType,iA::W,B::TensType,iB::R) where W <: Union{intvecType,Array{Array{intType,1},1}} where R <: Union{intvecType,Array{Array{intType,1},1}}
-    LId = makeId(A,iA)
-    RId = makeId(B,iB)
-    if typeof(LId) <: denstens || typeof(LId) <: qarray
-      push!(LId.size,1)
-    else
-      LId = reshape(LId,size(LId)...,1)
-    end
-    if typeof(RId) <: denstens || typeof(RId) <: qarray
-      push!(RId.size,1)
-    else
-      RId = reshape(RId,size(RId)...,1)
-    end
-    fullId = contract(LId,4,RId,4)
-    return permute(fullId,[1,3,2,4])
   end
 
   import Base.isapprox
@@ -1686,5 +1869,84 @@ function checkflux(Qt::Qtens;silent::Bool = true)
       return false
     end
   end
+
+
+
+
+  """
+      showQtens(Qt[,show=])
+
+  Prints fields of the Qtensor (`Qt`) out to a number of elements `show`; can also be called with `print` or `println`
+
+  See also: [`Qtens`](@ref) [`print`](@ref) [`println`](@ref)
+  """
+  function showQtens(Qtens::qarray;show::intType = 4)
+    println("printing Qtens of type: ", typeof(Qtens))
+    println("size = ", Qtens.size)
+    maxshow = min(show, size(Qtens.T, 1))
+    maxBool = show < size(Qtens.T, 1)
+    println("block tensor: ")#Qtens.T[1:maxshow], maxBool ? "..." : "")
+    if length(Qtens.T) == 0
+      println("<null tensor>")
+    else
+      for q = 1:length(Qtens.T)
+        maxshow = min(show, length(Qtens.T[q].T))
+        maxBool = show < length(Qtens.T[q].T)
+        println("block $q size = ",Qtens.T[q].size,", ",Qtens.Qblocksum[q],", values = ",Qtens.T[q].T[1:maxshow], maxBool ? "..." : "")
+        println("inds: block $q")
+        maxshow = min(show, length(Qtens.ind[q][1]))
+        maxBool = show < length(Qtens.ind[q][1])
+        println("  row: ",Qtens.ind[q][1][1:maxshow], maxBool ? "..." : "")
+        maxshow = min(show, length(Qtens.ind[q][2]))
+        maxBool = show < length(Qtens.ind[q][2])
+        println("  col: ",Qtens.ind[q][2][1:maxshow], maxBool ? "..." : "")
+      end
+    end
+    println("currblock = ",Qtens.currblock)
+    println("Qblocksum = ",Qtens.Qblocksum)
+    println("QnumMat = ")
+    for i = 1:size(Qtens.QnumMat, 1)
+      maxshow = min(show, size(Qtens.QnumMat[i], 1))
+      maxBool = show < size(Qtens.QnumMat[i], 1)
+      println("  ",i, ": ", Qtens.QnumMat[i][1:maxshow], maxBool ? "..." : "")
+    end
+    println("QnumSum = ")
+    for i = 1:size(Qtens.QnumSum, 1)
+      maxshow = min(show, size(Qtens.QnumSum[i], 1))
+      maxBool = show < size(Qtens.QnumSum[i], 1)
+      println("  ",i, ": ", Qtens.QnumSum[i][1:maxshow], maxBool ? "..." : "")
+    end
+    println("flux = ", Qtens.flux)
+    nothing
+  end
+  export showQtens
+
+  import Base.print
+  """
+      print(A[,show=])
+
+  Idential to `showQtens`
+
+  See also: [`showQtens`](@ref) [`println`](@ref)
+  """
+  function print(A::qarray...;show::intType = 4)
+    showQtens(A, show = show)
+    nothing
+  end
+
+  import Base.println
+  """
+      println(A[,show=])
+
+  Idential to `showQtens`
+
+  See also: [`showQtens`](@ref) [`print`](@ref)
+  """
+  function println(A::qarray;show::intType = 4)
+    showQtens(A, show = show)
+    print("\n")
+    nothing
+  end
+
 
 end

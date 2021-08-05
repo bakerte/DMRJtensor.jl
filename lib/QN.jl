@@ -1,12 +1,12 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.1
+#                              v1.0
 #
 #########################################################################
-# Made by Thomas E. Baker (2018)
+# Made by Alexandre Foley and Thomas E. Baker (2020)
 # See accompanying license with this program
-# This code is native to the julia programming language (v1.1.0) or (v1.5)
+# This code is native to the julia programming language (v1.1.1+)
 #
 
 """
@@ -98,17 +98,17 @@ using ..tensor
   Additionnally comparison operator <,>,>=,<=,==,!= are defined. The comparators are not meaningful
   from a group theoretical point of view.
 
-  See also: [`U1`](@ref) [`@composeQNs`](@ref)
+  See also: [`U1`](@ref) [`@makeQNs`](@ref)
   """
   mutable struct U1<:Qnum
     val::Int64
   end
 
-  @inline function U1()::U1
+  function U1()::U1
     return U1(0)
   end
 
-  @inline function U1(a::U1)::U1
+  function U1(a::U1)::U1
     return U1(a.val)
   end
   export U1
@@ -128,14 +128,14 @@ using ..tensor
     return U1(a.val)
   end
 
-  @inline Base.@pure function +(a::U1,b::U1)::U1
+  Base.@pure function +(a::U1,b::U1)::U1
     ap = copy(a)
     return add!(ap,b)
 #    return U1(a.val+b.val)
   end
 
   import .tensor.add!
-  @inline Base.@pure function add!(a::U1,b::U1)::U1
+  Base.@pure function add!(a::U1,b::U1)::U1
     a.val += b.val
     a
     # nothing
@@ -183,7 +183,7 @@ using ..tensor
   additionnally comparison operator <,>,>=,<=,==,!= are defined. The comparators are not meaningful
   from a group theoretical point of view.
 
-  See also: [`U1`](@ref) [`@composeQNs`](@ref)
+  See also: [`U1`](@ref) [`@makeQNs`](@ref)
   """
   mutable struct Zn{T} <: Qnum
     val::UInt64
@@ -212,7 +212,7 @@ using ..tensor
     return a.val==b.val
   end
 
-  @inline Base.@pure function add!(a::Zn{N},b::Zn{N})::Zn{N} where{N}
+  Base.@pure function add!(a::Zn{N},b::Zn{N})::Zn{N} where{N}
     a.val += b.val
 	# a.val %= N
 	# this conditionnal is less costly than the full modulo.
@@ -228,7 +228,7 @@ using ..tensor
     return Zn{N}(a.val)
   end
 
-  @inline Base.@pure function +(a::Zn{N},b::Zn{N})::Zn{N} where{N}
+  Base.@pure function +(a::Zn{N},b::Zn{N})::Zn{N} where{N}
     #implemented in term of the in place addition.
     ap = copy(a)
     return add!(ap,b)
@@ -249,7 +249,7 @@ using ..tensor
 #   nothing
   end
 
-  @inline function hash(a::Zn{N}) where{N}
+  function hash(a::Zn{N}) where{N}
     return a.val
   end
 
@@ -264,20 +264,20 @@ using ..tensor
   # end
 
   """
-      @composeQNs("name",types...)
+      @makeQNs("name",types...)
 
   creates a quantum number with `name` (String) with `types` in order; pre-defined types: U1, Zn, parity
 
   # Example:
 
-     @composeQNs("spin",U1) #spins
+     @makeQNs("spin",U1) #spins
 
-     @composeQNs("fermion",U1,U1) #fermions
+     @makeQNs("fermion",U1,U1) #fermions
 
   # Use:
 
     macro to automatically compose quantum numbers.
-      The macro composeQNs_printcode prints the generated code for inspection if you want
+      The macro makeQNs_printcode prints the generated code for inspection if you want
       to look at the code this macro would add to yours.
     Supply to the macro a name for your new quantum number type and
     all the quantum number that must be composed to make it.
@@ -287,25 +287,25 @@ using ..tensor
 	suppose we have a system where the number of particle, total spin, and some abstract Z2 quantity are conserved.
 	the number of particle N is a U1 number, the total spin S is a U1 number.
     The composite quantum number can be created by calling:
-      @composeQNs("U1xU1xZ2",U1,U1,Zn{2})
+      @makeQNs("U1xU1xZ2",U1,U1,Zn{2})
     after having called this macro, a new type named "U1xU1xZ2" is available.
     we can create such a quantum number with total particle 4, spin 0, and Z2 0 with the call
       N4S0P0 = U1xU1xZ2(4,0,0)
     Be sure to use a name that is unique to your current scope to avoid name clashes.
     Name all your composed QNs with a unique name.
 
-  See also: [`@composeQNs`](@ref) [`U1`](@ref) [`Zn`](@ref) [`parity`](@ref) [`@composeQNs_printcode`](@ref) [`@fermion_composeQNs`](@ref) [`_generatecompositestring`](@ref)
+  See also: [`@makeQNs`](@ref) [`U1`](@ref) [`Zn`](@ref) [`parity`](@ref) [`@makeQNs_printcode`](@ref) [`@fermion_makeQNs`](@ref) [`_generatecompositestring`](@ref)
   """
-  macro composeQNs(name::String,Types...)
+  macro makeQNs(name::String,Types...)
     # _generatecompositestring
     output = _generatecompositestring(name,Types...)
     EExp = Meta.parse(output)
     return eval(EExp)
   end
-  export @composeQNs
+  export @makeQNs
 
   """
-      @fermion_composeQNs("name",types...)
+      @fermion_makeQNs("name",types...)
 
   creates a quantum number with `name` (String) with `types` in order; pre-defined types: U1, Zn, parity
 
@@ -314,22 +314,22 @@ using ..tensor
 	 macro to create fermionic quantum numbers.
 	 this macro also has an extra quantum number for the parity of the wave function. It is the first value stored within.
 	 if we have an object A<:fermionQnum, its parity value can obtained by calling parity(A).
-	 Just like with the regular composeQNs macro, you create a new composite quantum number type by calling
-		@fermion_composeQNs(<name>,<QNs to compose>...)
+	 Just like with the regular makeQNs macro, you create a new composite quantum number type by calling
+		@fermion_makeQNs(<name>,<QNs to compose>...)
 	 to create a composite quantum number type with the name of your choice.
    Using this sort of quantum number make it possible to apply fermionic field operator on an qMPS state completly locally.
    
-  See also: [`@composeQNs`](@ref) [`U1`](@ref) [`Zn`](@ref) [`parity`](@ref) [`@composeQNs_printcode`](@ref) [`_generatecompositestring`](@ref)
+  See also: [`@makeQNs`](@ref) [`U1`](@ref) [`Zn`](@ref) [`parity`](@ref) [`@makeQNs_printcode`](@ref) [`_generatecompositestring`](@ref)
   """
-  macro fermion_composeQNs(name::String,Types...)
+  macro fermion_makeQNs(name::String,Types...)
 	output = _generatecompositestring(name,Types...,Inheritfrom=fermionQnum,valfield=["parity"])
 	EExp = Meta.parse(output)
     return eval(EExp)
   end
-  export @fermion_composeQNs
+  export @fermion_makeQNs
 
   """
-      @composeQNs_printcode("name",types...)
+      @makeQNs_printcode("name",types...)
 
   prints code created when defining a quantum number type
 
@@ -338,29 +338,29 @@ using ..tensor
   macro to create fermionic quantum numbers.
   this macro also has an extra quantum number for the parity of the wave function. It is the first value stored within.
   if we have an object A<:fermionQnum, its parity value can obtained by calling parity(A).
-  Just like with the regular composeQNs macro, you create a new composite quantum number type by calling
-  @fermion_composeQNs(<name>,<QNs to compose>...)
+  Just like with the regular makeQNs macro, you create a new composite quantum number type by calling
+  @fermion_makeQNs(<name>,<QNs to compose>...)
   to create a composite quantum number type with the name of your choice.
   Using this sort of quantum number make it possible to apply fermionic field operator on an qMPS state completly locally.
 
-  See also: [`@composeQNs`](@ref) [`U1`](@ref) [`Zn`](@ref) [`parity`](@ref) [`@fermion_composeQNs`](@ref) [`_generatecompositestring`](@ref)
+  See also: [`@makeQNs`](@ref) [`U1`](@ref) [`Zn`](@ref) [`parity`](@ref) [`@fermion_makeQNs`](@ref) [`_generatecompositestring`](@ref)
   """
-  macro composeQNs_printcode(name::String,Types...)
+  macro makeQNs_printcode(name::String,Types...)
     output = _generatecompositestring(name,Types...)
     println(output)
     nothing
   end
-  export @composeQNs_printcode
+  export @makeQNs_printcode
 
 
   """
       _generatecompositestring(name,Types[,Inheritfrom=,valfield=])
 
-  Helper function to make quantum numbers with `@composeQNs`, `@composeQNs` and `composeQNs_printcode`; defines basic operations =,>,+, etc.
+  Helper function to make quantum numbers with `@makeQNs`, `@makeQNs` and `makeQNs_printcode`; defines basic operations =,>,+, etc.
 
-  See also: [`@composeQNs`](@ref) [`U1`](@ref) [`Zn`](@ref) [`parity`](@ref) [`@@composeQNs_printcode`](@ref) [`@fermion_composeQNs`](@ref)
+  See also: [`@makeQNs`](@ref) [`U1`](@ref) [`Zn`](@ref) [`parity`](@ref) [`@@makeQNs_printcode`](@ref) [`@fermion_makeQNs`](@ref)
   """
-  @inline function _generatecompositestring(name,Types...;Inheritfrom = Qnum,valfield = String[])
+  function _generatecompositestring(name,Types...;Inheritfrom = Qnum,valfield = String[])
 	if length(valfield) < length(Types)
 		lvf = length(valfield)
 		for (i,T) in enumerate(Types[lvf+1:end])
@@ -371,23 +371,23 @@ using ..tensor
 	end
 #	@assert(Inheritfrom <: Qnum)
     structstr = "mutable struct $name <:$Inheritfrom\n"
-    funadd = "@inline function +(a::$name,b::$name)::$name\n	return $name("
-    fungreater = "@inline function >(a::$name,b::$name)::Bool\n\t"
-    funequal = "@inline function ==(a::$name,b::$name)::Bool\n"
-    funinv = "@inline function inv(a::$name)::$name\n	return $name("
-    funinv! ="@inline function inv!(a::$name)::$name\n"
-    funadd! ="@inline function add!(a::$name,b::$name)::$name\n"
-    funNeut = "@inline function $name()\n	return $name("
-    funpropercopy = "@inline function copy(a::$name)\n        $name("
-    funcopy = "@inline function copy!(a::$name,b::$name)\n for w = 1:$(length(valfield))\n"
-#    funcinv = "@inline function copyinv!(a::$name,b::$name)::$name\n"
-#    funaddinv = "@inline function addinv!(a::$name,b::$name)::$name\n"
-    funsize = "@inline function length(Q::$name)\n\t return $(length(valfield))\nend"
-    fungetindex = "@inline function getindex(a::$name,i::Integer)\n        if i == 1"
-     funsetindex = "@inline function setindex!(a::$name,b::Integer,i::Integer)\n        if i == 1"
+    funadd = "function +(a::$name,b::$name)::$name\n	return $name("
+    fungreater = "function >(a::$name,b::$name)::Bool\n\t"
+    funequal = "function ==(a::$name,b::$name)::Bool\n"
+    funinv = "function inv(a::$name)::$name\n	return $name("
+    funinv! ="function inv!(a::$name)::$name\n"
+    funadd! ="function add!(a::$name,b::$name)::$name\n"
+    funNeut = "function $name()\n	return $name("
+    funpropercopy = "function copy(a::$name)\n        $name("
+    funcopy = "function copy!(a::$name,b::$name)\n for w = 1:$(length(valfield))\n"
+#    funcinv = "function copyinv!(a::$name,b::$name)::$name\n"
+#    funaddinv = "function addinv!(a::$name,b::$name)::$name\n"
+    funsize = "function length(Q::$name)\n\t return $(length(valfield))\nend"
+    fungetindex = "function getindex(a::$name,i::Integer)\n        if i == 1"
+     funsetindex = "function setindex!(a::$name,b::Integer,i::Integer)\n        if i == 1"
     constructname = "$name("
     constructbody = "new("
-    copyconst = "@inline function $name(a::$name)\n\t$name("
+    copyconst = "function $name(a::$name)\n\t$name("
     counter = 2
 
     funcopy = "$(funcopy) \ta[w] = b[w]\n"
@@ -404,7 +404,7 @@ using ..tensor
       funpropercopy = "$(funpropercopy) a.$field,"
 #      funcinv = "$(funcinv) \ta.$field = inv(b.$field)\n"
 #      funaddinv = "$(funaddinv) \tadd!(a.$field, inv(b.$field))\n"
-  #		funsize = "@inline function size(Q::$name,i::Integer...)\n"
+  #		funsize = "function size(Q::$name,i::Integer...)\n"
       fungetindex = "$(fungetindex)\n\treturn a.$field.val\n\telseif i == $counter "
        funsetindex = "$(funsetindex)\n\t a.$field.val = b\n\telseif i == $counter "
       constructname = "$(constructname)l$field, "
@@ -449,6 +449,42 @@ using ..tensor
     export $name\n
     end"""
     return output
+  end
+
+
+
+
+  import Base.unique!
+  """
+      unique!(B)
+
+  finds unique elements but reorders input vector
+
+  See also: [`unique`](@ref)
+  """
+  function unique!(B::Array{W,1}) where W <: Qnum
+    sort!(B)
+    counter = 1
+    for a = 2:length(B)
+      if B[a-1] != B[a]
+        counter += 1
+        B[counter] = copy(B[a])
+      end
+    end
+    return B[1:counter]
+  end
+
+  import Base.unique
+  """
+      unique!(B)
+
+  finds unique elements without generating a new array to be sorted over (i.e., does not reorder to input vector)
+
+  See also: [`unique!`](@ref)
+  """
+  function unique(T::Array{W,1}) where W <: Qnum
+    B = copy(T)
+    return unique!(B)
   end
 
 end
