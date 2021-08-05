@@ -1,12 +1,15 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.1
+#                              v0.9
 #
 #########################################################################
-# Made by Thomas E. Baker (2018)
+# Made by Thomas E. Baker (2020)
 # See accompanying license with this program
-# This code is native to the julia programming language (v1.1.0) or (v1.5)
+# This code is native to the julia programming language (v1.1.1+)
+#
+# Planned improvements:
+#   v1.0: infinite, temperature, time (Lanczos, TDVP)
 #
 
 """
@@ -15,21 +18,47 @@
 Function for the density matrix renormalization group
 """
 module DMRG
+#using ..shuffle
 using ..tensor
 using ..QN
 using ..Qtensor
 using ..Qtask
 using ..MPutil
+using ..MPmaker
 using ..contractions
 using ..decompositions
 using ..Krylov
 using ..optimizeMPS
 
-  function twosite_update(AA::X,ops::Y,Lenv::Z,Renv::Z) where {X <: Union{Qtens{A,Q},Array{A,4},tens{A}}, Y <: Union{Qtens{B,Q},Array{B,6},tens{B}},Z <: Union{Qtens{W,Q},Array{W,3},tens{W}}} where {A <: Number, B <: Number, W <: Number, Q <: Qnum}
-    Hpsi = contract(ops,[5,6],AA,[2,3])
-    LHpsi = contract(Lenv,[2,3],Hpsi,[1,5])
-    temp = contract(LHpsi,[5,4],Renv,[1,2])
-    return temp
+const onetwo = (1,2)
+const twothree = (2,3)
+
+const threefour = (3,4)
+const fivesix = (5,6)
+
+const onefive = (1,5)
+const fivefour = (5,4)
+
+
+const onefour = (1,4)
+const twofive = (2,5)
+
+const one = (1...,)
+const two = (2...,)
+const three = (3...,)
+const four = (4...,)
+
+const twofourfive = (2,4,5)
+const onetwofour = (1,2,4)
+
+  function twosite_update(Lenv::Z,Renv::Z,tensors::TensType...) where {X <: Union{Qtens{A,Q},Array{A,4},tens{A}}, Y <: Union{Qtens{B,Q},Array{B,6},tens{B}},Z <: Union{Qtens{W,Q},Array{W,3},tens{W}}, G <: TensType} where {A <: Number, B <: Number, W <: Number, Q <: Qnum}
+    AA = tensors[1]
+    ops = tensors[2]
+    Hpsi = contract(ops,fivesix,AA,twothree)
+    LHpsi = contract(Lenv,twothree,Hpsi,onefive)
+    temp = contract(LHpsi,fivefour,Renv,onetwo)
+    currpsi = AA
+    return currpsi,temp
   end
 
   import Base.string
@@ -45,49 +74,48 @@ using ..optimizeMPS
     end
     return S
   end
-
+#=
   function load_storeD!(storeD::Array{W,1},Dmat::Array{W,1}) where {W <: Number}
     for a = 1:min(length(storeD),length(Dmat))
       storeD[a] = Dmat[a]
     end
     nothing
   end
-
+=#
   function string(vect::Array{W,1}) where W <: Number
     return string(vect,1,length(vect))
   end
 
-  function SvNcheck!(i::Integer,j::Integer,D::W,truncerr::Float64,
+  function SvNcheck!(i::Integer,j::Integer,D::W,Ns::intType,
                      params::TNparams;alpha::Bool=true) where {W<: TensType}
-
-    if params.maxtrunc < truncerr
-      params.maxtrunc = truncerr
+    if params.maxtrunc < params.truncerr
+      params.maxtrunc = params.truncerr
     end
     if params.biggestm < size(D,1)
       params.biggestm = size(D,1)
     end
-    Dmat = [searchindex(D,i,i) for i = 1:size(D,1)]
+    Dmat = [searchindex(D,i,i) for i = 1:min(size(D)...)]
     sizeDsq = length(Dmat)
     if params.allSvNbond
       SvNvec[i] = -sum(h->Dmat[h]^2*log(Dmat[h]^2),sizeDsq:-1:1)
       if i == params.startoc && !params.silent
         println("Entropies in chain: ",SvNvec)
       end
-    elseif i == max(2,params.SvNbond+1) && j < 0
+    elseif i == min(max(2,params.SvNbond+1),Ns) && j < 0
       if typeof(D) <: qarray
         sort!(Dmat,rev=true)
       end
-      SvN = -sum(h->Dmat[h]^2*log(Dmat[h]^2),sizeDsq:-1:1)
-      params.entropy = SvN
+      params.entropy = -sum(h->Dmat[h]^2*log(Dmat[h]^2),sizeDsq:-1:1)
+      params.entropy = params.entropy
+      ymax = min(sizeDsq,params.maxshowD)
+      params.storeD = Dmat[1:ymax]
       if !params.silent
-        print("SvN at center bond b=",params.SvNbond," = ",SvN)
+        print("SvN at center bond b=",params.SvNbond," = ",params.entropy)
         if alpha
           println(" (alpha = $(Printf.@sprintf("%.5f",params.noise)))")
         else
           println()
         end
-        ymax = min(sizeDsq,params.maxshowD)
-        load_storeD!(params.storeD,Dmat)
         println("Singular values at center bond b=",params.SvNbond,": [",string(Dmat,1,ymax),"]")
         println()
       end
@@ -95,13 +123,13 @@ using ..optimizeMPS
     nothing
   end
 
-  function regular_SvNcheck!(i::Integer,j::Integer,D::W,truncerr::Float64,params::TNparams) where {W<: TensType}
-    return SvNcheck!(i,j,D,truncerr,params,alpha=false)
+  function regular_SvNcheck!(i::Integer,j::Integer,D::W,Ns::intType,params::TNparams) where {W<: TensType}
+    return SvNcheck!(i,j,D,Ns,params,alpha=false)
   end
 
   function setDMRG(psi::MPS,mpo::MPO,maxm::Integer,minm::Integer,Lenv::TensType,Renv::TensType,
                     halfsweep::Bool,alpha::Z,origj::Bool,allSvNbond::Bool,boundary::B...) where {Z <: Union{Float64,Array{Float64,1}},B <: TensType}
-
+    zeroTens = typeof(psi[1])()
     if length(boundary) == 2
       Lbound = boundary[1]
       Rbound = boundary[2]
@@ -116,18 +144,18 @@ using ..optimizeMPS
         error("in DMRG...can't determine LRbounds parameter (only defined for \"L\" and \"R\")")
       end
     else
-      if Lenv != [0]
+      if Lenv != zeroTens
         Lbound = Lenv[1]
       else
-        Lbound = [0]
+        Lbound = zeroTens
       end
-      if Renv != [0]
+      if Renv != zeroTens
         Rbound = Renv[length(Renv)]
       else
-        Rbound = [0]
+        Rbound = zeroTens
       end
     end
-    if Lenv == [0] && Renv == [0]
+    if Lenv == zeroTens && Renv == zeroTens
       Lenv,Renv = makeEnv(psi,mpo,Lbound=Lbound,Rbound=Rbound)
     end
 
@@ -157,23 +185,23 @@ using ..optimizeMPS
   end
   
   function Lexpand(A::X,ops::Y,HL::Z,alpha::Float64) where {X <: Union{Qtens{M,Q},Array{M,3},tens{M}}, Y <: Union{Qtens{B,Q},Array{B,4},tens{B}},Z <: Union{Qtens{W,Q},Array{W,3},tens{W}}} where {M <: Number, B <: Number, W <: Number, Q <: Qnum}
-    Hpsi = contract(ops,[2],A,[2])
-    Hpsi = contract(HL,[2,3],Hpsi,[1,4],alpha=alpha)
-    expAA = reshape!(Hpsi,size(Hpsi,1),size(Hpsi,2),size(Hpsi,3)*size(Hpsi,4),merge=true)
-    return concat!(A,expAA,3)
+    Hpsi = contract(ops,two,A,two) #::Union{Qtens{W,Q},Array{W,5}} where Q <: Qnum
+    Hpsi = contract(HL,twothree,Hpsi,onefour,alpha=alpha) #::Union{Qtens{W,Q},Array{W,4}} where Q <: Qnum
+    expAA = reshape!(Hpsi,[[1],[2],[3,4]],merge=true) #::Union{Qtens{W,Q},Array{W,3}} where Q <: Qnum
+    return joinindex!(A,expAA,3) #::Union{Qtens{W,Q},Array{W,3}} where Q <: Qnum
   end
   
   function Rexpand(A::X,ops::Y,HR::Z,alpha::Float64) where {X <: Union{Qtens{M,Q},Array{M,3},tens{M}}, Y <: Union{Qtens{B,Q},Array{B,4},tens{B}},Z <: Union{Qtens{W,Q},Array{W,3},tens{W}}} where {M <: Number, B <: Number, W <: Number, Q <: Qnum}
-    Hpsi = contract(A,[2],ops,[2])
-    Hpsi = contract(Hpsi,[2,5],HR,[1,2],alpha=alpha)
-    expAA = reshape!(Hpsi,size(Hpsi,1)*size(Hpsi,2),size(Hpsi,3),size(Hpsi,4),merge=true)
-    return concat!(A,expAA,1)
+    Hpsi = contract(A,two,ops,two) #::Union{Qtens{W,Q},Array{W,5}} where Q <: Qnum
+    Hpsi = contract(Hpsi,twofive,HR,onetwo,alpha=alpha) #::Union{Qtens{W,Q},Array{W,4}} where Q <: Qnum
+    expAA = reshape!(Hpsi,[[1,2],[3],[4]],merge=true) #::Union{Qtens{W,Q},Array{W,3}} where Q <: Qnum
+    return joinindex!(A,expAA,1) #::Union{Qtens{W,Q},Array{W,3}} where Q <: Qnum
   end
   
   const alpha_max = 1.
   function alpha_update(alpha::Float64,truncerr::Float64,cutoff::Float64,
                         lastEnergy::Union{R,Array{R,1}},infovals::Union{S,Array{S,1}},
-                        noise_goal::Float64,dalpha::Float64;avgE::W=1.)::Number where {R <: Number, S <: Number, W <: Number}
+                        noise_goal::Float64,dalpha::Float64;avgE::W=infovals[1])::Number where {R <: Number, S <: Number, W <: Number}
     trunc_check = truncerr <= max(cutoff,1E-12)
     errEst = abs(infovals[1]-lastEnergy[1]) <= max(abs(infovals[1]*cutoff),1E-12)
     sitecond = abs((truncerr*avgE)/(lastEnergy[1]/infovals[1]-1)) > noise_goal[1] #recommendation in 3S paper
@@ -189,53 +217,58 @@ using ..optimizeMPS
     return mpo
   end
 
-  function twositeOps(mpo::MPO,params::TNparams)
+  function twositeOps(mpo::W,params::TNparams) where W <: MPO
     nsites = params.nsites
-    if typeof(mpo[1]) <: qarray
-      mpoType =  qarray
-    elseif typeof(mpo[1]) <: denstens
-      mpoType = denstens
-    else
-      mpoType = Array{eltype(mpo[1]),6}
-    end
     nbonds = length(mpo)-(nsites-1)
-    ops = Array{mpoType,1}(undef,nbonds)
-    for i = 1:nbonds
+    ops = Array{typeof(mpo[1]),1}(undef,nbonds)
+    #=Threads.@threads=# for i = 1:nbonds
       ops[i] = contract([1,3,5,6,2,4],mpo[i],ndims(mpo[i]),mpo[i+1],1)
+      if typeof(ops[i]) <: qarray
+        ops[i] = changeblock(ops[i],[1,2,3,4],[5,6])
+      end
     end
-    return MPO(ops)
+    if W <: largeMPO
+      newmpo = largeMPO(ops,label="twompo_")
+    else
+      newmpo = W(ops)
+    end
+    return newmpo
   end
 
-  function Nsite_update(AA::X,ops::Y,Lenv::Z,Renv::Z) where {X <: Union{Qtens{A,Q},Array{A,4},tens{A}}, Y <: Union{Qtens{B,Q},Array{B,6},tens{B}},Z <: Union{Qtens{W,Q},Array{W,3},tens{W}}} where {A <: Number, B <: Number, W <: Number, Q <: Qnum}
-    AAinds = [i for i = 2:ndims(AA)-1]
-    Hpsi = contract(ops,[i for i = (ndims(ops)-length(AAinds)+1):ndims(ops)],AA,AAinds)
-    LHpsi = contract(Lenv,[2,3],Hpsi,[1,1+ndims(AA)])
-    temp = contract(LHpsi,[ndims(LHpsi),ndims(LHpsi)-1],Renv,[1,2])
+  function Nsite_update(Lenv::Z,Renv::Z,AA::X,ops::Y) where {X <: Union{Qtens{A,Q},Array{A,4},tens{A}}, Y <: Union{Qtens{B,Q},Array{B,6},tens{B}},Z <: Union{Qtens{W,Q},Array{W,3},tens{W}}} where {A <: Number, B <: Number, W <: Number, Q <: Qnum}
+    AAinds = ([i for i = 2:ndims(AA)-1]...,)
+    opinds = ([i for i = (ndims(ops)-length(AAinds)+1):ndims(ops)]...,)
+    Hpsi = contract(ops,opinds,AA,AAinds) #::Union{Qtens{W,Q},Array{W,6}} where Q <: Qnum
+    Hpsi_inds = ([1,1+ndims(AA)]...,)
+    LHpsi = contract(Lenv,twothree,Hpsi,Hpsi_inds) #::Union{Qtens{W,Q},Array{W,5}} where Q <: Qnum
+    LHpsi_inds = ([ndims(LHpsi),ndims(LHpsi)-1]...,)
+    temp = contract(LHpsi,LHpsi_inds,Renv,onetwo) #::Union{Qtens{W,Q},Array{W,4}} where Q <: Qnum
     return temp
   end
 
   import ..optimizeMPS.singlesite_update
-  function step3S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,
-                  Lenv::AbstractArray,Renv::AbstractArray,
-                  psiLenv::AbstractArray,psiRenv::AbstractArray,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where {Z <: Union{qarray,Array{W,3},tens}, M <: Union{qarray,Array{J,4},tens}} where {X <: Number, W <: Number, J <: Number, Q <: Qnum, P <: Number, Y <: Number}
+  function step3S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::R,Renv::S,
+                  psiLenv::Z,psiRenv::G,beta::Array{Y,1},prevpsi::MPS...;
+                  params::TNparams=params()) where {Z <: Union{AbstractArray,envType}, G <: Union{AbstractArray,envType}, R <: Union{AbstractArray,envType}, S <: Union{AbstractArray,envType}, M <: Union{qarray,Array{J,4},tens}} where {X <: Number, W <: Number, J <: Number, Q <: Qnum, P <: Number, Y <: Number}
 
-    AAvec,outEnergy = krylov(singlesite_update,psi[i],mpo[i],Lenv[i],Renv[i],maxiter=params.maxiter)
-
+    currops = mpo[i]
+    psi[i] = div!(psi[i],norm(psi[i]))
+    AAvec,outEnergy = krylov(singlesite_update,Lenv[i],Renv[i],psi[i],currops,maxiter=params.maxiter)
     noise = params.noise
 
     params.energy = outEnergy[1]
-    alpha_condition = noise > params.noise_incr
+    alpha_condition = noise[1] > params.noise_incr
 
     minm = params.minm
     maxm = params.maxm
     cutoff = params.cutoff
 
     if j > 0
-      psi[iL] = (alpha_condition ? Lexpand(AAvec[1],mpo[iL],Lenv[iL],noise) : AAvec[1])::Union{Qtens{W,Q},Array{W,3},tens{W}} where Q <: Qnum where W <: Number
-      psi[iL],psi[iR],D,truncerr = moveR(psi[iL],psi[iR],cutoff=cutoff,m=maxm,minm=minm,condition=alpha_condition)
+      tempL = (alpha_condition ? Lexpand(AAvec[1],currops,Lenv[iL],noise) : AAvec[1])
+      psi[iL],psi[iR],D,truncerr = moveR(tempL,psi[iR],cutoff=cutoff,m=maxm,minm=minm,condition=alpha_condition)
     else
-      psi[iR] = (alpha_condition ? Rexpand(AAvec[1],mpo[iR],Renv[iR],noise) : AAvec[1])::Union{Qtens{W,Q},Array{W,3},tens{W}} where Q <: Qnum where W <: Number
-      psi[iL],psi[iR],D,truncerr = moveL(psi[iL],psi[iR],cutoff=cutoff,m=maxm,minm=minm,condition=alpha_condition)
+      tempR = (alpha_condition ? Rexpand(AAvec[1],currops,Renv[iR],noise) : AAvec[1])
+      psi[iL],psi[iR],D,truncerr = moveL(psi[iL],tempR,cutoff=cutoff,m=maxm,minm=minm,condition=alpha_condition)
     end
 
     params.noise = alpha_update(noise,truncerr,params.cutoff,params.lastenergy,params.energy,params.noise_goal,params.noise_incr)
@@ -243,19 +276,21 @@ using ..optimizeMPS
     params.biggestm = max(params.biggestm,size(D,1))
 
     if !params.efficient
-      SvNcheck!(i,j,D,truncerr,params)
+      SvNcheck!(i,j,D,length(psi),params)
     end
     nothing
   end
 
-  function twostep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,
-                    Lenv::AbstractArray,Renv::AbstractArray,
-                    psiLenv::AbstractArray,psiRenv::AbstractArray,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where {Z <: Union{qarray,Array{W,3},tens}, M <: Union{qarray,Array{J,4},tens}} where {X <: Number, W <: Number, J <: Number, Q <: Qnum, P <: Number, Y <: Number}
+  function twostep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::R,Renv::R,
+                    psiLenv::Z,psiRenv::Z,beta::Array{Y,1},prevpsi::MPS...;
+                    params::TNparams=params()) where {Z <: Union{AbstractArray,envType}, R <: Union{AbstractArray,envType}, M <: Union{qarray,Array{J,4},tens}} where {X <: Number, W <: Number, J <: Number, Q <: Qnum, P <: Number, Y <: Number}
 
-    AA = contract(psi[iL],3,psi[iR],1)
-    newAA,outEnergy = krylov(twosite_update,AA,mpo[iL],Lenv[iL],Renv[iR],maxiter=params.maxiter)
+    AA = contract(psi[iL],three,psi[iR],one)
 
+    AA = div!(AA,norm(AA))
+    newAA,outEnergy = krylov(twosite_update,Lenv[iL],Renv[iR],AA,mpo[iL],maxiter=params.maxiter)
     params.energy = outEnergy[1]
+
     U,D,V,truncerr = svd(newAA[1],[[1,2],[3,4]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
 
     if j < 0
@@ -266,22 +301,24 @@ using ..optimizeMPS
       psi[iR] = contract(D,2,V,1)
     end
 
+    params.truncerr = truncerr
+    params.biggestm = max(params.biggestm,size(D,1))
+
     if !params.efficient
-      regular_SvNcheck!(i,j,D,truncerr,params)
+      regular_SvNcheck!(i,j,D,length(psi),params)
     end
     nothing
   end
 
 
+  function step2S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::R,Renv::R,
+                  psiLenv::Z,psiRenv::Z,beta::Array{Y,1},prevpsi::MPS...;
+                  params::TNparams=params()) where {Z <: Union{AbstractArray,envType}, R <: Union{AbstractArray,envType}, M <: Union{qarray,Array{J,4},tens}} where {X <: Number, W <: Number, J <: Number, Q <: Qnum, P <: Number, Y <: Number}
 
 
-  function step2S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,
-                  Lenv::AbstractArray,Renv::AbstractArray,
-                  psiLenv::AbstractArray,psiRenv::AbstractArray,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where {Z <: Union{qarray,Array{W,3},tens}, M <: Union{qarray,Array{J,4},tens}} where {X <: Number, W <: Number, J <: Number, Q <: Qnum, P <: Number, Y <: Number}
-
-    AA = contract(psi[iL],ndims(psi[iL]),psi[iR],1)
-    AAvec,outEnergy = krylov(twosite_update,AA,ops[iL],Lenv[iL],Renv[iR],maxiter=maxiter)
-    infovals[1] = outEnergy[1]
+    AA = contract(psi[iL],ndims(psi[iL]),psi[iR],one)
+    AAvec,outEnergy = krylov(twosite_update,Lenv[iL],Renv[iR],AA,mpo[iL],maxiter=params.maxiter)
+    params.energy = outEnergy[1]
 
     m = params.maxm
     minm = params.minm
@@ -289,35 +326,59 @@ using ..optimizeMPS
 
     AA = AAvec[1]
 
+#      sizeAA = size(AA)
+
       if j > 0
-        rho = contractc(AA,[3,4],AA,[3,4])
+        rho = contractc(AA,threefour,AA,threefour)
       else
-        rho = ccontract([3,4,1,2],AA,[1,2],AA,[1,2])
+        rho = ccontract([3,4,1,2],AA,onetwo,AA,onetwo)
+#        checkflux(AA)
+        rho = conj(deepcopy(rho))
+#        checkflux(AA)
       end
 
-      if false #alpha > 0.
+      if false #params.noise > 0.
         if j > 0
-          temp = contract(Lenv[iL],3,AA,1)
-          randrho = contractc(temp,[2,4,5],temp,[2,4,5])
+          temp = contract(Lenv[iL],three,AA,one)
+          randrho = contractc(temp,twofourfive,temp,twofourfive)
         else
-          temp = contract(AA,4,Renv[iR],1)
-          randrho = ccontract(temp,[1,2,4],temp,[1,2,4])
+          temp = contract(AA,four,Renv[iR],one)
+#          println(temp)
+          randrho = ccontract(temp,onetwofour,temp,onetwofour)
+#          println(size(randrho))
         end
-        rho = add!(rho,randrho,alpha)
+        rho = add!(rho,randrho,params.noise)
       end
 
       D,U,truncerr,sumD = eigen(rho,[[1,2],[3,4]],cutoff=cutoff,m=m,minm=minm)
-      if alpha > 0.
+#=      if j < 0 && typeof(rho) <: Qtens
+        U.QnumMat[3] = inv!.(U.QnumMat[3])
+        U.flux = inv(U.flux)
+        U = permutedims!(U,[3,1,2])
+        checkflux(U)
+      end=#
+      if params.noise > 0.
         D = div!(D,sumD)
       end
+#      println(size(AA)," ",size(U))
+#      println(U)
       if j > 0
-        psi[iL],psi[iR] = U,ccontract(U,[1,2],AA,[1,2])
+        psi[iL],psi[iR] = U,ccontract(U,onetwo,AA,onetwo)
       else
-        psi[iL],newV = contractc(AA,[3,4],U,[1,2]),permutedims(U,[3,1,2])
-        psi[iR] = conj!(newV)
+        println(U)
+        println(AA)
+        cU = conj(deepcopy(U))
+        psi[iL] = contract(AA,threefour,cU,onetwo)
+        newV = permutedims(U,[3,1,2])
+        psi[iR] = conj!(deepcopy(newV))
       end
+#      checkflux(psi[iL])
+#      checkflux(psi[iR])
+#      psi[iL] = unreshape!(newU,sizeAA[1],sizeAA[2],size(D,1))
+#      psi[iR] = unreshape!(newV,size(D,1),sizeAA[3],sizeAA[4])
+
     if !params.efficient
-      regular_SvNcheck!(i,j,D,truncerr,params)
+      regular_SvNcheck!(i,j,D,length(psi),params)
     end
     nothing
   end
@@ -326,41 +387,81 @@ using ..optimizeMPS
 
 
   import ..optimizeMPS.Nstep
-  function dmrgNstep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,
-                    Lenv::Array{Z,1},Renv::Array{Z,1},
-                    psiLenv::AbstractArray,psiRenv::AbstractArray,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where {Z <: Union{qarray,Array{W,3},tens}, M <: Union{qarray,Array{J,4},tens}} where {X <: Number, W <: Number, J <: Number, Q <: Qnum, P <: Number, Y <: Number}
+  function dmrgNstep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::R,Renv::R,
+                      psiLenv::Z,psiRenv::Z,beta::Array{Y,1},prevpsi::MPS...;
+                      params::TNparams=params()) where {Z <: Union{AbstractArray,envType}, R <: Union{AbstractArray,envType}, M <: Union{qarray,Array{J,4},tens}} where {X <: Number, W <: Number, J <: Number, Q <: Qnum, P <: Number, Y <: Number}
 
-    Nstep(n,j,i,iL,iR,dualpsi,psi,ops,Lenv,Renv,psiLenv,psiRenv,beta,prevpsi...,params=params)
+    vecTens = [psi[a] for a = iL:iR]
+    AA = vecTens[1]
+    for a = 2:length(vecTens)
+      AA = contract(AA,ndims(AA),vecTens[a],1)
+    end
+
+    newAA,outEnergy = krylov(Nsite_update,Lenv[iL],Renv[iR],AA,mpo[iL],maxiter=params.maxiter)
+    params.energy = outEnergy[1]
+
+    AA = newAA[1]
+
+    if j > 0
+      for w = iR:-1:iL+1
+        U,D,psi[w],truncerr = svd(AA,[[i for i = 1:ndims(AA)-2],[ndims(AA)-1,ndims(AA)]],m=maxm,minm=minm,cutoff=cutoff)#,mag=1.)
+        if w == iL+1
+          psi[iL] = U
+          psi[iL+1] = contract(D,2,psi[w],1)
+          psi.oc = iL+1
+        else
+          AA = contract(U,ndims(U),D,1)
+        end
+      end
+    else
+      for w = iL:iR-1
+        psi[w],D,V,truncerr = svd(AA,[[1,2],[i for i = 3:ndims(AA)]],m=maxm,minm=minm,cutoff=cutoff)#,mag=1.)
+        if w == iR-1
+          psi[iR-1] = contract(psi[w],3,D,1)
+          psi[iR] = V
+          psi.oc = iR-1
+        else
+          AA = contract(D,2,V,1)
+        end
+      end
+    end
+    params.truncerr = truncerr
+    params.biggestm = max(params.biggestm,size(D,1))
+
     if !params.efficient
-      regular_SvNcheck!(i,j,D,truncerr,params)
+      regular_SvNcheck!(i,j,D,length(psi),params)
     end
     nothing
   end
 
   function dmrg(psi::MPS,mpo::MPO;maxm::Integer=0,minm::Integer=2,sweeps::Integer=1,cutoff::Float64=0.,silent::Bool=false,goal::Float64=0.,
-                    SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,nsites::intType=2,efficient::Bool=false,
-                    cvgE::Bool=true,maxiter::Integer=2,mincr::Integer=2,mperiod::Integer=0,fixD::Bool=false,Lbound::AbstractArray=[0],Rbound::AbstractArray=[0],
-                    noise::Number=1.0,noise_goal::Float64=0.3,noise_incr::Float64=0.01,noise_decay::Float64=0.9,method::String="3S",shift::Bool=false,
-                    saveEnergy::AbstractArray=[0],halfsweep::Bool=false,Lenv::TensType=[0],Renv::TensType=[0],origj::Bool=true,maxshowD::Integer=8,storeD::Array{W,1}=[0.],alpha_decay::Float64=0.9,
-                    partitions::Integer=Threads.nthreads()) where {B <: TensType, W <: Number}
-    if method == "3S"
-      return dmrg3S(psi,mpo,method=method,maxm=maxm,minm=minm,sweeps=sweeps,cutoff=cutoff,silent=silent,goal=goal,
-                    SvNbond=SvNbond,allSvNbond=allSvNbond,efficient=efficient,cvgE=cvgE,maxiter=maxiter,fixD=fixD,nsites=1,
+                    SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,nsites::intType=2,efficient::Bool=sweeps == 1,params::TNparams = algvars(),
+                    cvgE::Bool=true,maxiter::Integer=2,mincr::Integer=2,mperiod::Integer=0,exnum::Integer=1,fixD::Bool=false,Lbound::TensType=[0],Rbound::TensType=[0],
+                    noise::P=1.0,noise_goal::Float64=0.3,noise_incr::Float64=0.01,noise_decay::Number=0.99,method::String="3S",shift::Bool=false,
+                    saveEnergy::AbstractArray=[0],halfsweep::Bool=false,Lenv::Env=[0],Renv::Env=[0],origj::Bool=true,maxshowD::Integer=8,storeD::Array{W,1}=[0.],alpha_decay::Float64=0.9,
+                    partitions::Integer=Threads.nthreads()) where P <: Union{Number,Array{Float64,1}} where {B <: TensType, W <: Number}
+    if params.load
+      params.method = method
+    end
+    if params.method == "3S"
+      return dmrg3S(psi,mpo,method=method,maxm=maxm,minm=minm,sweeps=sweeps,cutoff=cutoff,silent=silent,goal=goal,params=params,
+                    SvNbond=SvNbond,allSvNbond=allSvNbond,efficient=efficient,cvgE=cvgE,maxiter=maxiter,exnum=exnum,fixD=fixD,nsites=1,
                     noise=noise,noise_decay=noise_decay,noise_goal=noise_goal,noise_incr=noise_incr,shift=shift,saveEnergy=saveEnergy,
                     halfsweep=halfsweep,Lbound=Lbound,Rbound=Rbound,Lenv=Lenv,Renv=Renv,origj=origj,maxshowD=maxshowD,storeD=storeD)
-    elseif method == "Nsite" || nsites > 2
-      return dmrg_Nsite(psi,mpo,method=method,maxm=maxm,minm=minm,sweeps=sweeps,cutoff=cutoff,silent=silent,goal=goal,
-                    SvNbond=SvNbond,allSvNbond=allSvNbond,efficient=efficient,cvgE=cvgE,maxiter=maxiter,fixD=fixD,nsites=nsites,
+    elseif params.method == "Nsite" #|| nsites > 2
+      return dmrg_Nsite(psi,mpo,method=method,maxm=maxm,minm=minm,sweeps=sweeps,cutoff=cutoff,silent=silent,goal=goal,params=params,
+                    SvNbond=SvNbond,allSvNbond=allSvNbond,efficient=efficient,cvgE=cvgE,maxiter=maxiter,exnum=exnum,fixD=fixD,nsites=nsites,
                     noise=noise,noise_decay=noise_decay,noise_goal=noise_goal,noise_incr=noise_incr,shift=shift,saveEnergy=saveEnergy,
                     halfsweep=halfsweep,Lbound=Lbound,Rbound=Rbound,Lenv=Lenv,Renv=Renv,origj=origj,maxshowD=maxshowD,storeD=storeD)
-    elseif method == "twosite"
-      return dmrg_twosite(psi,mpo,method=method,maxm=maxm,minm=minm,sweeps=sweeps,cutoff=cutoff,silent=silent,goal=goal,
-                    SvNbond=SvNbond,allSvNbond=allSvNbond,efficient=efficient,cvgE=cvgE,maxiter=maxiter,fixD=fixD,nsites=nsites,
+    elseif params.method == "twosite"
+      return dmrg_twosite(psi,mpo,method=method,maxm=maxm,minm=minm,sweeps=sweeps,cutoff=cutoff,silent=silent,goal=goal,params=params,
+                    SvNbond=SvNbond,allSvNbond=allSvNbond,efficient=efficient,cvgE=cvgE,maxiter=maxiter,exnum=exnum,fixD=fixD,nsites=nsites,
                     noise=noise,noise_decay=noise_decay,noise_goal=noise_goal,noise_incr=noise_incr,shift=shift,saveEnergy=saveEnergy,
                     halfsweep=halfsweep,Lbound=Lbound,Rbound=Rbound,Lenv=Lenv,Renv=Renv,origj=origj,maxshowD=maxshowD,storeD=storeD)
-    elseif method == "2S"
-      return dmrg2S(psi,mpo,method=method,maxm=maxm,minm=minm,sweeps=sweeps,cutoff=cutoff,silent=silent,goal=goal,
-                    SvNbond=SvNbond,allSvNbond=allSvNbond,efficient=efficient,cvgE=cvgE,maxiter=maxiter,fixD=fixD,nsites=2,
+#    elseif method == "zero" || method == "0"
+    elseif params.method == "2S"
+      return dmrg2S(psi,mpo,method=method,maxm=maxm,minm=minm,sweeps=sweeps,cutoff=cutoff,silent=silent,goal=goal,params=params,
+                    SvNbond=SvNbond,allSvNbond=allSvNbond,efficient=efficient,cvgE=cvgE,maxiter=maxiter,exnum=exnum,fixD=fixD,nsites=2,
                     noise=noise,noise_decay=noise_decay,noise_goal=noise_goal,noise_incr=noise_incr,shift=shift,saveEnergy=saveEnergy,
                     halfsweep=halfsweep,Lbound=Lbound,Rbound=Rbound,Lenv=Lenv,Renv=Renv,origj=origj,maxshowD=maxshowD,storeD=storeD)
     else
@@ -370,24 +471,27 @@ using ..optimizeMPS
   export dmrg
 
   function dmrginformation(params::TNparams)
-    println("Optimizing matrix product state...")
-    println("  algorithm = ",params.method)
-    println("  size of renormalized system = ",params.nsites)
-    println("  minimum bond dimension = ",params.minm)
-    println("  maximum bond dimension = ",params.maxm)
-    println("  number of sweeps = ",params.sweeps)
-    println("  Krylov iterations = ",params.maxiter)
-    println("  cutoff = ",params.cutoff)
-    println("  converge in energy? ",params.cvgE," (otherwise, entropy)")
-    println("  specified goal = ",params.goal)
-    println("  initial noise parameter = ",params.noise)
-    println("  noise increment = ",params.noise_incr)
-    println("  fixing SvN values? ",params.fixD)
+    if !params.silent
+      println("Optimizing matrix product state...")
+      println("  algorithm = ",params.method)
+      println("  size of renormalized system = ",params.nsites)
+      println("  minimum bond dimension = ",params.minm)
+      println("  maximum bond dimension = ",params.maxm)
+      println("  number of sweeps = ",params.sweeps)
+      println("  Krylov iterations = ",params.maxiter)
+      println("  cutoff = ",params.cutoff)
+      println("  converge in energy? ",params.cvgE," (otherwise, entropy)")
+      println("  specified goal = ",params.goal)
+      println("  initial noise parameter = ",params.noise)
+      println("  noise increment = ",params.noise_incr)
+      println("  fixing SvN values? ",params.fixD)
+    end
+    nothing
   end
 
-  function dmrgcvg(n::Integer,timer::Number,
-                          dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::AbstractArray,Renv::AbstractArray,psiLenv::AbstractArray,
-                          psiRenv::AbstractArray,beta::Array{W,1},prevpsi::MPS...;params::TNparams=params())::Bool where {Z <: Number, W <: Number, P <: Number, R <: MPS, X <: Number}
+  function dmrgcvg(n::Integer,timer::Number,#biggestm::Array{P,1},maxtrunc::Array{X,1},lastenergy::Union{Z,Array{Z,1}},
+                          dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Y,Renv::Y,psiLenv::B,
+                          psiRenv::B,beta::Array{W,1},prevpsi::MPS...;params::TNparams=params())::Bool where {Y <: Union{envType,AbstractArray}, B <: Union{envType,AbstractArray}, Z <: Number, W <: Number, P <: Number, R <: MPS, X <: Number}
 
     if !params.silent
       println("Sweep $n (back and forth): $(Printf.@sprintf("%.5f",timer)) sec")
@@ -396,7 +500,9 @@ using ..optimizeMPS
       println()
       flush(Base.stdout)
     end
+    params.savebiggestm = max(params.savebiggestm,params.biggestm)
     params.biggestm = 0
+    params.truncerr = params.maxtrunc
     params.maxtrunc = 0.
 
     if params.cvgE
@@ -427,170 +533,54 @@ using ..optimizeMPS
     return false
   end
 
+  import ..optimizeMPS.loadvars!
   function dmrg3S(psi::MPS,mpo::MPO;maxm::Integer=0,minm::Integer=2,sweeps::Integer=1,cutoff::Float64=0.,silent::Bool=false,goal::Float64=0.,
-                    SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,nsites::intType=2,efficient::Bool=false,
-                    cvgE::Bool=true,maxiter::Integer=2,mincr::Integer=2,mperiod::Integer=0,fixD::Bool=false,Lbound::AbstractArray=[0],Rbound::AbstractArray=[0],
-                    noise::Number=1.0,noise_goal::Float64=0.3,noise_incr::Float64=0.01,noise_decay::Float64=0.9,method::String="3S",shift::Bool=false,
-                    saveEnergy::AbstractArray=[0],halfsweep::Bool=false,Lenv::TensType=[0],Renv::TensType=[0],origj::Bool=true,maxshowD::Integer=8,storeD::Array{W,1}=[0.],
-                    alpha_decay::Float64=0.9) where {B <: TensType, W <: Number}
-
-    params = algvars()
-    params.method = "DMRG-"*method
-    params.minm = minm
-    params.maxm = maxm
-    params.sweeps = sweeps
-    params.cutoff = cutoff
-    params.silent = silent
-    params.goal = goal
-    params.startnoise = noise
-    params.SvNbond = SvNbond
-    params.allSvNbond = allSvNbond
-    params.efficient = efficient
-    params.cvgE = cvgE
-    params.maxiter = maxiter
-    params.fixD = fixD
-    params.nsites = nsites
-    params.noise = noise
-    params.noise_decay = noise_decay
-    params.noise_goal = noise_goal
-    params.noise_incr = noise_incr
-    params.saveEnergy = saveEnergy
-    params.halfsweep = halfsweep
-    params.Lbound = Lbound
-    params.Rbound = Rbound
-    params.Lenv = Lenv
-    params.Renv = Renv
-    params.origj = origj
-    params.maxshowD = maxshowD
-    params.storeD = storeD
-    return optmps(psi,psi,mpo,[1.],params=params,stepfct=step3S,makeOps=singlesiteOps,cvgfct=dmrgcvg)
+                    SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,nsites::intType=2,efficient::Bool=false,params::TNparams = algvars(),
+                    cvgE::Bool=true,maxiter::Integer=2,mincr::Integer=2,mperiod::Integer=0,exnum::Integer=1,fixD::Bool=false,Lbound::TensType=[0],Rbound::TensType=[0],
+                    noise::P=1.0,noise_goal::Float64=0.3,noise_incr::Float64=0.01,noise_decay::Number=0.9,method::String="3S",shift::Bool=false,
+                    saveEnergy::AbstractArray=[0],halfsweep::Bool=false,Lenv::Env=[0],Renv::Env=[0],origj::Bool=true,maxshowD::Integer=8,storeD::Array{W,1}=[0.],
+                    alpha_decay::Float64=0.9) where P <: Union{Number,Array{Float64,1}} where {B <: TensType, W <: Number}
+    loadvars!(params,"DMRG-"*method,minm,maxm,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
+        noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)
+    return optmps(psi,psi,mpo,[1.],params=params,stepfct=step3S,makeOps=singlesiteOps,cvgfct=dmrgcvg,displayfct=dmrginformation)
   end
   export dmrg3S
 
+#  import ..optimizeMPS.twositeOps
   function dmrg_twosite(psi::MPS,mpo::MPO;maxm::Integer=0,minm::Integer=2,sweeps::Integer=1,cutoff::Float64=0.,silent::Bool=false,goal::Float64=0.,
-                    SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,nsites::intType=2,efficient::Bool=false,
-                    cvgE::Bool=true,maxiter::Integer=2,mincr::Integer=2,mperiod::Integer=0,fixD::Bool=false,Lbound::AbstractArray=[0],Rbound::AbstractArray=[0],
-                    noise::Number=1.0,noise_goal::Float64=0.3,noise_incr::Float64=0.01,noise_decay::Float64=0.9,method::String="3S",shift::Bool=false,
-                    saveEnergy::AbstractArray=[0],halfsweep::Bool=false,Lenv::TensType=[0],Renv::TensType=[0],origj::Bool=true,maxshowD::Integer=8,storeD::Array{W,1}=[0.],alpha_decay::Float64=0.9,
-                    partitions::Integer=Threads.nthreads()) where {B <: TensType, W <: Number}
-
-    params = algvars()
-    params.method = "DMRG-"*method
-    params.minm = minm
-    params.maxm = maxm
-    params.sweeps = sweeps
-    params.cutoff = cutoff
-    params.silent = silent
-    params.goal = goal
-    params.startnoise = noise
-    params.SvNbond = SvNbond
-    params.allSvNbond = allSvNbond
-    params.efficient = efficient
-    params.cvgE = cvgE
-    params.maxiter = maxiter
-    params.fixD = fixD
-    params.nsites = nsites
-    params.noise = noise
-    params.noise_decay = noise_decay
-    params.noise_goal = noise_goal
-    params.noise_incr = noise_incr
-    params.saveEnergy = saveEnergy
-    params.halfsweep = halfsweep
-    params.Lbound = Lbound
-    params.Rbound = Rbound
-    params.Lenv = Lenv
-    params.Renv = Renv
-    params.startoc = psi.oc
-    params.origj = origj
-    params.maxshowD = maxshowD
-    params.storeD = storeD
-
-    return optmps(psi,psi,mpo,[1.],params=params,measfct=expect,stepfct=twostep,
-                    makeOps=twositeOps,cvgfct=dmrgcvg)
+                    SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,nsites::intType=2,efficient::Bool=false,params::TNparams = algvars(),
+                    cvgE::Bool=true,maxiter::Integer=2,mincr::Integer=2,mperiod::Integer=0,fixD::Bool=false,Lbound::TensType=[0],Rbound::TensType=[0],
+                    noise::P=1.0,noise_goal::Float64=0.3,noise_incr::Float64=0.01,noise_decay::Float64=0.9,method::String="3S",shift::Bool=false,
+                    saveEnergy::AbstractArray=[0],halfsweep::Bool=false,Lenv::Env=[0],Renv::Env=[0],origj::Bool=true,maxshowD::Integer=8,
+                    storeD::Array{W,1}=[0.],alpha_decay::Float64=0.9,exnum::Integer=1) where P <: Union{Number,Array{Float64,1}} where {B <: TensType, W <: Number}
+    loadvars!(params,"DMRG-"*method,minm,maxm,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
+        noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)
+    return optmps(psi,psi,mpo,[1.],params=params,measfct=expect,stepfct=twostep,makeOps=twositeOps,cvgfct=dmrgcvg,displayfct=dmrginformation)
   end
   export dmrg_twosite
 
   import ..optimizeMPS.NsiteOps
   function dmrg_Nsite(psi::MPS,mpo::MPO;maxm::Integer=0,minm::Integer=2,sweeps::Integer=1,cutoff::Float64=0.,silent::Bool=false,goal::Float64=0.,
-                    SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,nsites::intType=2,efficient::Bool=false,
-                    cvgE::Bool=true,maxiter::Integer=2,mincr::Integer=2,mperiod::Integer=0,fixD::Bool=false,Lbound::AbstractArray=[0],Rbound::AbstractArray=[0],
-                    noise::Number=1.0,noise_goal::Float64=0.3,noise_incr::Float64=0.01,noise_decay::Float64=0.9,method::String="Nsite",shift::Bool=false,
-                    saveEnergy::AbstractArray=[0],halfsweep::Bool=false,Lenv::TensType=[0],Renv::TensType=[0],origj::Bool=true,maxshowD::Integer=8,storeD::Array{W,1}=[0.],alpha_decay::Float64=0.9,
-                    partitions::Integer=Threads.nthreads()) where {B <: TensType, W <: Number}
-
-    params = algvars()
-    params.method = "DMRG-"*method*" (N=$nsites)"
-    params.minm = minm
-    params.maxm = maxm
-    params.sweeps = sweeps
-    params.cutoff = cutoff
-    params.silent = silent
-    params.goal = goal
-    params.startnoise = noise
-    params.SvNbond = SvNbond
-    params.allSvNbond = allSvNbond
-    params.efficient = efficient
-    params.cvgE = cvgE
-    params.maxiter = maxiter
-    params.fixD = fixD
-    params.nsites = nsites
-    params.noise = noise
-    params.noise_decay = noise_decay
-    params.noise_goal = noise_goal
-    params.noise_incr = noise_incr
-    params.saveEnergy = saveEnergy
-    params.halfsweep = halfsweep
-    params.Lbound = Lbound
-    params.Rbound = Rbound
-    params.Lenv = Lenv
-    params.Renv = Renv
-    params.startoc = psi.oc
-    params.origj = origj
-    params.maxshowD = maxshowD
-    params.storeD = storeD
-
-    return optmps(psi,psi,mpo,[1.],params=params,measfct=expect,stepfct=dmrgNstep,
-                    makeOps=NsiteOps,cvgfct=dmrgcvg)
+                    SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,nsites::intType=2,efficient::Bool=false,params::TNparams = algvars(),
+                    cvgE::Bool=true,maxiter::Integer=2,mincr::Integer=2,mperiod::Integer=0,fixD::Bool=false,Lbound::TensType=[0],Rbound::TensType=[0],
+                    noise::P=1.0,noise_goal::Float64=0.3,noise_incr::Float64=0.01,noise_decay::Float64=0.9,method::String="Nsite",shift::Bool=false,
+                    saveEnergy::AbstractArray=[0],halfsweep::Bool=false,Lenv::Env=[0],Renv::Env=[0],origj::Bool=true,maxshowD::Integer=8,
+                    storeD::Array{W,1}=[0.],alpha_decay::Float64=0.9,exnum::Integer=1) where P <: Union{Number,Array{Float64,1}} where {B <: TensType, W <: Number}
+    loadvars!(params,"DMRG-"*method*" (N=$nsites)",minm,maxm,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
+        noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)
+    return optmps(psi,psi,mpo,[1.],params=params,measfct=expect,stepfct=dmrgNstep,makeOps=NsiteOps,cvgfct=dmrgcvg,displayfct=dmrginformation)
   end
   export dmrg_Nsite
 
   function dmrg2S(psi::MPS,mpo::MPO;maxm::Integer=0,minm::Integer=2,sweeps::Integer=1,cutoff::Float64=0.,silent::Bool=false,goal::Float64=0.,
-                    SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,nsites::intType=2,efficient::Bool=false,
-                    cvgE::Bool=true,maxiter::Integer=2,mincr::Integer=2,mperiod::Integer=0,fixD::Bool=false,Lbound::AbstractArray=[0],Rbound::AbstractArray=[0],
-                    noise::Number=1.0,noise_goal::Float64=0.3,noise_incr::Float64=0.01,noise_decay::Float64=0.9,method::String="2S",shift::Bool=false,
-                    saveEnergy::AbstractArray=[0],halfsweep::Bool=false,Lenv::TensType=[0],Renv::TensType=[0],origj::Bool=true,maxshowD::Integer=8,storeD::Array{W,1}=[0.],
-                    alpha_decay::Float64=0.9) where {B <: TensType, W <: Number}
-
-    params = algvars()
-    params.method = "DMRG-"*method
-    params.minm = minm
-    params.maxm = maxm
-    params.sweeps = sweeps
-    params.cutoff = cutoff
-    params.silent = silent
-    params.goal = goal
-    params.startnoise = noise
-    params.SvNbond = SvNbond
-    params.allSvNbond = allSvNbond
-    params.efficient = efficient
-    params.cvgE = cvgE
-    params.maxiter = maxiter
-    params.fixD = fixD
-    params.nsites = nsites
-    params.noise = noise
-    params.noise_decay = noise_decay
-    params.noise_goal = noise_goal
-    params.noise_incr = noise_incr
-    params.saveEnergy = saveEnergy
-    params.halfsweep = halfsweep
-    params.Lbound = Lbound
-    params.Rbound = Rbound
-    params.Lenv = Lenv
-    params.Renv = Renv
-    params.origj = origj
-    params.maxshowD = maxshowD
-    params.storeD = storeD
-    return optmps(psi,psi,mpo,[1.],params=params,stepfct=step2S,makeOps=singlesiteOps,cvgfct=dmrgcvg)
+                    SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,nsites::intType=2,efficient::Bool=false,params::TNparams = algvars(),
+                    cvgE::Bool=true,maxiter::Integer=2,mincr::Integer=2,mperiod::Integer=0,fixD::Bool=false,Lbound::TensType=[0],Rbound::TensType=[0],
+                    noise::P=1.0,noise_goal::Float64=0.3,noise_incr::Float64=0.01,noise_decay::Float64=0.9,method::String="2S",shift::Bool=false,
+                    saveEnergy::AbstractArray=[0],halfsweep::Bool=false,Lenv::Env=[0],Renv::Env=[0],origj::Bool=true,maxshowD::Integer=8,
+                    storeD::Array{W,1}=[0.],alpha_decay::Float64=0.9,exnum::Integer=1) where P <: Union{Number,Array{Float64,1}} where {B <: TensType, W <: Number}
+    loadvars!(params,"DMRG-"*method,minm,maxm,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
+        noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)
+    return optmps(psi,psi,mpo,[1.],params=params,stepfct=step2S,makeOps=NsiteOps,cvgfct=dmrgcvg,displayfct=dmrginformation)
   end
   export dmrg2S
 end

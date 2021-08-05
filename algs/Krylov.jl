@@ -1,12 +1,15 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.1
+#                              v0.9
 #
 #########################################################################
-# Made by Thomas E. Baker (2018)
+# Made by Thomas E. Baker (2019)
 # See accompanying license with this program
-# This code is native to the julia programming language (v1.1.0) or (v1.5)
+# This code is native to the julia programming language (v1.2.0)
+#
+# Planned improvements:
+#   v1.0: Parallel, time (Z1, Z2, Lanczos), infinite methods, temperature
 #
 
 """
@@ -15,6 +18,7 @@
 Methods of solving a reduced site Hamiltonian with a Krylov expansion (ex: Lanczos)
 """
 module Krylov
+#using ..shuffle
 using ..tensor
 using ..QN
 using ..Qtensor
@@ -38,13 +42,22 @@ import LinearAlgebra
   +`Lenv::TensType`: left environment for reduced site H*psi representation
   +`Renv::TensType`: right environment for reduced site H*psi representation
   """
-  function compute_alpha(updatefct::Function,alpha::Array{W,1},k::Integer,currpsi::TensType,ops::TensType,
-                        Lenv::TensType,Renv::TensType) where {W <: Number, T <: TensType}
-    Hpsi = updatefct(currpsi,ops,Lenv,Renv)
+  function compute_alpha(updatefct::Function,alpha::Array{W,1},k::Integer,
+                         Lenv::TensType,Renv::TensType,psiops::TensType...) where {W <: Number, T <: TensType}
+
+    currpsi,Hpsi = updatefct(Lenv,Renv,psiops...)
     alpha[k] = real(ccontract(currpsi,Hpsi))
     return Hpsi
   end
 
+  function compute_beta(beta::Array{W,1},k::Integer,savepsi::Array{R,1},Hpsi::TensType,psiops::TensType...) where {W <: Number, R <: TensType}
+    beta[k-1] = sqrt(real(ccontract(Hpsi, Hpsi)))
+    Hpsi = div!(Hpsi, beta[k-1])
+    savepsi[k] = Hpsi
+    psiops = (Hpsi,Base.tail(psiops)...)
+    return Hpsi,psiops
+  end
+#=
   """
       lanczos_iterate(updatefct::Function,k::Integer,savepsi::Array{T,1},alpha::Array{W,1},beta::Array{W,1},Hpsi::TensType,
                       currpsi::TensType,ops::TensType,Lenv::TensType,Renv::TensType)
@@ -64,23 +77,15 @@ import LinearAlgebra
   +`Renv::TensType`: right environment for reduced site H*psi representation
   """
   function lanczos_iterate(updatefct::Function,k::Integer,savepsi::Array{T,1},alpha::Array{W,1},beta::Array{W,1},Hpsi::TensType,
-                      currpsi::TensType,ops::TensType,Lenv::TensType,Renv::TensType) where {W <: Number, T <: TensType}
-    Hpsi = div!(Hpsi, beta[k - 1])
-    savepsi[k] = Hpsi
+                           Lenv::TensType,Renv::TensType,psiops::TensType...) where {W <: Number, T <: TensType}
+#    Hpsi = div!(Hpsi, beta[k - 1])
+#    savepsi[k] = Hpsi
 
-    prevpsi,currpsi = currpsi,Hpsi
-    Hpsi = compute_alpha(updatefct,alpha,k,currpsi,ops,Lenv,Renv)
-    return prevpsi,currpsi,Hpsi
+#    prevpsi,currpsi = savepsi[k-1],Hpsi
+    Hpsi = compute_alpha(updatefct,alpha,k,Lenv,Renv,psiops...)
+    return Hpsi
   end
-
-  function psiholder(A::Qtens{W,Q},maxiter::Integer) where {W <: Number, Q <: Qnum}
-    return Array{Qtens{W,Q},1}(undef,maxiter)
-  end
-
-  function psiholder(A::Array{W,3},maxiter::Integer) where W <: Number
-    return Array{Array{W,3},1}(undef,maxiter)
-  end
-
+=#
   """
       lanczos(updatefct,AA,ops,Lenv,Renv[,maxiter=,betatest=])
 
@@ -95,36 +100,39 @@ import LinearAlgebra
   +`maxiter::Integer`: maximum number of lanczos iterations
   +`betatest::Number`: tolerance for beta coefficient before cutting off
   """
-  function lanczos(updatefct::Function, AA::K, ops::TensType, Lenv::Z, Renv::Z;
+  function lanczos(updatefct::Function, Lenv::Z, Renv::Z, psiops::TensType...;
                     maxiter::Integer = 2,betatest::Number = 1E-6) where {Z <: TensType,K <: Union{Qtens{W,Q},Array{W,4},Array{W,3},tens{W}}} where {W <: Number, Q <: Qnum} #::Tuple{Array{Float64,1},Array{Float64,1},Array{W,1},Number} where W <: Union{Qtens{R,Q},Array{R,3}} where {R <: Number, Q <: Qnum})
     alpha = Array{Float64,1}(undef, maxiter)
     beta = Array{Float64,1}(undef, maxiter - 1)
 
-    currpsi = div!(AA, norm(AA))
-    prevpsi = currpsi
+    Hpsi = compute_alpha(updatefct,alpha,1,Lenv,Renv,psiops...)
 
-    Hpsi = compute_alpha(updatefct,alpha,1,currpsi,ops,Lenv,Renv)
-    Hpsi = sub!(Hpsi, currpsi, alpha[1])
-
-    savepsi = Array{K,1}(undef, maxiter)
+    currpsi = psiops[1]
+    savepsi = Array{typeof(currpsi),1}(undef, maxiter)
     savepsi[1] = currpsi
 
-    k = 2
-    beta[k - 1] = sqrt(ccontract(Hpsi, Hpsi))
-    while k < maxiter && beta[k - 1] > betatest
-      prevpsi,currpsi,Hpsi = lanczos_iterate(updatefct,k,savepsi,alpha,beta,Hpsi,currpsi,ops,Lenv,Renv)
+    Hpsi = sub!(Hpsi, currpsi, alpha[1])
 
-      Hpsi = sub!(Hpsi,currpsi,alpha[k])
-      Hpsi = sub!(Hpsi,prevpsi,beta[k-1])
-      
+    k = 2
+    Hpsi,psiops = compute_beta(beta,k,savepsi,Hpsi,psiops...)
+    betabool = beta[k - 1] > betatest
+    while k < maxiter && betabool
+
+      Hpsi = compute_alpha(updatefct,alpha,k,Lenv,Renv,psiops...)
+
+      currpsi = savepsi[k]
+      prevpsi = savepsi[k-1]
+
+      Hpsi = tensorcombination((1,-alpha[k],-beta[k-1]),Hpsi,currpsi,prevpsi)
       k += 1
-      beta[k - 1] = sqrt(real(ccontract(Hpsi, Hpsi)))
+      Hpsi,psiops = compute_beta(beta,k,savepsi,Hpsi,psiops...)
+      betabool = beta[k - 1] > betatest
     end
-    if beta[k - 1] <= betatest
-      retK = k-1
-    else
-      prevpsi,currpsi,Hpsi = lanczos_iterate(updatefct,k,savepsi,alpha,beta,Hpsi,currpsi,ops,Lenv,Renv)
+    if betabool
+      Hpsi = compute_alpha(updatefct,alpha,k,Lenv,Renv,psiops...)
       retK = k
+    else
+      retK = k-1
     end
 
     return alpha, beta, savepsi, retK
@@ -132,7 +140,27 @@ import LinearAlgebra
   export lanczos
 
   """
-      krylov(updatefct,AA,ops,Lenv,Renv[,maxiter=,retnum=,betatest=])
+      lanczos_coefficients(updatefct,AA,ops,Lenv,Renv[,maxiter=,retnum=,betatest=])
+
+  Lanczos recursion call that outputs alpha coefficients, beta coefficients, the Krylov basis, and size of the Ky
+
+  #Arguments:
+  +`updatefct::Function`: Function to construct reduced site H*psi (arguments: `currpsi`,`ops`,`Lenv`,`Renv`)
+  +`AA::TensType`: wavefunction tensors on reduced site contract together
+  +`ops::TensType`: operators on reduced site contract together
+  +`Lenv::TensType`: left environment for reduced site H*psi representation
+  +`Renv::TensType`: right environment for reduced site H*psi representation
+  +`maxiter::Integer`: maximum number of lanczos iterations
+  +`retnum::Integer`: number of excitations to return
+  +`betatest::Number`: tolerance for beta coefficient before cutting off
+  """
+  function lanczos_coefficients(updatefct::Function, Lenv::TensType, Renv::TensType, psiops::TensType...;maxiter::Integer = 2,retnum::Integer = 1,betatest::Number = 1E-6)
+    alpha, beta, savepsi, sumsize = lanczos(updatefct, Lenv, Renv, psiops..., maxiter = maxiter, betatest = betatest)
+    return alpha, beta, savepsi, sumsize
+  end
+
+  """
+      krylov(updatefct,Lenv,Renv,AA,ops...[,maxiter=,retnum=,betatest=])
 
   Krylov subspace expansion
 
@@ -146,33 +174,36 @@ import LinearAlgebra
   +`retnum::Integer`: number of excitations to return
   +`betatest::Number`: tolerance for beta coefficient before cutting off
   """
-  function krylov(updatefct::Function, AA::TensType, ops::TensType, Lenv::TensType, Renv::TensType;maxiter::Integer = 2,retnum::Integer = 1,
+  function krylov(updatefct::Function, Lenv::TensType, Renv::TensType, psiops::TensType...;maxiter::Integer = 2,retnum::Integer = 1,
                   betatest::Number = 1E-6)#::Tuple{Array{R,1},Array{Float64,1}} where R <: Union{Qtens{W,Q},Array{W,3}} where {W <: Number, Q <: Qnum}))
 
-    alpha, beta, savepsi, sumsize = lanczos(updatefct, AA, ops, Lenv, Renv, maxiter = maxiter, betatest = betatest)
+    alpha, beta, savepsi, sumsize = lanczos_coefficients(updatefct, Lenv, Renv, psiops..., maxiter = maxiter, betatest = betatest)
 
     if sumsize != maxiter
       if sumsize != 1
         AB = LinearAlgebra.SymTridiagonal(alpha[1:sumsize], beta[1:sumsize - 1])
       else
-        AB = Float64[alpha[1] for i = 1:1, j=1:1]
+        AB = Array{Float64,2}(undef,1,1)
+        AB[1,1] = alpha[1]
       end
     else
       AB = LinearAlgebra.SymTridiagonal(alpha, beta)
     end
 
-    D, U = LinearAlgebra.eigen(AB)::LinearAlgebra.Eigen{Float64,Float64,Array{Float64,2},Array{Float64,1}}
+    D, U = LinearAlgebra.eigen(AB)
+    energies = [real(D[i]) for i = 1:size(D,1)]::Array{Float64,1}
 
     retsize = min(size(U, 2), retnum)
-    retpsi = Array{typeof(savepsi[1]),1}(undef, retsize)::Array{R,1} where R <: Union{Qtens{W,Q},Array{W,3},Array{W,4},tens{W}} where {W <: Number, Q <: Qnum}
+    retpsi = Array{typeof(savepsi[1]),1}(undef, retsize)
     for i = 1:retsize
       retpsi[i] = savepsi[1] * conj(U[1,i])
-      for k = 2:sumsize
+      for k = 2:sumsize          
         retpsi[i] = add!(retpsi[i], savepsi[k], conj(U[k,i])) # do the rest of the sum.
       end
     end
-    return retpsi, D
+
+    return retpsi, energies, alpha, beta
   end
   export krylov
-
+  
 end
