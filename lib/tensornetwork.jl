@@ -405,7 +405,7 @@ using ..MPutil
   + `arrowss`: fluxes for each index on `A`
   + `elements`: elements of `A` if reshaped into a vector (out to `show`)
   """
-  function println(A::TNobj;show::intType=10)
+  function println(A::TNobj;show::Integer=10)
 
     println("size = ",size(A))
     println("index names = ",A.names)
@@ -733,7 +733,7 @@ using ..MPutil
 
   See also: [`trace`](@ref)
   """
-  function matchindex!(A::TNobj,vect::Array{Array{intType,1},1},inds::Array{Array{W,1},1},w::Integer,q::Integer) where W <: Union{Any,Integer}
+  function matchindex!(A::TNobj,vect::Array{Array{P,1},1},inds::Array{Array{W,1},1},w::Integer,q::Integer) where {W <: Union{Any,Integer}, P <: Integer}
 #    condition = true
 #    z = 0
     convInds!(A,inds,vect)
@@ -745,7 +745,7 @@ using ..MPutil
 
   converts named indices in `A` to integers; finds only indices specified in `inds` and returns `vect` with integers; does nothing if its only integers
   """
-  function convInds!(A::TNobj,inds::Array{Array{W,1},1},vect::Array{Array{intType,1},1}) where W <: Union{Any,Integer}
+  function convInds!(A::TNobj,inds::Array{Array{W,1},1},vect::Array{Array{P,1},1}) where {W <: Union{Any,Integer}, P <: Integer}
     if W <: Integer
       return inds
     end

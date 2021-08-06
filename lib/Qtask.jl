@@ -323,46 +323,10 @@ using ..QN
 
   import Base.setindex!
   function setindex!(A::Qtens{W,Q},B::Qtens{W,Q},vals::genColType...) where {W <: Number, Q <: Qnum}
-#    println("size: ",size(A)," ",size(B))
-
-
-#    println(B)
-
-#=
-    if length(vals) != ndims(A)
-      C = mergereshape(A)
-    else
-      C = A
-    end
-    =#
-
-#    println()
-#    println("###########")
-#    println("START")
-#    println("###########")
-#    println()
-
-#println(B.currblock," ",A.currblock," ",B.currblock==A.currblock)
-
     C = changeblock(B,A.currblock)
-
-#    println(A)
-#    println(C)
-
-#    println()
-#    println("###########")
-#    println("RIGHT HERE YO")
-#    println("###########")
-
-
     unitranges,keepinds = get_ranges(size(A),vals...)
 
-#    println(unitranges)
-
-#    println(unitranges)
-
     commoninds = matchblocks((false,false),A,C,matchQN=A.flux)
-#    println(commoninds)
 
     Lpos = Array{intType,1}(undef,length(C.currblock[1]))
     Rpos = Array{intType,1}(undef,length(C.currblock[2]))
@@ -388,16 +352,12 @@ using ..QN
 
       end
     end
-
-#    error("HMM?")
     nothing
   end
 
 
   function setindex!(C::Qtens{W,Q},val::W,a::Integer...) where {W <: Number, Q <: Qnum}
     if length(C.T) > 0
-#      outnum = 0
-#    else
       q = findqsector(C,a...)
 
       x = scaninds(1,q,C,a...)
@@ -406,9 +366,6 @@ using ..QN
       C.T[q][x,y] = val
     end
     nothing
-
-#    return outnum
-
   end
 
 
@@ -780,7 +737,7 @@ import ..tensor.joinindex!
 
   See also: [`makeId`](@ref) [`trace`](@ref)
   """
-  function Idhelper(A::TensType,iA::W) where W <: Union{intvecType,Array{Array{intType,1},1}}
+  function (Idhelper(A::TensType,iA::W) where W <: Union{intvecType,Array{Array{P,1},1}}) where P <: Integer
     if typeof(iA) <: intvecType
       vA = convIn(iA)
       lsize = size(A,vA[1])
@@ -802,7 +759,7 @@ import ..tensor.joinindex!
 
   See also: [`trace`](@ref)
   """
-  function makeId(A::Qtens{W,Q},iA::X) where X <: Union{intvecType,Array{Array{intType,1},1}} where {W <: Number, Q <: Qnum}
+  function (makeId(A::Qtens{W,Q},iA::X) where X <: Union{intvecType,Array{Array{P,1},1}}) where {W <: Number, Q <: Qnum, P <: Integer}
     lsize,finalsizes = Idhelper(A,iA)
     newQnumMat = A.QnumMat[iA]
     typeA = eltype(A)
@@ -821,7 +778,7 @@ import ..tensor.joinindex!
   
   generates a swap gate (order of indices: in index for `A`, in index for `B`, out index for `A`, out index for `B`) for `A` and `B`'s indices `iA` and `iB`
   """
-  function swapgate(A::TensType,iA::W,B::TensType,iB::R) where W <: Union{intvecType,Array{Array{intType,1},1}} where R <: Union{intvecType,Array{Array{intType,1},1}}
+  function (swapgate(A::TensType,iA::W,B::TensType,iB::R) where {W <: Union{intvecType,Array{Array{P,1},1}},R <: Union{intvecType,Array{Array{P,1},1}}}) where P <: Integer
     LId = makeId(A,iA)
     RId = makeId(B,iB)
     if typeof(LId) <: denstens || typeof(LId) <: qarray

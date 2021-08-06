@@ -889,7 +889,7 @@ import LinearAlgebra
     return M
   end
 
-  function reshape!(M::Union{AbstractArray,tens{W}}, S::Array{Array{Int64,1},1};merge::Bool=false) where W <: Number
+  function reshape!(M::Union{AbstractArray,tens{W}}, S::Array{Array{P,1},1};merge::Bool=false) where {W <: Number, P <: Integer}
     newsize = ntuple(a->prod(b->size(M,b),S[a]),length(S))
     return reshape!(M,newsize)
   end
@@ -902,7 +902,7 @@ import LinearAlgebra
     return reshape!(newM,S)
   end
 
-  function reshape(M::Union{AbstractArray,tens{W}}, S::Array{Array{Int64,1},1};merge::Bool=false) where W <: Number
+  function reshape(M::tens{W}, S::Array{Array{P,1},1};merge::Bool=false) where {W <: Number, P <: Integer}
     newM = tens{W}(M.size,M.T)
     return reshape!(newM,S)
   end

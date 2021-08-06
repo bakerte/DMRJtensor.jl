@@ -376,8 +376,8 @@ import LinearAlgebra
 
   constructor for Qtensor with unreshaped size of `newsize`, non-zero values `T`, indices `ind`, total flux `flux`, quantum numbers `QnumMat`; optionally assign `arrows` for indices or conjugate the tensor (`conjugated`)
   """
-  function Qtens(newsize::Tuple,T::Array{tens{Z},1}, ind::Array{intType,1}, currblock::Array{Array{intType,1},1}, QnumMat::Array{Array{Q,1},1},
-                 flux::Q,arrows::U...)::qarray where {Z <: Number,Q <: Qnum, U <: Union{Bool,Array{Bool,1}}}
+  function Qtens(newsize::Tuple,T::Array{tens{Z},1}, ind::Array{P,1}, currblock::Array{Array{P,1},1}, QnumMat::Array{Array{Q,1},1},
+                 flux::Q,arrows::U...)::qarray where {P <: Integer, Z <: Number,Q <: Qnum, U <: Union{Bool,Array{Bool,1}}}
     if length(arrows) == 0
       newQnumMat = QnumMat
     else
@@ -429,7 +429,7 @@ import LinearAlgebra
     return basesize(Qtensor.QnumMat)
   end
 
-  function basesize(Qlabels::Array{Array{Q,1},1}) where Q <: Union{Qnum,intType}
+  function basesize(Qlabels::Array{Array{Q,1},1}) where Q <: Union{Qnum,Integer}
     return ntuple(i->length(Qlabels[i]),length(Qlabels))
   end
   export basesize
@@ -440,7 +440,7 @@ import LinearAlgebra
 
 
 
-  function rand(Qlabels::Array{Array{Q,1},1};currblock::Array{Array{intType,1},1}=equalblocks(Qlabels),datatype::DataType=Float64,leftflux::Bool=true,blockfct::Function=rand)::qarray where Q <: Qnum
+  function rand(Qlabels::Array{Array{Q,1},1};currblock::Array{Array{P,1},1}=equalblocks(Qlabels),datatype::DataType=Float64,leftflux::Bool=true,blockfct::Function=rand)::qarray where {Q <: Qnum, P <: Integer}
     Linds = currblock[1]
     Rinds = currblock[2]
 
@@ -497,11 +497,11 @@ import LinearAlgebra
 
 
   import Base.zeros
-  function zeros(Qlabels::Array{Array{Q,1},1};currblock::Array{Array{intType,1},1}=equalblocks(Qlabels),datatype::DataType=Float64,leftflux::Bool=true,blockfct::Function=rand)::qarray where Q <: Qnum
+  function zeros(Qlabels::Array{Array{Q,1},1};currblock::Array{Array{P,1},1}=equalblocks(Qlabels),datatype::DataType=Float64,leftflux::Bool=true,blockfct::Function=rand)::qarray where {Q <: Qnum, P <: Integer}
     return rand(Qlabels,currblock=currblock,datatype=datatype,leftflux=leftflux,blockfct=zeros)
   end
 
-  function zeros(datatype::DataType,Qlabels::Array{Array{Q,1},1};currblock::Array{Array{intType,1},1}=equalblocks(Qlabels),leftflux::Bool=true,blockfct::Function=rand)::qarray where Q <: Qnum
+  function zeros(datatype::DataType,Qlabels::Array{Array{Q,1},1};currblock::Array{Array{P,1},1}=equalblocks(Qlabels),leftflux::Bool=true,blockfct::Function=rand)::qarray where {Q <: Qnum, P <: Integer}
     return rand(Qlabels,currblock=currblock,datatype=datatype,leftflux=leftflux,blockfct=zeros)
   end
 
@@ -567,8 +567,8 @@ import LinearAlgebra
 ####################################################
 ####################################################
 
-function QnumList(Qt::Qtens{W,Q},LR::Bool,pLinds::Array{intType,1},pRinds::Array{intType,1},
-                  leftSummary::Array{Q,1},rightSummary::Array{Q,1}) where {W <: Number, Q <: Qnum}
+function QnumList(Qt::Qtens{W,Q},LR::Bool,pLinds::Array{P,1},pRinds::Array{P,1},
+                  leftSummary::Array{Q,1},rightSummary::Array{Q,1}) where {P <: Integer, W <: Number, Q <: Qnum}
   if LR
     leftQNs,Lbigtosub,rows,Lindexes = QnumList(Qt,pLinds,leftSummary)
     Rbigtosub,columns,Rindexes = smallQnumList(Qt,pRinds,rightSummary)
@@ -590,8 +590,8 @@ function QnumList(Qtens::Qtens{W,Q},vec::Array{Int64,1},QnumSummary::Array{Q,1})
   return QnumList_worker(sizes,QnumMat,QnumSum,vec,QnumSummary)
 end
 
-function QnumList_worker(sizes::NTuple{G,intType},QnumMat::Array{Array{intType,1},1},QnumSum::Array{Array{Q,1},1},
-                         vec::Array{intType,1},QnumSummary::Array{Q,1}) where {Q <: Qnum, G}
+function QnumList_worker(sizes::NTuple{G,P},QnumMat::Array{Array{P,1},1},QnumSum::Array{Array{Q,1},1},
+                         vec::Array{P,1},QnumSummary::Array{Q,1}) where {Q <: Qnum, G, P <: Integer}
   ninds = length(vec)
   #=
   if ninds == 0
@@ -666,8 +666,8 @@ function smallQnumList(Qtens::Qtens{W,Q},vec::Array{Int64,1},QnumSummary::Array{
   return smallQnumList_worker(sizes,QnumMat,QnumSum,vec,QnumSummary)
 end
 
-function smallQnumList_worker(sizes::NTuple{G,intType},QnumMat::Array{Array{intType,1},1},QnumSum::Array{Array{Q,1},1},
-                              vec::Array{intType,1},QnumSummary::Array{Q,1}) where {Q <: Qnum, G}
+function smallQnumList_worker(sizes::NTuple{G,P},QnumMat::Array{Array{P,1},1},QnumSum::Array{Array{Q,1},1},
+                              vec::Array{P,1},QnumSummary::Array{Q,1}) where {Q <: Qnum, G, P <: Integer}
   ninds = length(vec)
 
   pos = makepos(ninds)
@@ -721,7 +721,7 @@ function smallQnumList_worker(sizes::NTuple{G,intType},QnumMat::Array{Array{intT
   return returnvector,QNblocksizes,saveindexes
 end
 
-  function multi_indexsummary(Qt::Qtens{W,Q},vec::Array{intType,1}) where {W <: Number, Q <: Qnum, N}
+  function multi_indexsummary(Qt::Qtens{W,Q},vec::Array{P,1}) where {W <: Number, Q <: Qnum, N, P <: Integer}
     QnumSum = Qt.QnumSum
     if length(vec) == 1
       Qsumvec = QnumSum[vec[1]]
@@ -767,20 +767,20 @@ end
   end
   export multi_indexsummary
 
-  function changeblock(Qt::Qtens{W,Q},Linds::Array{intType,1},
-                        Rinds::Array{intType,1};leftflux::Bool=true) where {W <: Number, Q <: Qnum}
+  function changeblock(Qt::Qtens{W,Q},Linds::Array{P,1},
+                        Rinds::Array{P,1};leftflux::Bool=true) where {W <: Number, Q <: Qnum, P <: Integer}
     return changeblock(Qt,[Linds,Rinds],leftflux=leftflux)
   end
 
-  function findsizes(Qt::Qtens{W,Q},Linds::Array{intType,1}) where {W <: Number, Q <: Qnum}
+  function findsizes(Qt::Qtens{W,Q},Linds::Array{P,1}) where {W <: Number, Q <: Qnum, P <: Integer}
     nind = length(Linds)
     Lnonzero = nind > 0
     Lsize = Lnonzero ? prod(Linds) : 1
     return Lsize,nind,Lnonzero
   end
   
-  function changeblock(Qt::Qtens{W,Q},newblock::Array{Array{intType,1},1};
-                       leftflux::Bool=true) where {W <: Number, Q <: Qnum}
+  function changeblock(Qt::Qtens{W,Q},newblock::Array{Array{P,1},1};
+                       leftflux::Bool=true) where {W <: Number, Q <: Qnum, P <: Integer}
     if Qt.currblock == newblock
       newQt = Qt
     else
@@ -885,16 +885,16 @@ end
     return x
   end
 
-  @inline function innerloadpos!(y::intType,Rorigsize::intType,thispos::Array{intType,1},thiscurrblock_two::Array{intType,1},thisind_two::Array{intType,2})
+  @inline function innerloadpos!(y::P,Rorigsize::P,thispos::Array{P,1},thiscurrblock_two::Array{P,1},thisind_two::Array{P,2}) where P <: Integer
     @simd for i = 1:Rorigsize
       @inbounds thispos[thiscurrblock_two[i]] = thisind_two[i,y]
     end
     nothing
   end
 
-  @inline function innerloop(x::intType,y::intType,newblocks::Array{Array{W,2},1},inputval::W,leftQNs::Array{intType,1},LRpos::Bool,basesize::NTuple{P,intType},thispos::Array{intType,1},#thisthread::intType,
-            thisind_one::Array{intType,2},thisind_one_sizetwo::intType,Linds::NTuple{Z,intType},Lbigtosub::Array{intType,1},
-            Rinds::NTuple{G,intType},Rbigtosub::Array{intType,1}) where {P, Z, G, W <: Number}
+  @inline function innerloop(x::S,y::S,newblocks::Array{Array{W,2},1},inputval::W,leftQNs::Array{S,1},LRpos::Bool,basesize::NTuple{P,S},thispos::Array{S,1},#thisthread::S,
+            thisind_one::Array{S,2},thisind_one_sizetwo::S,Linds::NTuple{Z,S},Lbigtosub::Array{S,1},
+            Rinds::NTuple{G,S},Rbigtosub::Array{S,1}) where {P, Z, G, W <: Number, S <: Integer}
 
     smallx = AAzeropos2ind(thispos,basesize,Linds)
     smally = AAzeropos2ind(thispos,basesize,Rinds)
@@ -907,9 +907,9 @@ end
     nothing
   end
 
-  function double_loop(newblocks::Array{Array{W,2},1},thisTens::Array{W,1},leftQNs::Array{intType,1},LRpos::Bool,basesize::NTuple{P,intType},posvecs::Array{Array{intType,1},1},#thisthread::intType,
-            thisind_one::Array{intType,2},thisind_one_sizetwo::intType,Lorigsize::intType,thiscurrblock_one::Array{intType,1},Linds::NTuple{Z,intType},Lbigtosub::Array{intType,1},
-            thisind_two::Array{intType,2},thisind_two_sizetwo::intType,Rorigsize::intType,thiscurrblock_two::Array{intType,1},Rinds::NTuple{G,intType},Rbigtosub::Array{intType,1};minelements::Integer=50) where {P, Z, G, W <: Number}
+  function double_loop(newblocks::Array{Array{W,2},1},thisTens::Array{W,1},leftQNs::Array{S,1},LRpos::Bool,basesize::NTuple{P,S},posvecs::Array{Array{S,1},1},#thisthread::S,
+            thisind_one::Array{S,2},thisind_one_sizetwo::S,Lorigsize::S,thiscurrblock_one::Array{S,1},Linds::NTuple{Z,S},Lbigtosub::Array{S,1},
+            thisind_two::Array{S,2},thisind_two_sizetwo::S,Rorigsize::S,thiscurrblock_two::Array{S,1},Rinds::NTuple{G,S},Rbigtosub::Array{S,1};minelements::Integer=50) where {P, Z, G, W <: Number, S <: Integer}
   if thisind_two_sizetwo > minelements
     Threads.@threads for y = 1:thisind_two_sizetwo
       thisthread = Threads.threadid()
@@ -948,11 +948,11 @@ end
     nothing
   end
 
-  function reblock(Qt::Qtens{W,Q},newcurrblocks::Array{Array{intType,1},1},newQblocksum::Array{Array{Q,1},1},
-                   LR::Bool,QNsummary::Array{Q,1},leftQNs::Array{intType,1},ninds::intType,
-                   Linds::Array{intType,1},Rinds::Array{intType,1},Lindexes::Array{Array{intType,2},1},
-                   Rindexes::Array{Array{intType,2},1},rows::Array{intType,1},columns::Array{intType,1},
-                   Lbigtosub::Array{intType,1},Rbigtosub::Array{intType,1};effZero::Float64=1E-13) where {W <: Number, Q <: Qnum, G <: Union{Array{intType,1},Tuple}, P <: Union{Array{intType,1},Tuple}}
+  function (reblock(Qt::Qtens{W,Q},newcurrblocks::Array{Array{S,1},1},newQblocksum::Array{Array{Q,1},1},
+                   LR::Bool,QNsummary::Array{Q,1},leftQNs::Array{S,1},ninds::S,
+                   Linds::Array{S,1},Rinds::Array{S,1},Lindexes::Array{Array{S,2},1},
+                   Rindexes::Array{Array{S,2},1},rows::Array{S,1},columns::Array{S,1},
+                   Lbigtosub::Array{S,1},Rbigtosub::Array{S,1};effZero::Float64=1E-13) where {W <: Number, Q <: Qnum, G <: Union{Array{S,1},Tuple}, P <: Union{Array{S,1},Tuple}}) where S <: Integer
 
     fulltens = sum(q->length(Qt.T[q]),1:length(Qt.T)) == sum(q->rows[q]*columns[q],1:length(rows))
     newblocks = Array{Array{W,2},1}(undef,length(QNsummary))
@@ -1025,7 +1025,7 @@ end
 ####################################################
 ####################################################
 
-  function newindexsizeone!(Qt::Qtens{W,Q},S::intType...) where {W <: Number, Q <: Qnum}
+  function newindexsizeone!(Qt::Qtens{W,Q},S::Integer...) where {W <: Number, Q <: Qnum}
     size_ones = 0
     for w = 1:length(S)
       size_ones += S[w] == 1
@@ -1065,14 +1065,14 @@ end
 
   See also: [`reshape`](@ref)
   """
-  function reshape!(Qt::Qtens{W,Q}, S::intType...;merge::Bool=false)::qarray where {W <: Number, Q <: Qnum}
+  function reshape!(Qt::Qtens{W,Q}, S::Integer...;merge::Bool=false)::qarray where {W <: Number, Q <: Qnum}
     Rsize = recoverShape(Qt,S...)
     outQt = reshape!(Qt,Rsize,merge=merge)
     newindexsizeone!(outQt,S...)
     return outQt
   end
 
-  function (reshape!(Qt::Array{W,N},S::intType...;merge::Bool=false)::Array{W,length(S)}) where W <: Number where N
+  function (reshape!(Qt::Array{W,N},S::Integer...;merge::Bool=false)::Array{W,length(S)}) where W <: Number where N
     return reshape(Qt,S...)
   end
 
@@ -1086,15 +1086,15 @@ end
     return outQt
   end
 
-  function reshape!(Qt::Qtens{W,Q}, newQsize::Array{intType,1}...;merge::Bool=false)::qarray where {W <: Number, Q <: Qnum}
+  function reshape!(Qt::Qtens{W,Q}, newQsize::Array{P,1}...;merge::Bool=false)::qarray where {W <: Number, Q <: Qnum, P <: Integer}
     return reshape!(Qt,[newQsize[i] for i = 1:length(newQsize)],merge=merge)
   end
     
-  function (reshape!(Qt::Array{W,N}, newQsize::Array{Array{intType,1},1};merge::Bool=false)::Array{W,length(newQsize)}) where W <: Number where N
+  function (reshape!(Qt::Array{W,N}, newQsize::Array{Array{P,1},1};merge::Bool=false)::Array{W,length(newQsize)}) where {W <: Number, N, P <: Integer}
     return reshape!(Qt,intType[prod(a->size(Qt, a), newQsize[i]) for i = 1:size(newQsize, 1)]...,merge=merge)
   end
   
-  function (reshape!(Qt::Array{W,N}, newQsize::Array{intType,1}...;merge::Bool=false)::Array{W,length(newQsize)}) where W <: Number where N
+  function (reshape!(Qt::Array{W,N}, newQsize::Array{P,1}...;merge::Bool=false)::Array{W,length(newQsize)}) where {W <: Number, N, P <: Integer}
     return reshape(Qt, intType[newQsize...])
   end
 
@@ -1110,19 +1110,19 @@ end
 
   See also: [`reshape!`](@ref)
   """
-  function reshape(Qt::Qtens{W,Q}, S::intType...;merge::Bool=false)::qarray where {W <: Number, Q <: Qnum}
+  function reshape(Qt::Qtens{W,Q}, S::Integer...;merge::Bool=false) where {W <: Number, Q <: Qnum}
     return reshape!(copy(Qt),S...,merge=merge)
   end
 
-  function reshape(Qt::Qtens{W,Q}, newQsize::Array{Array{intType,1},1};merge::Bool=false) where {W <: Number, Q <: Qnum}
+  function reshape(Qt::Qtens{W,Q}, newQsize::Array{Array{P,1},1};merge::Bool=false) where {W <: Number, Q <: Qnum, P <: Integer}
     return reshape!(copy(Qt), newQsize...,merge=merge)
   end
   
-  function reshape(Qt::Qtens{W,Q}, newQsize::Array{intType,1}...;merge::Bool=false) where {W <: Number, Q <: Qnum}
+  function reshape(Qt::Qtens{W,Q}, newQsize::Array{P,1}...;merge::Bool=false) where {W <: Number, Q <: Qnum, P <: Integer}
     return reshape!(copy(Qt), newQsize...,merge=merge)
   end
 
-  function (reshape(Qt::Array{W,N}, newQsize::Array{Array{intType,1},1};merge::Bool=false)::Array{W,length(newQsize)}) where W <: Number where N
+  function (reshape(Qt::Array{W,N}, newQsize::Array{Array{P,1},1};merge::Bool=false)::Array{W,length(newQsize)}) where {W <: Number, N, P <: Integer}
 #    totdim = sum(w->length(newQsize[w])>0,1:length(newQsize))
     M = Array{intType,1}(undef,length(newQsize))
     counter = 0
@@ -1137,18 +1137,18 @@ end
     return reshape(deepcopy(Qt), M...)
   end
 
-  function getQnum(a::intType,b::intType,QnumMat::Array{Array{intType,1},1},QnumSum::Array{Array{Q,1},1}) where Q <: Qnum
+  function getQnum(a::Integer,b::Integer,QnumMat::Array{Array{P,1},1},QnumSum::Array{Array{Q,1},1}) where {Q <: Qnum, P <: Integer}
     Qnumber = QnumMat[a][b]
     return QnumSum[a][Qnumber]
   end
 
-  function getQnum(a::intType,b::intType,Qt::qarray)
+  function getQnum(a::Integer,b::Integer,Qt::qarray)
     return getQnum(a,b,Qt.QnumMat,Qt.QnumSum)
   end
   export getQnum
 
 
-  function makenewindsL(LR::intType,newQt::qarray,Qt::qarray,Rsize::Array{Array{intType,1},1},offset::intType)
+  function makenewindsL(LR::Integer,newQt::qarray,Qt::qarray,Rsize::Array{Array{P,1},1},offset::Integer) where P <: Integer
     newindsL = [Array{intType,2}(undef,length(newQt.currblock[1]),size(newQt.ind[q][LR],2)) for q = 1:length(newQt.T)]
     for q = 1:length(newindsL)
       for x = 1:size(newindsL[q],2)
@@ -1168,7 +1168,7 @@ end
   end
 
 
-  function makenewindsR(LR::intType,newQt::qarray,Qt::qarray,Rsize::Array{Array{intType,1},1},offset::intType)
+  function makenewindsR(LR::Integer,newQt::qarray,Qt::qarray,Rsize::Array{Array{P,1},1},offset::Integer) where P <: Integer
     newindsR = [Array{intType,2}(undef,length(newQt.currblock[LR]),size(newQt.ind[q][LR],2)) for q = 1:length(newQt.T)]
     for q = 1:length(newindsR)
       for x = 1:size(newindsR[q],2)
@@ -1194,7 +1194,7 @@ end
 
   See also: [`reshape!`](@ref)
   """
-  function mergereshape!(Qt::Qtens{W,Q};currblock::Array{Array{intType,1},1}=equalblocks(Qt)) where {W <: Number, Q <: Qnum}
+  function mergereshape!(Qt::Qtens{W,Q};currblock::Array{Array{P,1},1}=equalblocks(Qt)) where {W <: Number, Q <: Qnum, P <: Integer}
     Rsize = Qt.size
     newdim = length(Rsize)
 
@@ -1273,7 +1273,7 @@ end
   end
   export mergereshape!
 
-  function mergereshape(Qt::Qtens{W,Q};currblock::Array{Array{intType,1},1}=equalblocks(Qt)) where {W <: Number, Q <: Qnum}
+  function mergereshape(Qt::Qtens{W,Q};currblock::Array{Array{P,1},1}=equalblocks(Qt)) where {W <: Number, Q <: Qnum, P <: Integer}
     cQt = copy(Qt)
     return mergereshape!(cQt,currblock=currblock)
   end
@@ -1342,7 +1342,7 @@ end
 
   get the last index of a Qtensor (ex: A[:,1:end]...defines "end")
   """
-  function lastindex(Qtens::qarray, i::intType) #where Q <: qarray
+  function lastindex(Qtens::qarray, i::Integer) #where Q <: qarray
     return Qtens.size[i]
   end
 
@@ -1367,8 +1367,8 @@ end
   end
 
   function matchblocks(conjvar::NTuple{G,Bool},operators::qarray...;
-                       ind::NTuple{G,intType}=ntuple(i->i==1 ? 2 : 1,length(operators)),
-                       matchQN::Q=typeof(operators[1].flux)(),nozeros::Bool=true) where {G,Q <: Qnum}
+                       ind::NTuple{G,P}=ntuple(i->i==1 ? 2 : 1,length(operators)),
+                       matchQN::Q=typeof(operators[1].flux)(),nozeros::Bool=true) where {G,Q <: Qnum, P <: Integer}
     zeroQN = Q()
     A = operators[1]
     Aind = ind[1]
@@ -1757,7 +1757,7 @@ end
     return ntuple(w->size(A,w),ndims(A))
   end
 
-  function recoverShape(Qt::Qtens{W,Q},S::intType...) where {W <: Number, Q <: Qnum}
+  function recoverShape(Qt::Qtens{W,Q},S::Integer...) where {W <: Number, Q <: Qnum}
     Rsize = Array{Array{intType,1},1}(undef,length(S))
     count = 1
     wstart = 1
@@ -1793,7 +1793,7 @@ end
 
   See also: [`permutedims!`](@ref)
   """
-  function permutedims(currQtens::Qtens{W,Q}, vec::Array{intType,1}) where {W <: Number, Q <: Qnum}
+  function permutedims(currQtens::Qtens{W,Q}, vec::Array{P,1}) where {W <: Number, Q <: Qnum, P <: Integer}
     Qtens = copy(currQtens)
     permutedims!(Qtens, vec)
     return Qtens
@@ -1807,7 +1807,7 @@ end
 
   See also: [`permutedims`](@ref)
   """
-  function permutedims!(currQtens::Qtens{W,Q}, vec::Union{NTuple{N,intType},Array{intType,1}}) where {N, W <: Number, Q <: Qnum}
+  function permutedims!(currQtens::Qtens{W,Q}, vec::Union{NTuple{N,P},Array{P,1}}) where {N, W <: Number, Q <: Qnum, P <: Integer}
     Rsize = currQtens.size
 
     totalordersize = sum(q->length(Rsize[q]),1:length(Rsize))
@@ -1851,7 +1851,7 @@ end
     return currQtens
   end
 
-  function permutedims!(A::AbstractArray, order::Union{NTuple{N,intType},Array{intType,1}}) where N
+  function permutedims!(A::AbstractArray, order::Union{NTuple{N,P},Array{P,1}}) where {N, P <: Integer}
     return permutedims(A, order)
   end
 
@@ -1880,7 +1880,7 @@ end
 
   See also: [`Qtens`](@ref) [`print`](@ref) [`println`](@ref)
   """
-  function showQtens(Qtens::qarray;show::intType = 4)
+  function showQtens(Qtens::qarray;show::Integer = 4)
     println("printing Qtens of type: ", typeof(Qtens))
     println("size = ", Qtens.size)
     maxshow = min(show, size(Qtens.T, 1))
@@ -1942,7 +1942,7 @@ end
 
   See also: [`showQtens`](@ref) [`print`](@ref)
   """
-  function println(A::qarray;show::intType = 4)
+  function println(A::qarray;show::Integer = 4)
     showQtens(A, show = show)
     print("\n")
     nothing
