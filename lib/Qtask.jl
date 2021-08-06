@@ -50,7 +50,7 @@ using ..QN
 
 
 
-  function evaluate_keep(C::qarray,q::Integer,Linds::Array{intType,1},ap::Array{Array{intType,1},1},rowcol::Integer)
+  function evaluate_keep(C::qarray,q::Integer,Linds::Array{P,1},ap::Array{Array{P,1},1},rowcol::Integer) where P <: Integer
     thisindmat = C.ind[q][rowcol]
     keeprows = Array{Bool,1}(undef,size(thisindmat,2))
     rowindexes = size(thisindmat,1)
@@ -66,8 +66,8 @@ using ..QN
     return keeprows
   end
 
-  function truncate_replace_inds(C::qarray,q::Integer,rowcol::Integer,Lkeepinds::Array{intType,1},
-                                 keepbool::Array{Bool,1},kept_unitranges::Array{Array{intType,1},1},keeprows::Array{Bool,1})
+  function truncate_replace_inds(C::qarray,q::Integer,rowcol::Integer,Lkeepinds::Array{P,1},
+                                 keepbool::Array{Bool,1},kept_unitranges::Array{Array{P,1},1},keeprows::Array{Bool,1}) where P <: Integer
     thisindmat = C.ind[q][rowcol][keepbool,keeprows]
     offset = (rowcol-1)*length(C.currblock[1])
 
@@ -84,7 +84,7 @@ using ..QN
 
 
 
-  function get_ranges(sizes::NTuple{G,intType},a::genColType...) where G
+  function get_ranges(sizes::NTuple{G,P},a::genColType...) where {G, P <: Integer}
     unitranges = Array{Array{intType,1},1}(undef,length(a))
     keepinds = Array{Bool,1}(undef,length(a))
     for i = 1:length(a)
@@ -309,7 +309,7 @@ using ..QN
   end
 
 
-  function loadpos!(Lpos::Array{P,1},C::Qtens{W,Q},Cqind::Integer,LR::Integer,x::Integer,unitranges::Array{Array{intType,1},1}) where {P <: Integer, W <: Number, Q <: Qnum}
+  function loadpos!(Lpos::Array{P,1},C::Qtens{W,Q},Cqind::Integer,LR::Integer,x::Integer,unitranges::Array{Array{B,1},1}) where {B <: Integer, P <: Integer, W <: Number, Q <: Qnum}
     @simd for w = 1:length(Lpos)
       @inbounds index = C.currblock[LR][w]
       @inbounds xpos = C.ind[Cqind][LR][w,x] + 1
@@ -394,7 +394,7 @@ using ..QN
   end
 
 
-  function setindex!(C::Qtens{W,Q},val::W,a::intType...) where {W <: Number, Q <: Qnum}
+  function setindex!(C::Qtens{W,Q},val::W,a::Integer...) where {W <: Number, Q <: Qnum}
     if length(C.T) > 0
 #      outnum = 0
 #    else
@@ -418,7 +418,7 @@ using ..QN
 
 
 
-  function findqsector(C::qarray,a::intType...)
+  function findqsector(C::qarray,a::Integer...)
     LR = length(C.currblock[1]) < length(C.currblock[2]) ? 1 : 2
 
     smallinds = C.currblock[LR]
@@ -444,7 +444,7 @@ using ..QN
   end
 
 
-  function scaninds(blockindex::intType,q::intType,C::qarray,a::intType...)
+  function scaninds(blockindex::Integer,q::Integer,C::qarray,a::Integer...)
     La = a[C.currblock[blockindex]]
     notmatchingrow = true
     x = 0
@@ -470,7 +470,7 @@ using ..QN
 
   Find element of `C` that corresponds to positions `a`
   """
-  function searchindex(C::Qtens{W,Q},a::intType...) where {Q <: Qnum, W <: Number}
+  function searchindex(C::Qtens{W,Q},a::Integer...) where {Q <: Qnum, W <: Number}
     if length(C.T) == 0
       outnum = 0
     else
@@ -485,7 +485,7 @@ using ..QN
     return outnum
   end
 
-  function searchindex(C::AbstractArray,a::intType...)
+  function searchindex(C::AbstractArray,a::Integer...)
     return C[a...]
   end
 
@@ -732,7 +732,7 @@ import ..tensor.joinindex!
 
   Sub-function for quantum number contraction.  A Qtensor `A` with indices to contract `iA` generates all contracted indices (if, for example, a joined index was called by a single index number), and also the un-contracted indices
   """
-  function getinds(currQtens::qarray, vec::Union{Array{intType,1},Tuple}) #where X <: Integer
+  function getinds(currQtens::qarray, vec::Union{Array{P,1},Tuple}) where P <: Integer
     Rsize = currQtens.size
     consize = sum(a->length(Rsize[a]),vec)
     con = Array{intType,1}(undef,consize)  

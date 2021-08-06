@@ -88,7 +88,7 @@ using ..decompositions
   """
   mutable struct matrixproductstate{W} <: regMPS where W <: Array{TensType,1}
     A::W
-    oc::intType
+    oc::Integer
   end
   
   """
@@ -148,7 +148,7 @@ using ..decompositions
 
   processes `oc` to get location of the orthogonality center (first entry, default 1) for a system with `Ns` sites
   """
-  function makeoc(Ns::Integer,oc::intType...)
+  function makeoc(Ns::Integer,oc::Integer...)
     return length(oc) > 0  && 0 < oc[1] <= Ns ? oc[1] : 1
   end
 
@@ -165,11 +165,11 @@ using ..decompositions
     return MPS(psi.A,1,regtens=regtens)
   end
 
-  function MPS(psi::MPS,oc::intType;regtens::Bool=false) where W <: TensType
+  function MPS(psi::MPS,oc::Integer;regtens::Bool=false) where W <: TensType
     return MPS(psi.A,oc,regtens=regtens)
   end
 
-  function MPS(psi::Array{W,1},oc::intType;regtens::Bool=false) where W <: TensType
+  function MPS(psi::Array{W,1},oc::Integer;regtens::Bool=false) where W <: TensType
     if !regtens && typeof(psi[1]) <: AbstractArray
       tenspsi = [tens(psi[a]) for a = 1:length(psi)]
     else
@@ -178,7 +178,7 @@ using ..decompositions
     return matrixproductstate(tenspsi,oc)
   end
 
-  function MPS(thistype::DataType,B::Array{W,1},oc::intType...;regtens::Bool=false) where W <: AbstractArray
+  function MPS(thistype::DataType,B::Array{W,1},oc::Integer...;regtens::Bool=false) where W <: AbstractArray
     if !regtens
       MPSvec = [tens(convert(Array{thistype,ndims(B[i])},copy(B[i]))) for i = 1:size(B,1)]
     else
@@ -187,7 +187,7 @@ using ..decompositions
     return MPS(MPSvec,makeoc(length(B),oc...))
   end
 
-  function MPS(thistype::DataType,B::Array{W,1},oc::intType...;regtens::Bool=false) where W <: Union{denstens,qarray}
+  function MPS(thistype::DataType,B::Array{W,1},oc::Integer...;regtens::Bool=false) where W <: Union{denstens,qarray}
     MPSvec = [convertTens(thistype, copy(B[i])) for i = 1:size(B,1)]
     return MPS(MPSvec,makeoc(length(B),oc...))
   end
@@ -263,20 +263,20 @@ using ..decompositions
   function size(H::P) where P <: MPO
     return size(H.H)
   end
-  function size(H::P,i::intType) where P <: MPO
+  function size(H::P,i::Integer) where P <: MPO
     return size(H.H,i)
   end
   function size(psi::P) where P <: MPS
     return size(psi.A)
   end
-  function size(psi::P,i::intType) where P <: MPS
+  function size(psi::P,i::Integer) where P <: MPS
     return size(psi.A,i)
   end
   
   function size(G::P) where P <: regEnv
     return size(G.V)
   end
-  function size(G::P,i::intType) where P <: regEnv
+  function size(G::P,i::Integer) where P <: regEnv
     return size(G.V,i)
   end
 
@@ -315,7 +315,7 @@ using ..decompositions
 
   getindex allows to retrieve elements to an regEnv, MPS or MPO (ex: W = psi[1])
   """
-  function getindex(A::P,i::intType) where P <: regMPS
+  function getindex(A::P,i::Integer) where P <: regMPS
     return A.A[i]
   end
   function getindex(A::P,r::UnitRange{W}) where W <: Integer where P <: regMPS
@@ -326,14 +326,14 @@ using ..decompositions
     end
     return P(A.A[r],newoc)
   end
-  function getindex(H::P,i::intType) where P <: regMPO
+  function getindex(H::P,i::Integer) where P <: regMPO
     return H.H[i]
   end
   function getindex(H::P,r::UnitRange{W}) where W <: Integer where P <: regMPO
     return P(H.H[r])
   end
   
-  function getindex(G::P,i::intType) where P <: regEnv
+  function getindex(G::P,i::Integer) where P <: regEnv
     return G.V[i]
   end
   function getindex(G::P,r::UnitRange{W}) where W <: Integer where P <: regEnv
@@ -476,7 +476,7 @@ using ..decompositions
   """
   mutable struct largematrixproductstate <: largeMPS
     A::Array{String,1}
-    oc::intType
+    oc::Integer
     type::DataType
   end
   

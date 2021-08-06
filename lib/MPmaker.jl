@@ -139,7 +139,7 @@ using ..MPutil
 
   See also: [`move`](@ref)
   """
-  function move!(mps::MPS,pos::intType;m::Integer=0,cutoff::Float64=1E-14,minm::Integer=0)
+  function move!(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=1E-14,minm::Integer=0)
     movecenter!(mps,pos,cutoff=cutoff,m=m,minm=minm)
     nothing
   end
@@ -152,7 +152,7 @@ using ..MPutil
 
   See also: [`move!`](@ref)
   """
-  function move(mps::MPS,pos::intType;m::Integer=0,cutoff::Float64=1E-14,minm::Integer=0)
+  function move(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=1E-14,minm::Integer=0)
     newmps = copy(mps)
     movecenter!(newmps,pos,cutoff=cutoff,m=m,minm=minm)
     return newmps
@@ -341,7 +341,7 @@ using ..MPutil
   
   Applies MPO (`H`) to an MPS (`psi`) and truncates to maximum bond dimension `m` and cutoff `cutoff`
   """
-  function applyMPO(psi::MPS,H::MPO;m::intType=0,cutoff::Float64=0.)::MPS
+  function applyMPO(psi::MPS,H::MPO;m::Integer=0,cutoff::Float64=0.)::MPS
     if m == 0
       m = maximum([size(psi[i],ndims(psi[i])) for i = 1:size(psi.A,1)])
     end
@@ -503,7 +503,7 @@ using ..MPutil
 
 
 
-  function operator_in_order!(pos::Array{G,1},sizes::Union{Array{G,1},Tuple}) where G <: intType
+  function operator_in_order!(pos::Array{G,1},sizes::Union{Array{G,1},Tuple}) where G <: Integer
     w = length(pos)
     pos[w] += 1
     while w > 1 && pos[w] > sizes[w]
@@ -517,7 +517,7 @@ using ..MPutil
   end
 
   #heap algorithm for permutations (non-recursive)...
-  function permutations(nelem::intType)
+  function permutations(nelem::Integer)
     vec = [i for i = 1:nelem]
     numvecs = factorial(nelem)
     storevecs = Array{Array{intType,1},1}(undef,numvecs)
@@ -810,7 +810,7 @@ using ..MPutil
   isingmpo = convert2MPO(H,size(Id,1),Ns)
   ```
   """
-  function convert2MPO(H::AbstractArray,physSize::Array{Y,1},Ns::intType;
+  function convert2MPO(H::AbstractArray,physSize::Array{Y,1},Ns::Integer;
                        lower::Bool=true,regtens::Bool=false) where {X <: Integer, Y <: Integer}
     retType = typeof(prod(a->eltype(H[a])(1),1:Ns))
     finalMPO = Array{Array{retType,4},1}(undef,Ns)
@@ -846,18 +846,18 @@ using ..MPutil
     return MPO(finalMPO,regtens=regtens)
   end
 
-  function convert2MPO(H::AbstractArray,physSize::Y,Ns::intType;
+  function convert2MPO(H::AbstractArray,physSize::Y,Ns::Integer;
                        lower::Bool=true,regtens::Bool=false) where X <: Integer where Y <: Integer
     return convert2MPO(H,[physSize],Ns,lower=lower,regtens=regtens)
   end
 
-  function convert2MPO(H::Function,physSize::Array{X,1},Ns::intType;
+  function convert2MPO(H::Function,physSize::Array{X,1},Ns::Integer;
                        lower::Bool=true,regtens::Bool=false) where X <: Integer
     thisvec = [H(i) for i = 1:Ns]
     return convert2MPO(thisvec,physSize,Ns,lower=lower,regtens=regtens)
   end
 
-  function convert2MPO(H::Function,physSize::intType,Ns::intType;
+  function convert2MPO(H::Function,physSize::Integer,Ns::Integer;
                        lower::Bool=true,regtens::Bool=false)
     return convert2MPO(H,[physSize],Ns,lower=lower,regtens=regtens)
   end
@@ -868,7 +868,7 @@ using ..MPutil
 
   generates an MPS from a single vector (i.e., from exact diagonalization) for `Ns` sites and `physInd` size physical index at orthogonality center `oc`
   """
-  function makeMPS(vect::Array{W,1},physInd::Array{intType,1};Ns::intType=length(physInd),left2right::Bool=true,oc::intType=left2right ? Ns : 1,regtens::Bool=false) where W <: Number
+  function makeMPS(vect::Array{W,1},physInd::Array{P,1};Ns::Integer=length(physInd),left2right::Bool=true,oc::Integer=left2right ? Ns : 1,regtens::Bool=false) where {W <: Number, P <: Integer}
     mps = Array{Array{W,3},1}(undef,Ns)
     # MPS building loop
     if left2right
@@ -911,14 +911,14 @@ using ..MPutil
     return finalmps
   end
 
-  function makeMPS(vect::W,physInd::Array{intType,1};Ns::intType=length(physInd),
-                   left2right::Bool=true,oc::intType=left2right ? Ns : 1,regtens::Bool=false) where W <: denstens
+  function makeMPS(vect::W,physInd::Array{P,1};Ns::Integer=length(physInd),
+                   left2right::Bool=true,oc::Integer=left2right ? Ns : 1,regtens::Bool=false) where {W <: denstens, P <: Integer}
     newvect = copy(vect.T)
     return makeMPS(newvect,physInd;Ns=Ns,oc=oc,left2right=left2right,regtens=regtens)
   end
 
-  function makeMPS(vect::Array{W,1},physInd::intType;Ns::intType=convert(Int64,log(physInd,length(vect))),
-                   left2right::Bool=true,oc::intType=left2right ? Ns : 1,regtens::Bool=false) where W <: Union{denstens,Number}
+  function makeMPS(vect::Array{W,1},physInd::Integer;Ns::Integer=convert(Int64,log(physInd,length(vect))),
+                   left2right::Bool=true,oc::Integer=left2right ? Ns : 1,regtens::Bool=false) where W <: Union{denstens,Number}
     vecPhysInd = [physInd for i = 1:Ns]
     return makeMPS(vect,vecPhysInd;Ns=Ns,oc=oc,left2right=left2right,regtens=regtens)
   end
@@ -1003,7 +1003,7 @@ using ..MPutil
 
   See also: [`makeEnds`](@ref)
   """
-  function makeBoundary(dualpsi::K,psi::Z,mpovec::P...;left::Bool=true,rightind::intType=3) where {K <: MPS, Z <: MPS, P <: MPO}
+  function makeBoundary(dualpsi::K,psi::Z,mpovec::P...;left::Bool=true,rightind::Integer=3) where {K <: MPS, Z <: MPS, P <: MPO}
     retType = elnumtype(dualpsi,psi,mpovec...)
     nrank = 2 + length(mpovec)
     boundary = ones(retType,ones(intType,nrank)...)
@@ -1049,7 +1049,7 @@ using ..MPutil
   + `QnumMat::Array{Array{Qnum,1},1}`: quantum number matrix for the physical index
   + `storeVal::Array{T,1}`: maximum value found in MPS tensor, determine quantum number
   """
-  function assignflux!(i::intType,mps::MPS,QnumMat::Array{Array{Q,1},1},storeVal::Array{T,1}) where {Q <: Qnum, T <: Number}
+  function assignflux!(i::Integer,mps::MPS,QnumMat::Array{Array{Q,1},1},storeVal::Array{T,1}) where {Q <: Qnum, T <: Number}
     for c = 1:size(mps[i],3)
       for b = 1:size(mps[i],2),a = 1:size(mps[i],1)
         absval = abs(mps[i][a,b,c])
@@ -1171,7 +1171,7 @@ using ..MPutil
     return makeqMPS(mps,[Qlabels],arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
   end
 
-  function makeqMPS(arr::Array,Qlabels::W,arrows::Array{Bool,1}...;oc::intType=1,newnorm::Bool=true,setflux::Bool=false,
+  function makeqMPS(arr::Array,Qlabels::W,arrows::Array{Bool,1}...;oc::Integer=1,newnorm::Bool=true,setflux::Bool=false,
                     flux::Q=Q(),randomize::Bool=true,override::Bool=true,warning::Bool=true,lastfluxzero::Bool=false)::MPS where W <: Union{Array{Array{Q,1},1},Array{Q,1}} where Q <: Qnum
     mps = MPS(arr,oc)
     makeqMPS(mps,Qlabels,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,warning=warning,lastfluxzero=lastfluxzero)
@@ -1192,7 +1192,7 @@ using ..MPutil
   + `Qlabels::Array{Array{Qnum,1},1}`: quantum numbers for physical indices (modulus size of vector)
   + `arrows::Array{Bool,1}`: arrow convention for quantum numbers (default: [false,false,true,true])
   """
-  function makeqMPO(mpo::MPO,Qlabels::Array{Array{Q,1},1},arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::intType=1)::MPO where Q <: Qnum
+  function makeqMPO(mpo::MPO,Qlabels::Array{Array{Q,1},1},arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1)::MPO where Q <: Qnum
     zeroQN = Q()
     Ns = infinite ? 3*unitcell*length(mpo) : length(mpo)
     W = elnumtype(mpo)
@@ -1247,11 +1247,11 @@ using ..MPutil
   + `Qlabels::Array{Qnum,1}`: quantum numbers for physical indices (uniform)
   + `arrows::Array{Bool,1}`: arrow convention for quantum numbers (default: [false,false,true,true])
   """
-  function makeqMPO(mpo::MPO,Qlabels::Array{Q,1},arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::intType=1)::MPO where Q <: Qnum
+  function makeqMPO(mpo::MPO,Qlabels::Array{Q,1},arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1)::MPO where Q <: Qnum
     return makeqMPO(mpo,[Qlabels],arrows...,infinite=infinite,unitcell=unitcell)
   end
 
-  function makeqMPO(arr::Array,Qlabels::W,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::intType=1)::MPO where W <: Union{Array{Array{Q,1},1},Array{Q,1}} where Q <: Qnum
+  function makeqMPO(arr::Array,Qlabels::W,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1)::MPO where W <: Union{Array{Array{Q,1},1},Array{Q,1}} where Q <: Qnum
     mpo = convert2MPO(arr,infinite=infinite)
     return makeqMPO(mpo,Qlabels,arrows...,infinite=infinite,unitcell=unitcell)
   end
@@ -1329,7 +1329,7 @@ using ..MPutil
   expect(psi,newpsi);
   ```
   """
-  function mpoterm(val::Number,operator::Array{W,1},ind::Array{intType,1},base::Array{X,1},trail::Y...)::MPO where {W <: AbstractArray, X <: AbstractArray, Y <: AbstractArray}
+  function mpoterm(val::Number,operator::Array{W,1},ind::Array{P,1},base::Array{X,1},trail::Y...)::MPO where {W <: AbstractArray, X <: AbstractArray, Y <: AbstractArray, P <: Integer}
     opString = copy(base)
     for a = 1:size(ind,1)
       opString[ind[a]] = (a == 1 ? val : 1.)*copy(operator[a])
@@ -1342,7 +1342,7 @@ using ..MPutil
     return MPO(opString)
   end
 
-  function mpoterm(operator::AbstractArray,ind::Array{intType,1},base::AbstractArray,trail::AbstractArray...)::MPO
+  function mpoterm(operator::AbstractArray,ind::Array{P,1},base::AbstractArray,trail::AbstractArray...)::MPO where P <: Integer
     return mpoterm(1.,operator,ind,base,trail...)
   end
   export mpoterm
@@ -1354,11 +1354,11 @@ using ..MPutil
 
   See also: [`mpoterm`](@ref)
   """
-  function mpoterm(Qlabels::Array{Array{Q,1},1},val::Number,operator::AbstractArray,ind::Array{intType,1},base::AbstractArray,trail::AbstractArray...)::MPO where Q <: Qnum
+  function mpoterm(Qlabels::Array{Array{Q,1},1},val::Number,operator::AbstractArray,ind::Array{P,1},base::AbstractArray,trail::AbstractArray...)::MPO where {Q <: Qnum, P <: Integer}
     return makeqMPO(mpoterm(val,operator,ind,base,trail...),Qlabels)
   end
 
-  function mpoterm(Qlabels::Array{Array{Q,1},1},operator::AbstractArray,ind::Array{intType,1},base::AbstractArray,trail::AbstractArray...)::MPO where Q <: Qnum
+  function mpoterm(Qlabels::Array{Array{Q,1},1},operator::AbstractArray,ind::Array{P,1},base::AbstractArray,trail::AbstractArray...)::MPO where {Q <: Qnum, P <: Integer}
     return mpoterm(Qlabels,1.,operator,ind,base,trail...)
   end
   export mpoterm
@@ -1407,12 +1407,12 @@ using ..MPutil
 
   Adds a constant `c` to a Hamiltonian `H` (commutative)
   """
-  function +(H::MPO,c::Number;pos::intType=1)
+  function +(H::MPO,c::Number;pos::Integer=1)
     const_term = MPO([i == pos ? mult!(c,makeId(H[i],[2,3])) : makeId(H[i],[2,3]) for i = 1:length(H)])
     return copy(H) + const_term
   end
 
-  function +(c::Number,H::MPO;pos::intType=1)
+  function +(c::Number,H::MPO;pos::Integer=1)
     return +(H,c,pos=pos)
   end
   
@@ -1422,7 +1422,7 @@ using ..MPutil
 
   Adds a constant `c` to a Hamiltonian `H`
   """
-  function -(H::MPO,c::Number;pos::intType=1)
+  function -(H::MPO,c::Number;pos::Integer=1)
     return +(H,-c,pos=pos)
   end
 
@@ -1463,7 +1463,7 @@ using ..MPutil
     return finaltwo
   end
 
-  function pullvec(M::TensType,j::intType,left::Bool)
+  function pullvec(M::TensType,j::Integer,left::Bool)
     if typeof(M) <: qarray
       if left
         temp = M[:,:,:,j]
@@ -1603,7 +1603,7 @@ using ..MPutil
 
   Applies `sweeps` to MPO (`W`) to compress the bond dimension
   """
-  function deparallelize!(W::MPO;sweeps::intType=1)
+  function deparallelize!(W::MPO;sweeps::Integer=1)
     for n = 1:sweeps
       for i = 1:length(W)-1
         W[i],T = deparallelize!(W[i],left=true)
@@ -1658,11 +1658,11 @@ using ..MPutil
 
   See also: [`deparallelize!`](@ref)
   """
-  function deparallelize(W::MPO;sweeps::intType=1)
+  function deparallelize(W::MPO;sweeps::Integer=1)
     return deparallelize!(copy(W),sweeps=sweeps)
   end
 
-  function deparallelize(W::T;sweeps::intType=1) where T <: Union{AbstractArray,qarray}
+  function deparallelize(W::T;sweeps::Integer=1) where T <: Union{AbstractArray,qarray}
     return deparallelize!(copy(W),sweeps=sweeps)
   end
   export deparallelize
@@ -1674,8 +1674,8 @@ using ..MPutil
   """
   const forwardshape = Array{intType,1}[intType[1,2,3],intType[4]]
   const backwardshape = Array{intType,1}[intType[1],intType[2,3,4]]
-  function compressMPO!(W::MPO,M::MPO...;sweeps::intType=1000,cutoff::Float64=1E-16,
-                        deltam::intType=0,minsweep::intType=1,nozeros::Bool=false)
+  function compressMPO!(W::MPO,M::MPO...;sweeps::Integer=1000,cutoff::Float64=1E-16,
+                        deltam::Integer=0,minsweep::Integer=1,nozeros::Bool=false)
     for a = 1:length(M)
       W = add!(W,M[a])
     end
@@ -1716,8 +1716,8 @@ using ..MPutil
   
   compresses an array of MPOs (`W`) in parallel with SVD compression for `sweeps` sweeps, `cutoff` applied to the SVD, `deltam` target for teh bond dimension compression, and `nozeros` defaulted to true to eliminate all zeros in the SVD
   """
-  function compressMPO!(W::Array{MPO,1};sweeps::intType=1000,cutoff::Float64=1E-16,
-          deltam::intType=0,minsweep::intType=1,nozeros::Bool=true) # where V <: Union{Array{MPO,1},SubArray{MPO,1,Array{MPO,1},Tuple{Array{intType,1}}}}
+  function compressMPO!(W::Array{MPO,1};sweeps::Integer=1000,cutoff::Float64=1E-16,
+          deltam::Integer=0,minsweep::Integer=1,nozeros::Bool=true) # where V <: Union{Array{MPO,1},SubArray{MPO,1,Array{MPO,1},Tuple{Array{intType,1}}}}
     nlevels = floor(intType,log(2,size(W,1)))
     active = Bool[true for i = 1:size(W,1)]
     if size(W,1) > 2
@@ -1749,7 +1749,7 @@ using ..MPutil
 
   See also: [`compressMPO!`](@ref)
   """
-  function compressMPO(W::Array{MPO,1};sweeps::intType=1000,cutoff::Float64=1E-16,deltam::intType=0,minsweep::intType=1,nozeros::Bool=true)
+  function compressMPO(W::Array{MPO,1};sweeps::Integer=1000,cutoff::Float64=1E-16,deltam::Integer=0,minsweep::Integer=1,nozeros::Bool=true)
     M = copy(W)
     return compressMPO!(M;sweeps=sweeps,cutoff=cutoff,deltam=deltam,minsweep=minsweep,nozeros=nozeros)
   end

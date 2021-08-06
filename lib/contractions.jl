@@ -56,7 +56,7 @@ import LinearAlgebra
 
   Reshapes tensor `X` into an `Lsize` x `Rsize` matrix
   """
-  function matrixequiv(X::W,Lsize::intType,Rsize::intType) where W <: Union{AbstractArray,denstens}
+  function matrixequiv(X::W,Lsize::Integer,Rsize::Integer) where W <: Union{AbstractArray,denstens}
     return matrixequiv!(copy(X),Lsize,Rsize)
   end
 
@@ -65,20 +65,20 @@ import LinearAlgebra
 
   Reshapes tensor `X` into an `Lsize` x `Rsize` matrix in-place
   """
-  function matrixequiv!(X::AbstractArray,Lsize::intType,Rsize::intType)
+  function matrixequiv!(X::AbstractArray,Lsize::Integer,Rsize::Integer)
     return reshape!(X,Lsize,Rsize)
   end
 
-  function matrixequiv!(X::denstens,Lsize::intType,Rsize::intType)
+  function matrixequiv!(X::denstens,Lsize::Integer,Rsize::Integer)
     return reshape!(X.T,Lsize,Rsize)
   end
 
-  function permutedims_2matrix!(X::AbstractArray,vec::Tuple,Lsize::intType,Rsize::intType)
+  function permutedims_2matrix!(X::AbstractArray,vec::Tuple,Lsize::Integer,Rsize::Integer)
     xM = permutedims(X, vec)
     return reshape!(xM,Lsize,Rsize)
   end
 
-  function permutedims_2matrix!(X::denstens,vec::Tuple,Lsize::intType,Rsize::intType)
+  function permutedims_2matrix!(X::denstens,vec::Tuple,Lsize::Integer,Rsize::Integer)
     return permutedims_2matrix!(makeArray(X),vec,Lsize,Rsize)
   end
 
@@ -365,7 +365,7 @@ import LinearAlgebra
   200.0
   ```
   """
-  function trace(A::TensType,iA::W) where W <: Union{intvecType,Array{Array{intType,1},1}}
+  function trace(A::TensType,iA::W) where W <: intvecType
     if typeof(iA) <: intvecType
       Id = makeId(A,iA)
       conA = iA
@@ -405,7 +405,7 @@ import LinearAlgebra
     return remAQ
   end
 
-  function computeQsum(A::Qtens{W,Q},Ablocks::Array{intType,1},LR::intType,Aqind::intType,conjvar::Bool) where {W <: Number, Q <: Qnum}
+  function computeQsum(A::Qtens{W,Q},Ablocks::Array{P,1},LR::P,Aqind::P,conjvar::Bool) where {W <: Number, Q <: Qnum, P <: Integer}
     Asum = Q()
     for w = 1:length(Ablocks)
       @inbounds pos = Ablocks[w]

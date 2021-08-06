@@ -65,7 +65,7 @@ import LinearAlgebra
 
   See also: [`intType`](@ref) [`convIn`](@ref)
   """
-  const intvecType = Union{intType,Array{intType,1},Array{intType,2},Tuple}
+  const intvecType = Union{Int32,Array{Int32,1},Array{Int32,2},Int64,Array{Int64,1},Array{Int64,2},Tuple}
   export intvecType
 
   """
@@ -75,7 +75,7 @@ import LinearAlgebra
 
   See also: [`getindex!`](@ref)
   """
-  const genColType = Union{UnitRange,intType,Array{intType,1},Colon,StepRange,Tuple}
+  const genColType = Union{UnitRange,Int64,Int32,Array{Int64,1},Array{Int32,1},Colon,StepRange,Tuple}
   export genColType
 
   """
@@ -159,7 +159,7 @@ import LinearAlgebra
     return makeId(W,size(A,iA[1]),addone=addone,addRightDim=addRightDim)
   end
 
-  function makeId(A::tens{W},iA::R) where R <: Array{Array{intType,1},1} where W <: Number
+  function makeId(A::tens{W},iA::R) where R <: AbstractArray where W <: Number
     Id = makeId(A,iA[1],addone=true,addRightDim=true)
     for g = 2:length(iA)
       addId = makeId(A,iA[g],addone=true,addRightDim=false)
@@ -179,7 +179,7 @@ import LinearAlgebra
     return makedens(Id)
   end
 
-  function makeId(A::Array{W,N},iA::R) where N where R <: Array{Array{intType,1},1} where W <: Number
+  function makeId(A::Array{W,N},iA::R) where N where R <: AbstractArray where W <: Number
     densA = tens(A)
     Id = makeId(densA,iA)
     return makedens(Id)
@@ -322,7 +322,7 @@ import LinearAlgebra
     return A.size
   end
 
-  function size(A::denstens,i::Integer)::intType
+  function size(A::denstens,i::Integer)
     return A.size[i]
   end
 
@@ -342,7 +342,7 @@ import LinearAlgebra
 
   get the last index of a Qtensor (ex: A[:,1:end]...defines "end")
   """
-  function lastindex(M::denstens, i::intType)
+  function lastindex(M::denstens, i::Integer)
     return M.size[i]
   end
 
@@ -415,12 +415,12 @@ import LinearAlgebra
   export getindex!
 
   function getSingleVal!(C::tens{W},a::Integer...) where W <: Number
-    val = 0#::intType
+    val = 0
     @simd for i = length(a):-1:2
-      @inbounds val += a[i]-1#::intType
-      @inbounds val *= size(C,i-1)#::intType
+      @inbounds val += a[i]-1
+      @inbounds val *= size(C,i-1)
     end
-    val += a[1]#::intType
+    val += a[1]
     return C.T[val]
   end
   export getSingleVal!
@@ -433,7 +433,7 @@ import LinearAlgebra
 
   *- two-dimensional arrays must be size "m x 1"
   """
-  function convIn(iA::Array{intType,1})
+  function convIn(iA::Array{P,1}) where P <: Integer
     return ntuple(i->iA[i],length(iA))
   end
 
@@ -441,7 +441,7 @@ import LinearAlgebra
     return (iA...,)
   end
 
-  function convIn(iA::Array{Integer,2})
+  function convIn(iA::Array{P,2}) where P <: Integer
     return ntuple(i->iA[i],length(iA))
   end
 
@@ -456,7 +456,7 @@ import LinearAlgebra
 
   Generates the complement set of an input `iA` for a total number of elements `nA`.  Used for contractions and other functions.
   """
-  function findnotcons(nA::intType,iA::Tuple) #where P <: Union{AbstractArray,denstens}
+  function findnotcons(nA::Integer,iA::Tuple)
     notcon = ()
     for i = 1:nA
       k = 0
@@ -574,9 +574,9 @@ import LinearAlgebra
     for y = 1:length(ap)
       if typeof(a[y]) <: Colon
         ap[y] = 1:C[y]
-      elseif typeof(a[y]) <: intType
+      elseif typeof(a[y]) <: Integer
         ap[y] = a[y]:a[y]
-      elseif typeof(a[y]) <: Array{intType,1}
+      elseif typeof(a[y]) <: AbstractArray
         ap[y] = 1:length(a[y])
 #      elseif typeof(a[y]) <: StepRange
 #        ap[y] = 
@@ -594,8 +594,8 @@ import LinearAlgebra
 
   See also: [`position_incrementer!`](@ref)
   """
-  function makepos(ninds::intType;zero::intType=0)
-    pos = Array{intType,1}(undef,ninds)
+  function makepos(ninds::P;zero::P=0) where P <: Integer
+    pos = Array{P,1}(undef,ninds)
     pos[1] = zero
     one = zero + 1
     for g = 2:ninds
@@ -660,7 +660,7 @@ import LinearAlgebra
   end
 
 
-  function setindex!(B::tens{W},A::W,a::intType...) where W <: Number
+  function setindex!(B::tens{W},A::W,a::Integer...) where W <: Number
     index = a[end]-1
     for q = length(a)-1:-1:1
       index *= size(B,q)
@@ -677,7 +677,7 @@ import LinearAlgebra
 
   Find element of `C` that corresponds to positions `a`
   """
-  function searchindex(C::denstens,a::intType...)
+  function searchindex(C::denstens,a::Integer...)
     if length(C.T) == 0
       outnum = 0
     elseif length(C.size) == 0
@@ -884,7 +884,7 @@ import LinearAlgebra
     return M
   end
 
-  function reshape!(M::Union{AbstractArray,tens{W}}, S::intType...;merge::Bool=false) where W <: Number
+  function reshape!(M::Union{AbstractArray,tens{W}}, S::Integer...;merge::Bool=false) where W <: Number
     M.size = S
     return M
   end
@@ -896,7 +896,7 @@ import LinearAlgebra
   export reshape!
 
   import Base.reshape
-  function reshape(M::tens{W}, S::intType...;merge::Bool=false) where W <: Number
+  function reshape(M::tens{W}, S::Integer...;merge::Bool=false) where W <: Number
     newMsize = S
     newM = tens{W}(newMsize,M.T)
     return reshape!(newM,S)
@@ -913,21 +913,21 @@ import LinearAlgebra
 
   Same as `reshape!` but used for ease of reading code and also has new context with quantum numbers
   """
-  function unreshape!(M::AbstractArray, S::intType...;merge::Bool=false) where W <: Number
+  function unreshape!(M::AbstractArray, S::Integer...;merge::Bool=false) where W <: Number
     return reshape(M,S...)
   end
   
-  function unreshape!(M::tens{W}, S::intType...;merge::Bool=false) where W <: Number
+  function unreshape!(M::tens{W}, S::Integer...;merge::Bool=false) where W <: Number
     M.size = S
     return M
   end
   export unreshape!
   
-  function unreshape(M::AbstractArray, S::intType...;merge::Bool=false) where W <: Number
+  function unreshape(M::AbstractArray, S::Integer...;merge::Bool=false) where W <: Number
     return reshape(M,S...)
   end
   
-  function unreshape(M::tens{W}, S::intType...;merge::Bool=false) where W <: Number
+  function unreshape(M::tens{W}, S::Integer...;merge::Bool=false) where W <: Number
     newM = tens{W}(M.size,M.T)
     return unreshape!(newM,S...)
   end
@@ -941,7 +941,7 @@ import LinearAlgebra
 
   See also: [`permutedims!`](@ref)
   """
-  function permutedims(M::tens{W}, vec::Array{intType,1}) where W <: Number
+  function permutedims(M::tens{W}, vec::Array{P,1}) where {W <: Number, P <: Integer}
     return permutedims!(M,(vec...,))
   end
 
@@ -953,7 +953,7 @@ import LinearAlgebra
 
   See also: [`permutedims`](@ref)
   """
-  function permutedims!(M::tens{W}, vec::Array{intType,1}) where W <: Number
+  function permutedims!(M::tens{W}, vec::Array{P,1}) where {W <: Number, P <: Integer}
     return permutedims!(M,(vec...,),M.size...)
   end
 
@@ -970,7 +970,7 @@ import LinearAlgebra
   
   Permutes `M` according to `vec`, but the tensor `M` is reshaped to `x`.  The size of `x` must match `vec`'s size.
   """
-  function permutedims!(M::tens{W}, vec::Tuple,x::intType...) where W <: Number
+  function permutedims!(M::tens{W}, vec::Tuple,x::Integer...) where W <: Number
     rM = reshape(M.T,x)
     xM = permutedims(rM, vec)
     out = tens(W,xM)
@@ -1166,7 +1166,7 @@ import LinearAlgebra
 
   See also: [`Qtens`](@ref) [`print`](@ref) [`println`](@ref)
   """
-  function showTens(M::denstens;show::intType = 4)
+  function showTens(M::denstens;show::Integer = 4)
     println("printing regular tensor of type: ", typeof(M))
     println("size = ", M.size)
     maxshow = min(show, size(M.T, 1))
@@ -1184,7 +1184,7 @@ import LinearAlgebra
 
   See also: [`showQtens`](@ref) [`println`](@ref)
   """
-  function print(A::denstens...;show::intType = 4)
+  function print(A::denstens...;show::Integer = 4)
     showTens(A, show = show)
     nothing
   end
@@ -1197,7 +1197,7 @@ import LinearAlgebra
 
   See also: [`showQtens`](@ref) [`print`](@ref)
   """
-  function println(A::denstens;show::intType = 4)
+  function println(A::denstens;show::Integer = 4)
     showTens(A, show = show)
     print("\n")
     nothing

@@ -218,7 +218,7 @@ import Printf
   and define functions as `LinearAlgebra.svd` to use functions from that package.
   
   """
-  function svd(AA::Array{T,2};power::Number=2,cutoff::Float64 = 0.,m::intType = 0,mag::Float64=0.,minm::intType=2,
+  function svd(AA::Array{T,2};power::Number=2,cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,minm::Integer=2,
                nozeros::Bool=false,recursive::Bool = false,effZero::Float64 = 1E-16,keepdeg::Bool=false) where T <: Number
       U,D,Vt = recursive ? recursive_SVD(AA) : safesvd(AA)
       thism,p,sizeD,truncerr,sumD = findnewm(D,m,minm,mag,cutoff,effZero,nozeros,power,keepdeg)
@@ -249,7 +249,7 @@ import Printf
 #         +-----------------+
 
   function svd(AA::tens{W};power::Number=2,cutoff::Float64 = 0.,
-            m::intType = 0,mag::Float64=0.,minm::intType=2,nozeros::Bool=false,
+            m::Integer = 0,mag::Float64=0.,minm::Integer=2,nozeros::Bool=false,
             recursive::Bool = false,effZero::Number = 1E-16,keepdeg::Bool=false) where W <: Number
     rAA = reshape(AA.T,size(AA)...)
     U,D,V,truncerr,sumD = svd(rAA,power=power,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,recursive=recursive,effZero=effZero,keepdeg=keepdeg)
@@ -265,8 +265,8 @@ import Printf
 
   See also: [`svd`](@ref)
   """
-  function eigen(AA::Array{T,2},B::Array{T,2}...;cutoff::Float64 = 0.,m::intType = 0,mag::Float64=0.,
-                  minm::intType=1,nozeros::Bool=false,power::Number=1,effZero::Float64 = 1E-16,keepdeg::Bool=false) where {T <: Number}
+  function eigen(AA::Array{T,2},B::Array{T,2}...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,
+                  minm::Integer=1,nozeros::Bool=false,power::Number=1,effZero::Float64 = 1E-16,keepdeg::Bool=false) where {T <: Number}
 
     if eltype(AA) <: Complex
       M = LinearAlgebra.Hermitian((AA+AA')/2)
@@ -319,7 +319,7 @@ import Printf
   export eigen
 
   function eigen(AA::tens{T},B::tens{R}...;cutoff::Float64 = 0.,
-                m::intType = 0,mag::Float64=0.,minm::intType=2,
+                m::Integer = 0,mag::Float64=0.,minm::Integer=2,
                 nozeros::Bool=false,recursive::Bool = false,keepdeg::Bool=false) where {T <: Number, R <: Number}
     X = reshape(AA.T,size(AA)...)
     D,U,truncerr,sumD = eigen(X,B...,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,keepdeg)#,recursive=recursive)
@@ -341,8 +341,8 @@ import Printf
 
 
 
-  function getorder(AA::G,vecA::Array{Array{intType,1},1}) where G <: TensType
-    order = Array{intType,1}(undef,sum(a->length(vecA[a]),1:length(vecA)))
+  function getorder(AA::G,vecA::Array{Array{W,1},1}) where {G <: TensType, W <: Integer}
+    order = Array{W,1}(undef,sum(a->length(vecA[a]),1:length(vecA)))
     counter = 0
     for b = 1:length(vecA)
       for j = 1:length(vecA[b])
@@ -370,9 +370,9 @@ import Printf
 
   reshapes `AA` for `svd` and then unreshapes U and V matrices on return; `vecA` is of the form [[1,2],[3,4,5]] and must be length 2
   """
-  function svd(AA::G,vecA::Array{Array{intType,1},1};cutoff::Float64 = 0.,
-              m::intType = 0,mag::Float64=0.,minm::intType=1,nozeros::Bool=false,
-              recursive::Bool = false,inplace::Bool=true,power::Number=2,keepdeg::Bool=false) where G <: TensType
+  function svd(AA::G,vecA::Array{Array{W,1},1};cutoff::Float64 = 0.,
+              m::Integer = 0,mag::Float64=0.,minm::Integer=1,nozeros::Bool=false,
+              recursive::Bool = false,inplace::Bool=true,power::Number=2,keepdeg::Bool=false) where {G <: TensType, W <: Integer}
     AB,Lsizes,Rsizes = getorder(AA,vecA)
     U,D,V,truncerr,newmag = svd(AB,power = power,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,recursive=recursive,keepdeg=keepdeg)
 
@@ -386,9 +386,9 @@ import Printf
 
   reshapes `AA` for `eigen` and then unreshapes U matrix on return; `vecA` is of the form [[1,2],[3,4,5]] and must be length 2
   """
-  function eigen(AA::TensType,vecA::Array{Array{intType,1},1},
-                  B::TensType...;cutoff::Float64 = 0.,m::intType = 0,mag::Float64=0.,
-                  minm::intType=1,nozeros::Bool=false,inplace::Bool=true,keepdeg::Bool=false)
+  function eigen(AA::TensType,vecA::Array{Array{W,1},1},
+                  B::TensType...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,
+                  minm::Integer=1,nozeros::Bool=false,inplace::Bool=true,keepdeg::Bool=false) where W <: Integer
     AB,Lsizes,Rsizes = getorder(AA,vecA)
     D,U,truncerr,newmag = eigen(AB,B...,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,keepdeg)
     outU = unreshape!(U,Lsizes...,size(D,1))
@@ -400,7 +400,7 @@ import Printf
 
   reshapes `AA` for `svd` and then unreshapes U and V matrices on return; `vecA` is of the form [[1,2],[3,4,5]] and must be length 2
   """
-  function qr(AA::TensType,vecA::Array{Array{intType,1},1})
+  function qr(AA::TensType,vecA::Array{Array{W,1},1}) where W <: Integer
     AB,Lsizes,Rsizes = getorder(AA,vecA)
     Qmat,Rmat,truncerr,newmag = qr(AB)
 
@@ -426,7 +426,7 @@ import Printf
 
   reshapes `AA` for `svd` and then unreshapes U and V matrices on return; `vecA` is of the form [[1,2],[3,4,5]] and must be length 2
   """
-  function lq(AA::TensType,vecA::Array{Array{intType,1},1})
+  function lq(AA::TensType,vecA::Array{Array{W,1},1}) where W <: Integer
     AB,Lsizes,Rsizes = getorder(AA,vecA)
     Lmat,Qmat,truncerr,newmag = lq(AB)
 
@@ -456,9 +456,9 @@ import Printf
 
   See also: [`svd`](@ref)
   """
-  function polar(AA::TensType,group::Array{Array{intType,1},1};
-                  right::Bool=true,cutoff::Float64 = 0.,m::intType = 0,mag::Float64 = 0.,
-                  minm::intType=1,nozeros::Bool=false,recursive::Bool=false,outermaxm::intType=0,keepdeg::Bool=false)
+  function polar(AA::TensType,group::Array{Array{W,1},1};
+                  right::Bool=true,cutoff::Float64 = 0.,m::Integer = 0,mag::Float64 = 0.,
+                  minm::Integer=1,nozeros::Bool=false,recursive::Bool=false,outermaxm::Integer=0,keepdeg::Bool=false) where W <: Integer
     AB,Lsizes,Rsizes = getorder(AA,group)
     U,D,V = svd(AB,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,keepdeg=keepdeg)
     U = unreshape!(U,Lsizes...,size(D,1))
@@ -504,7 +504,7 @@ using ..QN
 using ..Qtensor
 using ..Qtask
 
-  function makeQblocksum(finalUinds::Array{Array{Array{intType,2},1},1},finalUQnumMat::Array{Array{intType,1},1},finalUQnumSum::Array{Array{Q,1},1}) where Q <: Qnum
+  function makeQblocksum(finalUinds::Array{Array{Array{W,2},1},1},finalUQnumMat::Array{Array{W,1},1},finalUQnumSum::Array{Array{Q,1},1}) where {Q <: Qnum, W <: Integer}
     nQN = length(finalUinds)
     newQblocksum = [[Q(),Q()] for q = 1:nQN]
     for q = 1:nQN
@@ -527,11 +527,11 @@ using ..Qtask
 
 
   function makeU(nQN::Integer,keepq::Array{Bool,1},outU::Array{tens{W},1},QtensA::Qtens{W,Q},
-                 finalinds::Array{Array{intType,2},1},
-                 newqindexL::Array{Array{intType,1},1},newqindexLsum::Array{Array{Q,1},1},
-                 leftflux::Bool,Linds::Array{intType,1},thism::Integer) where {W <: Number, Q <: Qnum}
+                 finalinds::Array{Array{P,2},1},
+                 newqindexL::Array{Array{P,1},1},newqindexLsum::Array{Array{Q,1},1},
+                 leftflux::Bool,Linds::Array{P,1},thism::Integer) where {W <: Number, Q <: Qnum, P <: Integer}
     finalnQN = sum(keepq)
-    finalUinds = Array{Array{Array{intType,2},1},1}(undef,finalnQN)
+    finalUinds = Array{Array{Array{P,2},1},1}(undef,finalnQN)
     counter = 0
     for q = 1:nQN
       if keepq[q]
@@ -552,11 +552,11 @@ using ..Qtask
   end
 
   function makeV(nQN::Integer,keepq::Array{Bool,1},outV::Array{tens{W},1},QtensA::Qtens{W,Q},
-                 finalinds::Array{Array{intType,2},1},
-                 newqindexR::Array{Array{intType,1},1},newqindexRsum::Array{Array{Q,1},1},
-                 leftflux::Bool,Rinds::Array{intType,1},thism::Integer) where {W <: Number, Q <: Qnum}
+                 finalinds::Array{Array{P,2},1},
+                 newqindexR::Array{Array{P,1},1},newqindexRsum::Array{Array{Q,1},1},
+                 leftflux::Bool,Rinds::Array{P,1},thism::Integer) where {W <: Number, Q <: Qnum, P <: Integer}
     finalnQN = sum(keepq)
-    finalVinds = Array{Array{Array{intType,2},1},1}(undef,finalnQN)
+    finalVinds = Array{Array{Array{P,2},1},1}(undef,finalnQN)
     counter = 0
     for q = 1:nQN
       if keepq[q]
@@ -578,11 +578,11 @@ using ..Qtask
   end
 
   function makeD(nQN::Integer,keepq::Array{Bool,1},outD::Array{tens{W},1},QtensA::Qtens{W,Q},
-                 finalinds::Array{Array{intType,2},1},
-                 newqindexL::Array{Array{intType,1},1},newqindexR::Array{Array{intType,1},1},
-                 newqindexRsum::Array{Array{Q,1},1},newqindexLsum::Array{Array{Q,1},1},thism::Integer) where {W <: Number, Q <: Qnum}
+                 finalinds::Array{Array{P,2},1},
+                 newqindexL::Array{Array{P,1},1},newqindexR::Array{Array{P,1},1},
+                 newqindexRsum::Array{Array{Q,1},1},newqindexLsum::Array{Array{Q,1},1},thism::Integer) where {W <: Number, Q <: Qnum, P <: Integer}
     finalnQN = sum(keepq)
-    finalDinds = Array{Array{Array{intType,2},1},1}(undef,finalnQN)
+    finalDinds = Array{Array{Array{P,2},1},1}(undef,finalnQN)
     counter = 0
     for q = 1:nQN
       if keepq[q]
@@ -686,8 +686,8 @@ using ..Qtask
     return newqindexL,newqindexLsum,newqindexR,newqindexRsum
   end
 
-  function svd(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::intType = 0,
-                minm::intType=1,nozeros::Bool=true,recursive::Bool=false,
+  function svd(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
+                minm::Integer=1,nozeros::Bool=true,recursive::Bool=false,
                 power::Number=2,leftflux::Bool=false,mag::Float64=0.,
                 effZero::Real=1E-16,keepdeg::Bool=false) where {W <: Number, Q <: Qnum}
 
@@ -810,8 +810,8 @@ using ..Qtask
 
 
 
-  function eigen(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::intType = 0,
-                minm::intType=1,nozeros::Bool=false,recursive::Bool=false,
+  function eigen(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
+                minm::Integer=1,nozeros::Bool=false,recursive::Bool=false,
                 power::Number=1,leftflux::Bool=false,mag::Float64=0.,decomposer::Function=symeigen,keepdeg::Bool=false) where {W <: Number, Q <: Qnum}
 
     Rsize = QtensA.size #recoverShape(QtensA)
