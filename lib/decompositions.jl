@@ -300,13 +300,13 @@ import Printf
       thism = min(m < sizeD-p+1 ? sizeD-m+1 : p,sizeD-minm+1)
       =#
 #    if 0 < thism
-      Utrunc = U[:,thism:sizeD]::Array{W,2} where W <: Number
-      Dtrunc = Dsq[thism:sizeD]
-    elseif sizeD < thism
-      Utrunc = zeros(eltype(U),size(U,1),thism)::Array{W,2} where W <: Number
-      Dtrunc = zeros(eltype(Dsq),thism)
-      Utrunc[:,thism:size(U,2)] = U
-      Dtrunc[thism:size(Dsq,1)] = Dsq
+      Utrunc = U[:,sizeD-thism+1:sizeD]::Array{W,2} where W <: Number
+      Dtrunc = Dsq[sizeD-thism+1:sizeD]
+    elseif sizeD < minm
+      Utrunc = zeros(eltype(U),size(U,1),minm)::Array{W,2} where W <: Number
+      Dtrunc = zeros(eltype(Dsq),minm)
+      Utrunc[:,1:thism] = U
+      Dtrunc[1:thism] = Dsq
     else
       Utrunc = U::Array{W,2} where W <: Number
       Dtrunc = Dsq
@@ -316,17 +316,17 @@ import Printf
 #    end
     return finalD,Utrunc,finaltrunc,sumD
   end
-  export eigen
 
   function eigen(AA::tens{T},B::tens{R}...;cutoff::Float64 = 0.,
                 m::Integer = 0,mag::Float64=0.,minm::Integer=2,
                 nozeros::Bool=false,recursive::Bool = false,keepdeg::Bool=false) where {T <: Number, R <: Number}
     X = reshape(AA.T,size(AA)...)
-    D,U,truncerr,sumD = eigen(X,B...,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,keepdeg)#,recursive=recursive)
+    D,U,truncerr,sumD = eigen(X,B...,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,keepdeg=keepdeg)#,recursive=recursive)
     tensD = tens(Float64,D)
     tensU = tens(T,U)
     return tensD,tensU,truncerr,mag
   end
+  export eigen
 
   import .LinearAlgebra.eigvals
   function eigvals(A::tens{W}) where W <: Number
@@ -355,9 +355,9 @@ import Printf
       AB = permutedims(AA,order)
       Lvec = [i for i = 1:length(vecA[1])]
       Rvec = [i + length(vecA[1]) for i = 1:length(vecA[2])]
-      rAA = reshape(AB,[Lvec,Rvec])::G
+      rAA = reshape(AB,[Lvec,Rvec]) #should always be rank-2 here
     else
-      rAA = reshape(AA,vecA)::G
+      rAA = reshape(AA,vecA) #should always be rank-2 here
     end
 
     Lsizes = [size(AA,vecA[1][i]) for i = 1:length(vecA[1])]
@@ -390,7 +390,7 @@ import Printf
                   B::TensType...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,
                   minm::Integer=1,nozeros::Bool=false,inplace::Bool=true,keepdeg::Bool=false) where W <: Integer
     AB,Lsizes,Rsizes = getorder(AA,vecA)
-    D,U,truncerr,newmag = eigen(AB,B...,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,keepdeg)
+    D,U,truncerr,newmag = eigen(AB,B...,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,keepdeg=keepdeg)
     outU = unreshape!(U,Lsizes...,size(D,1))
     return D,outU,truncerr,newmag
   end   
