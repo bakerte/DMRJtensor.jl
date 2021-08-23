@@ -1,13 +1,14 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v1.0
+#                              v0.8
 #
 #########################################################################
-# Made by Thomas E. Baker (2020)
+# Made by Thomas E. Baker (2018)
 # See accompanying license with this program
-# This code is native to the julia programming language (v1.5.4+)
+# This code is native to the julia programming language (v1.1.1) or (v1.5)
 #
+
 
 println("_________  _________ _       _ _")
 println("|     \\  \\/  || ___ (_)     | (_)")
@@ -49,7 +50,7 @@ import Printf
 import Serialization
 import Distributed
 
-  filepath = "lib/"
+  filepath = "../lib/"
 
   include(filepath*"tensor.jl")
 
@@ -71,7 +72,7 @@ import Distributed
 =#
 
 
-  filepath = "algs/"
+  filepath = "../algs/"
 
   include(filepath*"optimizeMPS.jl")
   include(filepath*"Krylov.jl")

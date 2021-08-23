@@ -1,12 +1,7 @@
-# dmrjulia
+# DMRjulia
 A general purpose tensor network library in the julia programming language
 
-Hello! Welcome to the future site of the full release of DMRjulia, a tensor network library for physics computations written in julia. Right now, ground state calculations on the MPS are available.
-
-Timeline for release of full features:
-  + August-September 2020: Full documentation of ground-state
-  + August-November 2020: Full release of time and other methods for the MPS
-  + ~January 2021: More advanced solvers
+Hello! Welcome to the future site of the full release of DMRjulia, a tensor network library for physics computations written in julia. Right now, ground state calculations on the MPS are available (v0.8.0) for both quantum numbers and dense tensors.
   
 Troubleshooting? Email: thomas.baker@usherbrooke.ca
 
