@@ -16,14 +16,8 @@ Ns = 100
 spinmag = 0.5
 
 hereQS = convert(Int64,2*spinmag+1)
-QS = cld(hereQS,2)
 
-initTensor = [zeros(1,hereQS,1) for i=1:Ns]
-for i = 1:Ns
-   initTensor[i][1,i%2 == 1 ? 1 : 2,1] = 1.0
-end
-
-psi = MPS(initTensor,1) #oc on site 1 ok here?
+psi = randMPS(hereQS,Ns)
 
 Sx,Sy,Sz,Sp,Sm,O,Id = spinOps(s=spinmag)
 function H(i::Int64)

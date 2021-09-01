@@ -1,14 +1,13 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.8
+#                              v1.0
 #
 #########################################################################
-# Made by Thomas E. Baker (2018)
+# Made by Thomas E. Baker (2020)
 # See accompanying license with this program
-# This code is native to the julia programming language (v1.1.1) or (v1.5)
+# This code is native to the julia programming language (v1.5.4+)
 #
-
 
 """
     Module: contractions
@@ -387,11 +386,6 @@ import LinearAlgebra
   #>------| Quantum number version |---------<
   #       +------------------------+
 
-
-#  using ..QN
-#  using ..Qtensor
-#  using ..Qtask
-
   function remQN(Qvec::Array{Array{Q,1},1},vec::intvecType,conjvar::Bool) where Q <: Qnum
     remAQ = Array{Array{Q,1},1}(undef,length(vec))
     for q = 1:length(vec)
@@ -420,9 +414,6 @@ import LinearAlgebra
     end
     return Asum
   end
-
-
-  #  import Base.Threads.@spawn
 
   const one = (1,)
   const two = (2,)
@@ -472,7 +463,6 @@ import LinearAlgebra
       Ablocks = A.currblock[1]
       Bblocks = B.currblock[2]
 
-#      let A = A, B = B, outTens = outTens, vecA = vecA, vecB = vecB, numQNs = numQNs, conjA = conjA, conjB = conjB, commonblocks = commonblocks, alpha = alpha, beta = beta, Zed = Zed
         Threads.@threads for q = 1:numQNs
           Aqind = commonblocks[q][1]
           Bqind = commonblocks[q][2]
@@ -492,7 +482,6 @@ import LinearAlgebra
           Bsum = computeQsum(B,Bblocks,2,Bqind,conjB)
           newQblocksum[q] = [Asum,Bsum]
         end
-#      end
 
       remAQ = A.QnumMat[notconA] #remQN(A.QnumMat,notconA,conjA)
       remBQ = B.QnumMat[notconB] #remQN(B.QnumMat,notconB,conjB)
@@ -505,10 +494,6 @@ import LinearAlgebra
       notvecA = findnotcons(ndims(A),vecA)
       notvecB = findnotcons(ndims(B),vecB)
 
-#      println(QtensA.size)
-
-#      println(QtensA.size[notvecA])
-#      println(QtensB.size[notvecB])
       newsize = [Array{intType,1}(undef,length(QtensA.size[notvecA[w]])) for w = 1:length(notvecA)]
       newsize = vcat(newsize,[Array{intType,1}(undef,length(QtensB.size[notvecB[w]])) for w = 1:length(notvecB)])
       counter = 0
@@ -562,12 +547,17 @@ import LinearAlgebra
       for a = 1:length(iA)
         AQNs = recoverQNs(iA[a],A)
         BQNs = recoverQNs(iB[a],B)
-        println("contracted index $a")
-        if AQNs[iA[a]] == inv.(BQNs[iB[a]])
-          println("matching quantum numbers on indices on index ",iA[a]," of A and index ",iB[a]," of B")
+        println("contracted index $a (A's index: ",iA[a],", B's index: ",iB[a],")")
+        if length(AQNs) == length(BQNs)
+          for w = 1:length(AQNs)
+            if AQNs[w] != inv(BQNs[w])
+              error("unmatching quantum numbers on indices on index ",iA[a]," of A and index ",iB[a]," of B: value ",w)
+            end
+          end
         else
-          error("unmatching quantum numbers on indices on index ",iA[a]," of A and index ",iB[a]," of B")
+          error("unmatching quantum number vector lengths")
         end
+        println("maching quantum numbers on both indices")
       end
     end
     nothing

@@ -26,25 +26,23 @@ Cup, Cdn, Nup, Ndn, Ndens, F, O, Id = fermionOps() #operators for a Hubbard mode
 
 
 #generates initial wavefunction tensors
-initTensor = [zeros(1,QS,1) for i=1:Ns]
-for i = 1:Ns
-   initTensor[i][1,1,1] = 1.0
-end
+psi = MPS(QS,Ns)
 
-for i = 1:Ne_up
-  initTensor[i] = contract([2,1,3],Matrix(Cup'),2,initTensor[i],2)
-  for j = 1:i-1
-    initTensor[j] = contract([2,1,3],Matrix(F),2,initTensor[j],2)
-  end
-end
+upsites = [i for i = 1:2:Ns]
+Cupdag = Matrix(Cup')
+applyOps(psi,upsites,Cupdag,trail=F)
+
+dnsites = [i for i = 1:2:Ns]
+Cupdag = Matrix(Cup')
+psi = applyOps!(psi,sites,Cupdag,trail=F)
+
+
 for i = 1:Ne_dn
-  initTensor[i] = contract([2,1,3],Matrix(Cdn'),2,initTensor[i],2)
+  psi[i] = contract([2,1,3],Matrix(Cdn'),2,psi[i],2)
   for j = 1:i-1
-    initTensor[j] = contract([2,1,3],Matrix(F),2,initTensor[j],2)
+    psi[j] = contract([2,1,3],F,2,psi[j],2)
   end
 end
-
-psi = MPS(initTensor,1) #MPS
 qpsi = makeqMPS(psi,Qlabels) #quantum number MPS
 
 mu = -2.0 #chemical potential
@@ -64,7 +62,7 @@ onsite(i::Int64) = mu * Ndens + HubU * Nup * Ndn
 
 println("Making qMPO")
 
-@time mpo = convert2MPO(H,QS,Ns) #converts matrix to MPO
+@time mpo = makeMPOH,QS,Ns) #converts matrix to MPO
 @time qmpo = makeqMPO(mpo,Qlabels) #makes quantum number MPO
 
 

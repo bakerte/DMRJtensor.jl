@@ -1,14 +1,16 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.8
+#                              v0.9
 #
 #########################################################################
-# Made by Thomas E. Baker (2018)
+# Made by Thomas E. Baker (2019)
 # See accompanying license with this program
-# This code is native to the julia programming language (v1.1.1) or (v1.5)
+# This code is native to the julia programming language (v1.2.0)
 #
-
+# Planned improvements:
+#   v1.0: Parallel, time (Z1, Z2, Lanczos), infinite methods, temperature
+#
 
 """
     Module: Krylov
@@ -27,6 +29,12 @@ using ..contractions
 using ..decompositions
 import LinearAlgebra
 =#
+
+
+function makeHpsi(H::TensType,psi::TensType)
+  return contract(H,2,psi,1)
+end
+
   """
       compute_alpha(updatefct,alpha,k,currpsi,ops,Lenv,Renv)
 
@@ -98,8 +106,8 @@ import LinearAlgebra
   +`maxiter::Integer`: maximum number of lanczos iterations
   +`betatest::Number`: tolerance for beta coefficient before cutting off
   """
-  function lanczos(updatefct::Function, Lenv::Z, Renv::Z, psiops::TensType...;
-                    maxiter::Integer = 2,betatest::Number = 1E-10) where {Z <: TensType,K <: Union{Qtens{W,Q},Array{W,4},Array{W,3},tens{W}}} where {W <: Number, Q <: Qnum} #::Tuple{Array{Float64,1},Array{Float64,1},Array{W,1},Number} where W <: Union{Qtens{R,Q},Array{R,3}} where {R <: Number, Q <: Qnum})
+  function lanczos(psiops::TensType...;maxiter::Integer = 2,betatest::Number = 1E-10,
+                   updatefct::Function=makeHpsi, Lenv::Z=[0], Renv::Z=[0]) where {Z <: TensType,K <: Union{Qtens{W,Q},Array{W,4},Array{W,3},tens{W}}} where {W <: Number, Q <: Qnum}
     alpha = Array{Float64,1}(undef, maxiter)
     beta = Array{Float64,1}(undef, maxiter - 1)
 
@@ -136,7 +144,7 @@ import LinearAlgebra
     return alpha, beta, savepsi, retK
   end
   export lanczos
-
+#=
   """
       lanczos_coefficients(updatefct,AA,ops,Lenv,Renv[,maxiter=,retnum=,betatest=])
 
@@ -156,7 +164,7 @@ import LinearAlgebra
     alpha, beta, savepsi, sumsize = lanczos(updatefct, Lenv, Renv, psiops..., maxiter = maxiter, betatest = betatest)
     return alpha, beta, savepsi, sumsize
   end
-
+=#
   """
       krylov(updatefct,Lenv,Renv,AA,ops...[,maxiter=,retnum=,betatest=])
 
@@ -172,10 +180,10 @@ import LinearAlgebra
   +`retnum::Integer`: number of excitations to return
   +`betatest::Number`: tolerance for beta coefficient before cutting off
   """
-  function krylov(updatefct::Function, Lenv::TensType, Renv::TensType, psiops::TensType...;maxiter::Integer = 2,retnum::Integer = 1,
-                  betatest::Number = 1E-10)#::Tuple{Array{R,1},Array{Float64,1}} where R <: Union{Qtens{W,Q},Array{W,3}} where {W <: Number, Q <: Qnum}))
+  function krylov(psiops::TensType...;maxiter::Integer = 2,retnum::Integer = 1,
+                  betatest::Number = 1E-10,lanczosfct::Function=lanczos,updatefct::Function=makeHpsi, Lenv::TensType=[0], Renv::TensType = [0])#::Tuple{Array{R,1},Array{Float64,1}} where R <: Union{Qtens{W,Q},Array{W,3}} where {W <: Number, Q <: Qnum}))
 
-    alpha, beta, savepsi, sumsize = lanczos_coefficients(updatefct, Lenv, Renv, psiops..., maxiter = maxiter, betatest = betatest)
+    alpha, beta, savepsi, sumsize = lanczosfct(psiops..., maxiter = maxiter, betatest = betatest, updatefct = updatefct, Lenv = Lenv, Renv = Renv)
 
     if sumsize != maxiter
       if sumsize != 1

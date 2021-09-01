@@ -1,14 +1,13 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.8
+#                              v1.0
 #
 #########################################################################
-# Made by Thomas E. Baker (2018)
+# Made by Thomas E. Baker (2020)
 # See accompanying license with this program
-# This code is native to the julia programming language (v1.1.1) or (v1.5)
+# This code is native to the julia programming language (v1.1.1+)
 #
-
 
 """
     Module: Qtensor
@@ -414,9 +413,9 @@ import LinearAlgebra
     return rand(eltype(rho), size(rho))
   end
 
-  function rand(Qlabels::Array{Array{Q,1},1}, arrows::Array{Bool,1})::qarray where Q <: Qnum
+  function rand(Qlabels::Array{Array{Q,1},1}, arrows::Array{Bool,1};datatype::DataType=Float64)::qarray where Q <: Qnum
     newQlabels = Array{Q,1}[arrows[a] ? Qlabels[a] : inv.(Qlabels[a]) for a = 1:length(arrows)]
-    return rand(newQlabels)
+    return rand(newQlabels,datatype=datatype)
   end
 
 
@@ -439,7 +438,7 @@ import LinearAlgebra
     Linds = currblock[1]
     Rinds = currblock[2]
 
-    Qtensor = Qtens(Qlabels)
+    Qtensor = Qtens(Qlabels,datatype=datatype)
 
     truesize = basesize(Qlabels)
     #some repeated code...could combine into one function
@@ -470,7 +469,7 @@ import LinearAlgebra
       Qtensor.ind[q] = [Lindexes[q],Rindexes[q]]
 
       newblock = blockfct(datatype,rows[q],columns[q])
-      Qtensor.T[q] = tens(newblock)
+      Qtensor.T[q] = tens{datatype}(newblock)
     end
     Qtensor.currblock = currblock
   
@@ -1072,6 +1071,10 @@ end
   end
 
   function reshape!(Qt::Qtens{W,Q}, newQsize::Array{Array{intType,1},1};merge::Bool=false)::qarray where {W <: Number, Q <: Qnum}
+    order = vcat(newQsize...)
+    if !issorted(order)
+      permutedims!(Qt,order)
+    end
     Qt.size = newQsize
     if merge
       outQt = mergereshape!(Qt)
@@ -1082,14 +1085,26 @@ end
   end
 
   function reshape!(Qt::Qtens{W,Q}, newQsize::Array{P,1}...;merge::Bool=false)::qarray where {W <: Number, Q <: Qnum, P <: Integer}
+    order = vcat(newQsize)
+    if !issorted(order)
+      permutedims!(Qt,order)
+    end
     return reshape!(Qt,[newQsize[i] for i = 1:length(newQsize)],merge=merge)
   end
-    
+
   function (reshape!(Qt::Array{W,N}, newQsize::Array{Array{P,1},1};merge::Bool=false)::Array{W,length(newQsize)}) where {W <: Number, N, P <: Integer}
+    order = vcat(newQsize...)
+    if !issorted(order)
+      permutedims!(Qt,order)
+    end
     return reshape!(Qt,intType[prod(a->size(Qt, a), newQsize[i]) for i = 1:size(newQsize, 1)]...,merge=merge)
   end
   
   function (reshape!(Qt::Array{W,N}, newQsize::Array{P,1}...;merge::Bool=false)::Array{W,length(newQsize)}) where {W <: Number, N, P <: Integer}
+    order = vcat(newQsize)
+    if !issorted(order)
+      permutedims!(Qt,order)
+    end
     return reshape(Qt, intType[newQsize...])
   end
 
@@ -1675,7 +1690,7 @@ end
   Froebenius norm of a Qtensor
   """
   function norm(QtensA::Qtens{W,Q}) where {W <: Number, Q <: Qnum}
-    return metricdistance(QtensA,power=2)
+    return sqrt(sum([norm(QtensA.T[q])^2 for q = 1:length(QtensA.T)])) #metricdistance(QtensA,power=2)
   end
   export norm
 

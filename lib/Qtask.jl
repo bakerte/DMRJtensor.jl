@@ -1,14 +1,13 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.8
+#                              v1.0
 #
 #########################################################################
-# Made by Thomas E. Baker (2018)
+# Made by Thomas E. Baker (2020)
 # See accompanying license with this program
-# This code is native to the julia programming language (v1.1.1) or (v1.5)
+# This code is native to the julia programming language (v1.1.1+)
 #
-
 
 """
     Module: Qtask
@@ -211,12 +210,6 @@ using ..QN
 
     newcurrblock = [Lkeepinds,Rkeepinds]
 
-    # transform the colons in actual ranges
-    # because the "in" operator and length function cannot be used on raw colons
-    
-
-    ##identify the elements of T and inds that must be kept.
-
     keepers = [false for i = 1:length(C.T)]
     loadT = Array{tens{W},1}(undef,length(C.T))
     loadind_one = Array{Array{intType,2},1}(undef,length(C.T))
@@ -256,11 +249,6 @@ using ..QN
       end
     end
 
-    #WORRY ABOUT PERMUTATION HERE??
-    
-    #Array{Q,1}[Qnlist[arange] for (Qnlist, arange) in zip(C.QnumMat[rangeArgs], a[rangeArgs])]
-#    finalQnumMat,newQnumSum = newQnumMat,C.QnumSum[keepinds] #convertQnumMat(newQnumMat)
-
     newQsum = C.Qblocksum[keepers]
     newT = loadT[keepers]
 
@@ -275,15 +263,7 @@ using ..QN
     end
 
     out = Qtens{W,Q}(tup_newsize, newT, newinds, newcurrblock, newQsum, newQnumMat, newQnumSum, newflux)
-    #=
-    try 
-      checkflux(out)
-    catch
-      println(newinds)
-      println(out)
-      error("stop")
-    end
-=#
+
     return out
   end
   export getindex!

@@ -1,12 +1,12 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.8
+#                              v1.0
 #
 #########################################################################
-# Made by Thomas E. Baker (2018)
+# Made by Thomas E. Baker (2020)
 # See accompanying license with this program
-# This code is native to the julia programming language (v1.1.1) or (v1.5)
+# This code is native to the julia programming language (v1.5.4+)
 #
 
 """
@@ -892,6 +892,8 @@ import LinearAlgebra
 
   function reshape!(M::Union{AbstractArray,tens{W}}, S::Array{Array{P,1},1};merge::Bool=false) where {W <: Number, P <: Integer}
     newsize = ntuple(a->prod(b->size(M,b),S[a]),length(S))
+    order = vcat(S...)
+    pM = issorted(order) ? M : permutedims!(M,order)
     return reshape!(M,newsize)
   end
   export reshape!
@@ -904,8 +906,7 @@ import LinearAlgebra
   end
 
   function reshape(M::tens{W}, S::Array{Array{P,1},1};merge::Bool=false) where {W <: Number, P <: Integer}
-    newM = tens{W}(M.size,M.T)
-    return reshape!(newM,S)
+    return reshape!(copy(M),S)
   end
 
 

@@ -1,14 +1,16 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.8
+#                              v0.9
 #
 #########################################################################
-# Made by Thomas E. Baker (2018)
+# Made by Thomas E. Baker (2020)
 # See accompanying license with this program
-# This code is native to the julia programming language (v1.1.1) or (v1.5)
+# This code is native to the julia programming language (v1.1.1+)
 #
-
+# Planned improvements:
+#   v1.0: infinite, temperature, time (Lanczos, TDVP)
+#
 
 """
     Module: DMRG
@@ -252,7 +254,7 @@ const onetwofour = (1,2,4)
 
     currops = mpo[i]
     psi[i] = div!(psi[i],norm(psi[i]))
-    AAvec,outEnergy = krylov(singlesite_update,Lenv[i],Renv[i],psi[i],currops,maxiter=params.maxiter)
+    AAvec,outEnergy = krylov(psi[i],currops,maxiter=params.maxiter,updatefct=singlesite_update,Lenv=Lenv[i],Renv=Renv[i])
     noise = params.noise
 
     params.energy = outEnergy[1]
@@ -287,7 +289,7 @@ const onetwofour = (1,2,4)
     AA = contract(psi[iL],three,psi[iR],one)
 
     AA = div!(AA,norm(AA))
-    newAA,outEnergy = krylov(twosite_update,Lenv[iL],Renv[iR],AA,mpo[iL],maxiter=params.maxiter)
+    newAA,outEnergy = krylov(AA,mpo[iL],maxiter=params.maxiter,updatefct=twosite_update,Lenv=Lenv[iL],Renv=Renv[iR])
     params.energy = outEnergy[1]
 
     U,D,V,truncerr = svd(newAA[1],[[1,2],[3,4]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
@@ -316,7 +318,7 @@ const onetwofour = (1,2,4)
 
 
     AA = contract(psi[iL],ndims(psi[iL]),psi[iR],one)
-    AAvec,outEnergy = krylov(twosite_update,Lenv[iL],Renv[iR],AA,mpo[iL],maxiter=params.maxiter)
+    AAvec,outEnergy = krylov(AA,mpo[iL],maxiter=params.maxiter,updatefct=twosite_update,Lenv=Lenv[iL],Renv=Renv[iR])
     params.energy = outEnergy[1]
 
     m = params.maxm
@@ -396,7 +398,7 @@ const onetwofour = (1,2,4)
       AA = contract(AA,ndims(AA),vecTens[a],1)
     end
 
-    newAA,outEnergy = krylov(Nsite_update,Lenv[iL],Renv[iR],AA,mpo[iL],maxiter=params.maxiter)
+    newAA,outEnergy = krylov(AA,mpo[iL],maxiter=params.maxiter,updatefct=Nsite_update,Lenv=Lenv[iL],Renv=Renv[iR])
     params.energy = outEnergy[1]
 
     AA = newAA[1]

@@ -1,14 +1,13 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.8
+#                              v1.0
 #
 #########################################################################
-# Made by Thomas E. Baker (2018)
+# Made by Thomas E. Baker (2020)
 # See accompanying license with this program
-# This code is native to the julia programming language (v1.1.1) or (v1.5)
+# This code is native to the julia programming language (v1.5.4+)
 #
-
 
 """
     Module: decompositions
@@ -181,19 +180,21 @@ import LinearAlgebra
     if mag == 0.
       sumD = 0.
       @simd for a = 1:size(D,1)
-        sumD += (real(D[a])::Float64)^2
+        sumD += abs(D[a])^2
       end
     else
-      sumD = mag::Float64
+      sumD = mag
     end
 
     truncerr = 0.
 
     if cutoff > 0.
       modcutoff = sumD*cutoff
-      while p > 0 && ((truncerr + D[p]^power < modcutoff) || (nozeros && abs(D[p]) < effZero))
-        truncerr += D[p]^power
+      truncadd = abs(D[p])^power
+      while p > 0 && ((truncerr + truncadd < modcutoff) || (nozeros && abs(D[p]) < effZero))
+        truncerr += truncadd
         p -= 1
+        truncadd = abs(D[p])^power
       end
       if keepdeg
         while p < length(D) && isapprox(D[p],D[p+1])
@@ -204,6 +205,7 @@ import LinearAlgebra
     else
       thism = m == 0 ? max(sizeD,minm) : max(min(m,sizeD),minm)
     end
+
     return thism,p,sizeD,truncerr,sumD
   end
 
@@ -284,30 +286,7 @@ import LinearAlgebra
     Dsq,U = length(B) == 0 ? LinearAlgebra.eigen(M) : LinearAlgebra.eigen(M,B[1])
 
     thism,p,sizeD,truncerr,sumD = findnewm(Dsq,m,minm,mag,cutoff,effZero,nozeros,power,keepdeg)
-      if sizeD > thism
-    #=
-    if m == 0
-      finalD = Array(LinearAlgebra.Diagonal(Dsq))::Array{Float64,2}
-      Utrunc = U::Array{T,2}
-      finaltrunc,sumD = Float64(0),Float64(0)
-    else
-      Dsq = abs.(Dsq)
-      sizeD = size(Dsq,1)
-      truncerr = 0.
-      if mag == 0.
-        sumD = real(sum(Dsq))::Float64
-      else
-        sumD = mag::Float64
-      end
-      modcutoff = cutoff*sumD
-      p = 1
-      while p < sizeD && ((truncerr + Dsq[p] < modcutoff) || (nozeros && abs(D[p]) < effZero))
-        truncerr += Dsq[p]
-        p += 1
-      end
-      thism = min(m < sizeD-p+1 ? sizeD-m+1 : p,sizeD-minm+1)
-      =#
-#    if 0 < thism
+    if sizeD > thism
       Utrunc = U[:,sizeD-thism+1:sizeD]::Array{W,2} where W <: Number
       Dtrunc = Dsq[sizeD-thism+1:sizeD]
     elseif sizeD < minm
@@ -616,10 +595,13 @@ import LinearAlgebra
 
     rhodiag = Array{Float64,1}(undef,sizeinnerm)
     counter = 0
+
+#    println(newD)
+
     #=Threads.@threads=# for q = 1:nQN
       offset = q == 1 ? 0 : sum(w->length(newD[w]),1:q-1)
       for x = 1:length(newD[q])
-        rhodiag[x + offset] = Real(newD[q][x])^power
+        rhodiag[x + offset] = abs(newD[q][x])^power
       end
     end
 
@@ -633,13 +615,13 @@ import LinearAlgebra
     order = sortperm(rhodiag,rev=true)
   
     truncerr = 0.
-    y = m == 0 ? length(order) : min(m,length(order))
+    y = length(order) #m == 0 ? length(order) : min(m,length(order))
 
     truncadd = rhodiag[order[y]]
     while y > 0 && ((truncerr + truncadd < modcutoff) || (nozeros && isapprox(truncadd,0.)))
       truncerr += truncadd
-      truncadd = rhodiag[order[y]]
       y -= 1
+      truncadd = rhodiag[order[y]]
     end
     if keepdeg
       while y < length(rhodiag) && isapprox(rhodiag[order[y]],rhodiag[order[y+1]])

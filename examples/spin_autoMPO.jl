@@ -49,20 +49,14 @@ Columns 3 and 4: couplings in a XXZ model
     mpo = makeH()
 
     hereQS = convert(Int64,2*spinmag+1)
-    QS = cld(hereQS,2)
 
     @makeQNs "spin" U1
     Qlabels = [[spin(i) for i = QS:-2:-QS]]
     qmpo = makeqMPO(mpo,Qlabels)
     compressMPO!(qmpo)
 
-
-
-    initTensor = [zeros(1,hereQS,1) for i=1:Ns]
-    for i = 1:Ns
-      initTensor[i][1,i%2 == 1 ? 1 : 2,1] = 1.0
-    end
-    psi = MPS(initTensor,1)
+    
+    psi = randMPS(hereQS,Ns)
     qpsi = makeqMPS(psi,Qlabels)
 
     dmrg(qpsi,qmpo,sweeps=1000,goal=1E-5,cutoff=1E-6,maxm=200)

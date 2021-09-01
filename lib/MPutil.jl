@@ -1,14 +1,13 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.8
+#                              v1.0
 #
 #########################################################################
-# Made by Thomas E. Baker (2018)
+# Made by Thomas E. Baker (2020)
 # See accompanying license with this program
-# This code is native to the julia programming language (v1.1.1) or (v1.5)
+# This code is native to the julia programming language (v1.5.4+)
 #
-
 
 """
     Module: MPutil
@@ -110,7 +109,7 @@ using ..decompositions
   end
 
   """
-      `envVec`
+      `environment`
 
   Array that holds environment tensors
   """
@@ -200,6 +199,48 @@ using ..decompositions
 
   function MPS(thistype::DataType,psi::W;regtens::Bool=false) where W <: TensType
     return MPS(thistype,psi,1,regtens=regtens)
+  end
+
+  function MPS(T::DataType,physindvec::Array{W,1},vecNs::Integer...;oc::Integer=1) where W <: Integer
+    if length(vecNs) == 0
+      Ns = length(physindvec)
+    else
+      Ns = vecNs[1]
+    end
+    vec = Array{Array{T,3},1}(undef,Ns)
+    for w = 1:length(physindvec)
+      vec[w] = zeros(T,1,physindvec[w],1)
+      vec[w][1,1,1] = 1
+    end
+    return MPS(vec,oc)
+  end
+
+  function MPS(physindvec::Array{W,1},vecNs::Integer...;oc::Integer=1) where W <: Integer
+    return MPS(Float64,physindvec,vecNs...,oc=oc)
+  end
+
+  function MPS(physindsize::W,Ns::Integer;oc::Integer=1) where W <: Integer
+    return MPS(Float64,[physindsize for w = 1:Ns],oc=oc)
+  end
+
+  function MPS(T::DataType,physindsize::W,Ns::Integer;oc::Integer=1) where W <: Integer
+    return MPS(T,[physindsize for w = 1:Ns],oc=oc)
+  end
+
+  function MPS(T::DataType,Qlabels::Array{Array{Q,1},1},vecNs::Integer...;oc::Integer=1) where Q <: Qnum
+    if length(vecNs) == 0
+      Ns = length(Qlabels)
+    else
+      Ns = vecNs[1]
+    end
+    physindvec = [length(Qlabels[(x-1) % length(Qlabels) + 1]) for i = 1:Ns]
+    psi = MPS(T,physindvec,oc=oc)
+    qpsi = makeqMPS(psi,Qlabels)
+    return qpsi
+  end
+
+  function MPS(Qlabels::Array{Array{Q,1},1},vecNs::Integer...;oc::Integer=1) where Q <: Qnum
+    return MPS(Float64,Qlabels,oc=oc)
   end
 
   """

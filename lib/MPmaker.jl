@@ -1,14 +1,13 @@
-#########################################################################
+ #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.8
+#                              v1.0
 #
 #########################################################################
-# Made by Thomas E. Baker (2018)
+# Made by Thomas E. Baker (2020)
 # See accompanying license with this program
-# This code is native to the julia programming language (v1.1.1) or (v1.5)
+# This code is native to the julia programming language (v1.1.1+)
 #
-
 
 """
     Module: MPmaker
@@ -25,6 +24,72 @@ using ..contractions
 using ..decompositions
 using ..MPutil
 =#
+
+
+
+function randMPS(T::Type,physindsize::Integer,Ns::Integer;oc::Integer=1,m::Integer=1) where P <: regMPS
+  physindvec = [physindsize for i = 1:Ns]
+  return randMPS(T,physindvec,oc=oc,m=m)
+end
+
+function randMPS(T::Type,physindvec::Array{W,1};oc::Integer=1,m::Integer=1) where {P <: regMPS, W <: Integer}
+  Ns = length(physindvec)
+  vec = Array{Array{T,3},1}(undef,Ns)
+  if m == 1
+    for w = 1:Ns
+      vec[w] = zeros(1,physindvec[w],1)
+      state = rand(1:physindvec[w],1)[1]
+      vec[w][1,state,1] = 1
+    end
+    psi = MPS(vec,oc)
+  else
+    Lsize,Rsize = 1,prod(w->physindvec[w],2:length(physindvec))
+    accumsize = physindvec[1]
+    for w = 1:Ns
+      physindsize = physindvec[w]
+      currRsize = Rsize < accumsize ? min(Rsize,m) : min(accumsize,m)
+      vec[w] = rand(T,Lsize,physindsize,currRsize)
+      vec[w] /= norm(vec[w])
+      Lsize = currRsize #Lsize * physindsize
+      Rsize = cld(Rsize,physindsize)
+      accumsize *= physindsize
+    end
+    psi = MPS(vec,oc)
+    psi[oc] /= expect(psi)
+  end
+  return psi
+end
+
+function randMPS(physindsize::Integer,Ns::Integer;oc::Integer=1,m::Integer=1) where P <: regMPS
+  return randMPS(Float64,physindsize,Ns,oc=oc,m=m)
+end
+
+function randMPS(physindvec::Array{W,1};oc::Integer=1,m::Integer=1) where {P <: regMPS, W <: Integer}
+  return randMPS(Float64,physindvec,oc=oc,m=m)
+end
+export randMPS
+
+function applyOps!(psi::MPS,sites::Array{W,1},Op::TensType;trail::TensType=ones(1,1)) where W <: Integer
+  for i = 1:length(sites)
+    site = sites[i]
+    p = site
+    psi[p] = contract([2,1,3],Op,2,psi[p],2)
+    if trail != ones(1,1)
+      for j = 1:p-1
+        psi[j] = contract([2,1,3],trail,2,psi[j],2)
+      end
+    end
+  end
+  return psi
+end
+export applyOps!
+
+function applyOps(psi::MPS,sites::Array{W,1},Op::TensType;trail::TensType=ones(1,1)) where W <: Integer
+  cpsi = copy(psi)
+  return applyOps!(cpsi,sites,Op,trail=trail)
+end
+export applyOps
+
 #       +---------------------------------------+
 #>------+  move! orthogonality center in MPS    +---------<
 #       +---------------------------------------+
@@ -796,7 +861,7 @@ using ..MPutil
     #of the H matrix as recorded in each s1s2 pair.  These are each of the operators in H.
 
   """
-      convert2MPO(H,physSize,Ns[,infinite=,lower=])
+      makeMPO(H,physSize,Ns[,infinite=,lower=])
 
   Converts function or vector (`H`) to each of `Ns` MPO tensors; `physSize` can be a vector (one element for the physical index size on each site) or a number (uniform sites); `lower` signifies the input is the lower triangular form (default)
 
@@ -809,10 +874,10 @@ using ..MPutil
       return [Id O;
               Sz Id]
   end
-  isingmpo = convert2MPO(H,size(Id,1),Ns)
+  isingmpo = makeMPO(H,size(Id,1),Ns)
   ```
   """
-  function convert2MPO(H::Array{K,1},physSize::Array{Y,1},Ns::Integer;
+  function makeMPO(H::Array{K,1},physSize::Array{Y,1},Ns::Integer;
                        lower::Bool=true,regtens::Bool=false) where {X <: Integer, Y <: Integer, K <: AbstractArray}
     retType = typeof(prod(a->eltype(H[a])(1),1:Ns))
     finalMPO = Array{Array{retType,4},1}(undef,Ns)
@@ -848,37 +913,37 @@ using ..MPutil
     return MPO(finalMPO,regtens=regtens)
   end
 
-  function convert2MPO(H::Array{P,2},physSize::Array{Y,1},Ns::Integer;
+  function makeMPO(H::Array{P,2},physSize::Array{Y,1},Ns::Integer;
                        lower::Bool=true,regtens::Bool=false) where {X <: Integer, Y <: Integer, P <: Number}
-    return convert2MPO([H for i = 1:Ns],physSize,Ns)
+    return makeMPO([H for i = 1:Ns],physSize,Ns)
   end
 
-  function convert2MPO(H::Array{P,2},physSize::Y,Ns::Integer;
+  function makeMPO(H::Array{P,2},physSize::Y,Ns::Integer;
                        lower::Bool=true,regtens::Bool=false) where {X <: Integer, Y <: Integer, P <: Number}
-    return convert2MPO([H for i = 1:Ns],[physSize],Ns)
+    return makeMPO([H for i = 1:Ns],[physSize],Ns)
   end
 
-  function convert2MPO(H::Array{P,1},physSize::Y,Ns::Integer;
+  function makeMPO(H::Array{P,1},physSize::Y,Ns::Integer;
                        lower::Bool=true,regtens::Bool=false) where X <: Integer where {Y <: Integer, P <: AbstractArray}
-    return convert2MPO(H,[physSize],Ns,lower=lower,regtens=regtens)
+    return makeMPO(H,[physSize],Ns,lower=lower,regtens=regtens)
   end
 
-  function convert2MPO(H::Array{P,1},physSize::Y;
+  function makeMPO(H::Array{P,1},physSize::Y;
                        lower::Bool=true,regtens::Bool=false) where X <: Integer where {Y <: Integer, P <: AbstractArray}
-    return convert2MPO(H,[physSize],length(H),lower=lower,regtens=regtens)
+    return makeMPO(H,[physSize],length(H),lower=lower,regtens=regtens)
   end
 
-  function convert2MPO(H::Function,physSize::Array{X,1},Ns::Integer;
+  function makeMPO(H::Function,physSize::Array{X,1},Ns::Integer;
                        lower::Bool=true,regtens::Bool=false) where X <: Integer
     thisvec = [H(i) for i = 1:Ns]
-    return convert2MPO(thisvec,physSize,Ns,lower=lower,regtens=regtens)
+    return makeMPO(thisvec,physSize,Ns,lower=lower,regtens=regtens)
   end
 
-  function convert2MPO(H::Function,physSize::Integer,Ns::Integer;
+  function makeMPO(H::Function,physSize::Integer,Ns::Integer;
                        lower::Bool=true,regtens::Bool=false)
-    return convert2MPO(H,[physSize],Ns,lower=lower,regtens=regtens)
+    return makeMPO(H,[physSize],Ns,lower=lower,regtens=regtens)
   end
-  export convert2MPO
+  export makeMPO
 
   """
       makeMPS(vect,physInd,Ns[,oc=])
@@ -967,7 +1032,20 @@ using ..MPutil
   end
   export fullH
 
+  """
+      fullpsi(psi)
 
+  Generates the full wavefunction from an MPS (memory providing)
+  """
+  function fullpsi(psi::MPS)
+    Ns = length(psi)
+    fullpsi = psi[1]
+    for p = 2:Ns
+      fullpsi = contract(fullpsi,ndims(fullpsi),psi[p],1)
+    end
+    return fullpsi
+  end
+  export fullH
 
 #       +---------------------------------------+
 #>------+           convert to qMPS             +---------<
@@ -1269,7 +1347,7 @@ using ..MPutil
   end
 
   function makeqMPO(arr::Array,Qlabels::W,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1)::MPO where W <: Union{Array{Array{Q,1},1},Array{Q,1}} where Q <: Qnum
-    mpo = convert2MPO(arr,infinite=infinite)
+    mpo = makeMPO(arr,infinite=infinite)
     return makeqMPO(mpo,Qlabels,arrows...,infinite=infinite,unitcell=unitcell)
   end
   export makeqMPO
