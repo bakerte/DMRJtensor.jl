@@ -9,4 +9,4 @@ If you're just starting out, I recommend reading the introduction article at htt
 
 If you want to view documentation in the code, open the julia terminal, type "?" and type the name of the function.  There is a lot of good information that can help you there.
 
-A friendlier and more comprehensive introduction is coming soon!
+A friendly and comprehensive introduction is coming soon!
