@@ -13,40 +13,35 @@
 path = "../src/"
 include(path*"DMRjulia.jl")
 
-Ns = 10 #number of sites in MPS
+Ns = 10
 
-@makeQNs "fermion" U1 U1 #general format for quantum number initialization: U1 and Zn{x} also defined
-Qlabels = [[fermion(0,0),fermion(1,1),fermion(1,-1),fermion(2,0)]] #quantum number labels for Hubbard model
+@makeQNs "fermion" U1 U1
+Qlabels = [[fermion(0,0),fermion(1,1),fermion(1,-1),fermion(2,0)]]
 
-Ne = 10 #number of electrons
-Ne_up = ceil(Int64,div(Ne,2)) #number of up electrons
-Ne_dn = Ne-Ne_up #number of down electron
-QS = 4 #size of local Fock space
-Cup, Cdn, Nup, Ndn, Ndens, F, O, Id = fermionOps() #operators for a Hubbard model...also available in that file are t-J and spin
+Ne = Ns
+Ne_up = ceil(Int64,div(Ne,2))
+Ne_dn = Ne-Ne_up
+QS = 4
+Cup, Cdn, Nup, Ndn, Ndens, F, O, Id = fermionOps()
 
-
-
-#generates initial wavefunction tensors
 psi = MPS(QS,Ns)
-
 upsites = [i for i = 1:2:Ns]
 Cupdag = Matrix(Cup')
-applyOps(psi,upsites,Cupdag,trail=F)
-
-dnsites = [i for i = 1:2:Ns]
-Cupdag = Matrix(Cdn')
-psi = applyOps!(psi,dnsites,Cupdag,trail=F)
+applyOps!(psi,upsites,Cupdag,trail=F)
 
 
-qpsi = makeqMPS(psi,Qlabels) #quantum number MPS
+dnsites = [i for i = 2:2:Ns]
+Cdndag = Matrix(Cdn')
+applyOps!(psi,dnsites,Cdndag,trail=F)
 
-mu = -2.0 #chemical potential
-HubU = 4.0 #Hubbard U
-t = 1.0 #hopping
+qpsi = makeqMPS(psi,Qlabels)
 
-#makes MPO representation as it appears on the page
+mu = -2.0
+HubU = 4.0
+t = 1.0
+
 function H(i::Int64)
-onsite(i::Int64) = mu * Ndens + HubU * Nup * Ndn
+onsite(i::Int64) = mu * Ndens + HubU * Nup * Ndn #- Ne*exp(-abs(i-Ns/2)/2)*Ndens
         return [Id  O O O O O;
             -t*Cup' O O O O O;
             conj(t)*Cup  O O O O O;
@@ -57,8 +52,8 @@ onsite(i::Int64) = mu * Ndens + HubU * Nup * Ndn
 
 println("Making qMPO")
 
-@time mpo = makeMPO(H,QS,Ns) #converts matrix to MPO
-@time qmpo = makeqMPO(mpo,Qlabels) #makes quantum number MPO
+@time mpo = makeMPO(H,QS,Ns)
+@time qmpo = makeqMPO(mpo,Qlabels)
 
 
 println("#############")
@@ -75,7 +70,4 @@ println("#############")
 energy = dmrg(psi,mpo,maxm=45,sweeps=20,cutoff=1E-9)
 
 println(QNenergy-energy)
-
-
-move!(psi,4) #moves MPS to site 4
 
