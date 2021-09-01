@@ -10,7 +10,8 @@
 #
 
 
-using DMRjulia
+path = "../src/"
+include(path*"DMRjulia.jl")
 
 
     using DelimitedFiles

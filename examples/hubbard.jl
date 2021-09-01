@@ -10,7 +10,8 @@
 #
 
 
-using DMRjulia
+path = "../src/"
+include(path*"DMRjulia.jl")
 
 Ns = 10 #number of sites in MPS
 
@@ -33,16 +34,10 @@ Cupdag = Matrix(Cup')
 applyOps(psi,upsites,Cupdag,trail=F)
 
 dnsites = [i for i = 1:2:Ns]
-Cupdag = Matrix(Cup')
-psi = applyOps!(psi,sites,Cupdag,trail=F)
+Cupdag = Matrix(Cdn')
+psi = applyOps!(psi,dnsites,Cupdag,trail=F)
 
 
-for i = 1:Ne_dn
-  psi[i] = contract([2,1,3],Matrix(Cdn'),2,psi[i],2)
-  for j = 1:i-1
-    psi[j] = contract([2,1,3],F,2,psi[j],2)
-  end
-end
 qpsi = makeqMPS(psi,Qlabels) #quantum number MPS
 
 mu = -2.0 #chemical potential
@@ -62,7 +57,7 @@ onsite(i::Int64) = mu * Ndens + HubU * Nup * Ndn
 
 println("Making qMPO")
 
-@time mpo = makeMPOH,QS,Ns) #converts matrix to MPO
+@time mpo = makeMPO(H,QS,Ns) #converts matrix to MPO
 @time qmpo = makeqMPO(mpo,Qlabels) #makes quantum number MPO
 
 

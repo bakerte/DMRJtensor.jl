@@ -9,8 +9,8 @@
 # This code is native to the julia programming language (v1.1.1) or (v1.5)
 #
 
-path = "<path to DMRjulia.jl>"
-include(path*"/DMRjulia.jl")
+path = "../src/"
+include(path*"DMRjulia.jl")
 
 #create reduced site problem (step 2)
 function make2site(Lenv,Renv,psiL,psiR,mpoL,mpoR)

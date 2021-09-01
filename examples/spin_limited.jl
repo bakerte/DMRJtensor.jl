@@ -10,7 +10,8 @@
 #
 
 
-using DMRjulia
+path = "../src/"
+include(path*"DMRjulia.jl")
 
 Ns = 100
 spinmag = 0.5
@@ -29,7 +30,7 @@ function H(i::Int64)
     end
 
 println("Making qMPO")
-@time mpo = convert2MPO(H,hereQS,Ns)
+@time mpo = makeMPO(H,hereQS,Ns)
 
 println("#############")
 println("nonQN version")
