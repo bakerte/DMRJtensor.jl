@@ -18,7 +18,12 @@ spinmag = 0.5
 
 hereQS = convert(Int64,2*spinmag+1)
 
-psi = randMPS(hereQS,Ns)
+initTensor = [zeros(1,hereQS,1) for i=1:Ns]
+for i = 1:Ns
+   initTensor[i][1,i%2 == 1 ? 1 : 2,1] = 1.0
+end
+
+psi = MPS(initTensor,1)
 
 Sx,Sy,Sz,Sp,Sm,O,Id = spinOps(s=spinmag)
 function H(i::Int64)
