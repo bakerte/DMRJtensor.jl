@@ -44,7 +44,7 @@ LinearAlgebra.BLAS.set_num_threads(juliathreads)
 #println("BLAS threads: ",ccall((:openblas_get_num_threads64_, Base.libblas_name), Cint, ()))
 println()
 =#
-module DMRjulia
+module DMRJtensor
 import LinearAlgebra
 import Printf
 import Serialization
@@ -80,4 +80,4 @@ import Distributed
 
 end
 
-using .DMRjulia
+using .DMRJtensor
