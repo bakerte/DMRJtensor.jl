@@ -1,7 +1,10 @@
-name = "DMRJ"
+name = "DMRjulia"
 uuid = "5b179a51-5399-4802-8f6e-f7014fc12e6f"
 authors = ["Thomas E. Baker"]
 version = "0.8.1"
+
+[compat]
+julia = "1.1.1"
 
 [deps]
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
