@@ -1,15 +1,12 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.9
+#                              v0.8.3
 #
 #########################################################################
-# Made by Thomas E. Baker (2020)
+# Made by Thomas E. Baker (2018)
 # See accompanying license with this program
-# This code is native to the julia programming language (v1.1.1+)
-#
-# Planned improvements:
-#   v1.0: infinite, temperature, time (Lanczos, TDVP)
+# This code is native to the julia programming language (v1.1.1) or (v1.5)
 #
 
 """
