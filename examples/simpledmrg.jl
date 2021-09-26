@@ -1,7 +1,7 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.8
+#                              v0.8.3
 #
 #########################################################################
 # Made by Thomas E. Baker (2018)
