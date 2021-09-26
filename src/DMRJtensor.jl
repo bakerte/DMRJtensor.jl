@@ -1,7 +1,7 @@
 #########################################################################
 #
 #  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
-#                              v0.8
+#                              v0.8.3
 #
 #########################################################################
 # Made by Thomas E. Baker (2018)
@@ -44,7 +44,7 @@ LinearAlgebra.BLAS.set_num_threads(juliathreads)
 #println("BLAS threads: ",ccall((:openblas_get_num_threads64_, Base.libblas_name), Cint, ()))
 println()
 =#
-module DMRjulia
+module DMRJtensor
 import LinearAlgebra
 import Printf
 import Serialization
@@ -80,4 +80,4 @@ import Distributed
 
 end
 
-using .DMRjulia
+using .DMRJtensor
