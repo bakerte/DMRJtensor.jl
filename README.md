@@ -1,4 +1,4 @@
-# DMRjulia (DMRJtensor.jl)
+# DMRJtensor.jl
 DMRjulia is a general purpose tensor network library in the julia programming language
 
 Hello! Welcome to the future site of the full release of DMRjulia, a tensor network library for physics computations written in julia. Right now, ground state calculations on the MPS are available (v0.8.3) for both quantum numbers and dense tensors.
