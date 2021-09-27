@@ -9,6 +9,11 @@
 # This code is native to the julia programming language (v1.1.1) or (v1.5)
 #
 
+module DMRJtensor
+import LinearAlgebra
+import Printf
+import Serialization
+import Distributed
 
 println("_________  _________ _       _ _")
 println("|     \\  \\/  || ___ (_)     | (_)")
@@ -32,23 +37,11 @@ println("   + Canada First Research Excellence Fund (CFREF)")
 println("   + Institut Transdisciplinaire d'Information Quantique (INTRIQ)")
 println("   + US-UK Fulbright Commission (Bureau of Education and Cultural Affairs from the United States Department of State)")
 println("   + Department of Physics, University of York")
-
-#=
-import LinearAlgebra
-
+println()
+println("Tip:")
 println("Running the julia kernel with --check-bounds=no can decrease runtimes by 20%")
 juliathreads = Threads.nthreads()
 println("julia threads: ",juliathreads,"    (modify with 'export JULIA_NUM_THREADS=')")
-LinearAlgebra.BLAS.set_num_threads(juliathreads)
-#println("BLAS threads (set in DMRjulia.jl): ",juliathreads)
-#println("BLAS threads: ",ccall((:openblas_get_num_threads64_, Base.libblas_name), Cint, ()))
-println()
-=#
-module DMRJtensor
-import LinearAlgebra
-import Printf
-import Serialization
-import Distributed
 
   filepath = "../lib/"
 
