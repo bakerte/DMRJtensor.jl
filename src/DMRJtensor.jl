@@ -45,18 +45,16 @@ println("julia threads: ",juliathreads,"    (modify with 'export JULIA_NUM_THREA
 
   filepath = "../lib/"
 
-  include(filepath*"tensor.jl")
+  include(libpath*"tensor.jl")
+  include(libpath*"Opt.jl")
 
-  include(filepath*"QN.jl")
-  include(filepath*"Qtensor.jl")
-  include(filepath*"Qtask.jl")
+  include(libpath*"QN.jl")
+  include(libpath*"Qtensor.jl")
 
-  include(filepath*"contractions.jl")
-  include(filepath*"decompositions.jl")
+  include(libpath*"contractions.jl")
+  include(libpath*"decompositions.jl")
 
-  include(filepath*"Opt.jl")
-  include(filepath*"MPutil.jl")
-  include(filepath*"MPmaker.jl")
+  include(libpath*"MPtask.jl")
 
 
 #=
