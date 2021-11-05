@@ -49,7 +49,7 @@ println("Running the julia kernel with --check-bounds=no can decrease runtimes b
 juliathreads = Threads.nthreads()
 println("julia threads: ",juliathreads,"    (modify with 'export JULIA_NUM_THREADS=')")
 
-  filepath = "../lib/"
+  libpath = "../lib/"
 
   include(libpath*"tensor.jl")
   include(libpath*"Opt.jl")
@@ -60,18 +60,14 @@ println("julia threads: ",juliathreads,"    (modify with 'export JULIA_NUM_THREA
   include(libpath*"contractions.jl")
   include(libpath*"decompositions.jl")
 
-  include(libpath*"MPcreate.jl")
   include(libpath*"MPtask.jl")
 
-  include(filepath*"tensornetwork.jl")
 
+  algpath = "../algs/"
 
-
-  filepath = "../algs/"
-
-  include(filepath*"optimizeMPS.jl")
-  include(filepath*"Krylov.jl")
-  include(filepath*"DMRG.jl")
+  include(algpath*"optimizeMPS.jl")
+  include(algpath*"Krylov.jl")
+  include(algpath*"DMRG.jl")
 
 end
 
