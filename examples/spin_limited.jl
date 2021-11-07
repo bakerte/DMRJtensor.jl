@@ -41,4 +41,4 @@ println("#############")
 println("nonQN version")
 println("#############")
 
-@time energy = dmrg(psi,mpo,maxm=45,sweeps=20,cutoff=1E-9)
+@time energy = dmrg(psi,mpo,maxm=45,sweeps=20,cutoff=1E-9,method="twosite")
