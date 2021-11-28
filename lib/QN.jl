@@ -463,13 +463,13 @@ using ..tensor
 
   See also: [`unique`](@ref)
   """
-  function unique!(B::Array{W,1}) where W <: Qnum
+  function unique!(B::Array{Q,1}) where Q <: Qnum
     sort!(B)
     counter = 1
     for a = 2:length(B)
       if B[a-1] != B[a]
         counter += 1
-        B[counter] = copy(B[a])
+        B[counter] = B[a]
       end
     end
     return B[1:counter]
@@ -483,9 +483,18 @@ using ..tensor
 
   See also: [`unique!`](@ref)
   """
-  function unique(T::Array{W,1}) where W <: Qnum
+  function unique(T::Array{Q,1}) where Q <: Qnum
     B = copy(T)
-    return unique!(B)
+    sort!(B)
+    counter = 1
+    for a = 2:length(B)
+      if B[a-1] != B[a]
+        counter += 1
+        B[counter] = B[a]
+      end
+    end
+    return B[1:counter]
+#    return unique!(B)
   end
 
 #end

@@ -30,17 +30,35 @@ import LinearAlgebra
 #       |                                       |
 #       +---------------------------------------+
 """
-    libsvd(C,D[,Z,alpha=,beta=])
-Chooses the best svd function for tensor decomposition
-+ Outputs U,D,Vt
+    U,D,V = libsvd(X)
+
+Chooses the best svd function for tensor decomposition with the standard three tensor output for the SVD
 """
-function libsvd(X::Array{T,2}) where T <: Number
+function libsvd(X::Array{W,2})::Tuple{Matrix{W},Vector{Float64},Matrix{W}} where W <: Number
   F = LinearAlgebra.svd(X)
   return F.U,F.S,Array(F.Vt)
 end
-export libsvd
 
-function libqr(R::AbstractArray;decomposer::Function=LinearAlgebra.qr)
+"""
+    D,U = libeigen(AA[,B])
+
+Chooses the best eigenvalue decomposition function for tensor `AA` with the standard three tensor output. Can include an overlap matrix for generalized eigenvalue decompositions `B`
+"""
+function libeigen(AA::Array{W,2},B::Array{W,2}...) where W <: Number
+  if eltype(AA) <: Complex
+    M = LinearAlgebra.Hermitian((AA+AA')/2)
+  else
+    M = LinearAlgebra.Symmetric((AA+AA')/2)
+  end
+  return length(B) == 0 ? LinearAlgebra.eigen(M) : LinearAlgebra.eigen(M,B[1])
+end
+
+"""
+    Q,R = libqr(X[,decomposer=LinearAlgebra.qr])
+
+Decomposes `X` with a QR decomposition.
+"""
+function libqr(R::Array{W,2};decomposer::Function=LinearAlgebra.qr) where W <: Number
   P,Q = decomposer(R)
   X,Y = Array(P),Array(Q)
   if size(P,2) > size(Q,1)
@@ -52,21 +70,88 @@ function libqr(R::AbstractArray;decomposer::Function=LinearAlgebra.qr)
   else
     U,V = X,Y
   end
-  return U,V,0.,1.
+  return U,V
 end
 
-function liblq(R::AbstractArray;decomposer::Function=LinearAlgebra.lq)
+"""
+  L,Q = libqr(X[,decomposer=LinearAlgebra.lq])
+
+Decomposes `X` with a LQ decomposition.
+"""
+function liblq(R::Array{W,2};decomposer::Function=LinearAlgebra.lq) where W <: Number
   return libqr(R,decomposer=decomposer)
 end
 
-# iterative SVD for increased precision
-function recursive_SVD(AA::AbstractArray,tolerance::Float64=1E-4)
+"""
+  newm,sizeD,truncerr,sumD = findnewm(D,m,minm,mag,cutoff,effZero,nozeros,power,keepdeg)
+
+Determines the maximum bond dimension to keep for SVD and eigenvalue decompositions based on:
+  + The input diagonal matrix `D` (given as a vector here)
+  + The maximum bond dimension `m`
+  + The minimal bond dimension `minm`
+  + The magnitude of the original tensor `mag`
+  + The cutoff value `cutoff`
+  + `effZero` contains the effective value of zero (default: 1E-16)
+  + `nozeros` will remove all values that are approximately zero
+  + `power` is the power to which the values of `D` are raised to
+  + `keepdeg` is the boolean parameter whether to keep degenerate values or not
+
+The outputs are the size of the new bond (`newm`), size of the input `D` tensor (`sizeD`), truncation error (`truncerr`), and magnitude of the original tensor (`sumD` which is skipped if the input is not 0.)
+
+All parameters can be set in `svd` or `eigen` or similar.
+"""
+function findnewm(D::Array{W,1},m::Integer,minm::Integer,mag::Float64,cutoff::Real,effZero::Real,nozeros::Bool,power::Number,keepdeg::Bool) where {W <: Number}
+  sizeD = size(D,1)
+  p = sizeD
+  if mag == 0.
+    sumD = 0.
+    @simd for a = 1:size(D,1)
+      @inbounds sumD += abs(D[a])^2
+    end
+  else
+    sumD = mag
+  end
+
+  truncerr = 0.
+
+  if cutoff > 0.
+    modcutoff = sumD*cutoff
+    @inbounds truncadd = abs(D[p])^power
+    while p > 0 && ((truncerr + truncadd < modcutoff) || (nozeros && abs(D[p]) < effZero))
+      truncerr += truncadd
+      p -= 1
+      @inbounds truncadd = abs(D[p])^power
+    end
+    if keepdeg
+      while p < length(D) && isapprox(D[p],D[p+1])
+        p += 1
+      end
+    end
+    thism = m == 0 ? max(min(p,sizeD),minm) : max(min(m,p,sizeD),minm)
+  else
+    thism = m == 0 ? max(sizeD,minm) : max(min(m,sizeD),minm)
+  end
+
+  return thism,sizeD,truncerr,sumD
+end
+
+# 
+"""
+  U,D,V = recursive_SVD(A,tol)
+
+Iterative SVD for increased precision of matrix `A` to a tolerance `tol`. Adapted from Phys. Rev. B 87, 155137 (2013)
+
+WARNING: This function is not known to be practically useful except for finding more accurate singular values. The use in algorithms has not been tested by the developers of DMRjulia to find a good use.
+"""
+function recursive_SVD(AA::Array{W,2},tolerance::Float64=1E-4)::Tuple{Matrix{W},Vector{Float64},Matrix{W}} where W <: Number
   U,D,V = safesvd(AA)
   counter = 2
   anchor = 1
   while counter <= size(D,1)
     if D[counter]/D[anchor] < tolerance
-      X = U[:,counter:size(D,1)]' * AA * V[counter:size(D,1),:]'
+      Lpsi = U[:,counter:size(D,1)]
+      Rpsi = V[counter:size(D,1),:]
+      X = LinearAlgebra.dot(Lpsi,AA,Rpsi)
       Up,Dp,Vp = safesvd(X)
       for a = counter:size(D,1)
         U[:,a] = sum(p->U[:,p]*Up[p-counter+1,a-counter+1],counter:size(D,1))
@@ -80,13 +165,13 @@ function recursive_SVD(AA::AbstractArray,tolerance::Float64=1E-4)
   newD = Array(LinearAlgebra.Diagonal(D))
   return U,newD,V
 end
-export recursive_SVD
 
 """
-    safesvd(AA)
+    U,D,V = safesvd(AA)
+
 Evaluates SVD with checks on the matrix-equivalent of a tensor
 
-# Explanation (v1.1.1-v1.5.3 and beyond?):
+# Explanation (v1.1.1-v1.5.3 and beyond):
 
 For some highly degenerate matrices, julia's svd function will throw an error (interface issue with LAPACK).
 This try/catch function will test the svd output and use a modified algorithm with lower preicision (fast),
@@ -95,7 +180,7 @@ Messages and the offending matrix are printed when this occurs so it is known wh
 The problem often self-corrects as the computation goes along in a standard DMRG computation for affected models.
 Typically, this is just a warning and not a cause for concern.
 """
-function (safesvd(AA::Array{T,2})) where T <: Number
+function (safesvd(AA::Array{W,2})) where W <: Number
   try
     libsvd(AA)
   catch
@@ -168,49 +253,15 @@ function (safesvd(AA::Array{T,2})) where T <: Number
         println()
         println()
         error("LAPACK functions are not working!")
-        return Array{Float64,2}(undef,0,0),Array{Float64,1}(undef,0),Array{Float64,2}(undef,0,0)
+        return Array{W,2}(undef,0,0),Array{Float64,1}(undef,0),Array{W,2}(undef,0,0)
       end
     end
   end
-end
-
-function findnewm(D::Array{W,1},m::Integer,minm::Integer,mag::Float64,cutoff::Real,effZero::Real,nozeros::Bool,power::Number,keepdeg::Bool) where {W <: Number}
-  sizeD = size(D,1)
-  p = sizeD
-  if mag == 0.
-    sumD = 0.
-    @simd for a = 1:size(D,1)
-      sumD += abs(D[a])^2
-    end
-  else
-    sumD = mag
-  end
-
-  truncerr = 0.
-
-  if cutoff > 0.
-    modcutoff = sumD*cutoff
-    truncadd = abs(D[p])^power
-    while p > 0 && ((truncerr + truncadd < modcutoff) || (nozeros && abs(D[p]) < effZero))
-      truncerr += truncadd
-      p -= 1
-      truncadd = abs(D[p])^power
-    end
-    if keepdeg
-      while p < length(D) && isapprox(D[p],D[p+1])
-        p += 1
-      end
-    end
-    thism = m == 0 ? max(min(p,sizeD),minm) : max(min(m,p,sizeD),minm)
-  else
-    thism = m == 0 ? max(sizeD,minm) : max(min(m,sizeD),minm)
-  end
-
-  return thism,p,sizeD,truncerr,sumD
 end
 
 """
-    svd(AA[,cutoff=,m=,mag=,minm=,nozeros=])
+    U,D,V,truncerr,newmag = svd(AA[,cutoff=0.,m=0,mag=0.,minm=2,nozeros=false,recursive=false])
+
 SVD routine with truncation; accepts Qtensors
 
 # Arguments
@@ -228,35 +279,30 @@ import LinearAlgebra
 and define functions as `LinearAlgebra.svd` to use functions from that package.
 
 """
-function svd(AA::Array{T,2};power::Number=2,cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,minm::Integer=2,
-              nozeros::Bool=false,recursive::Bool = false,effZero::Float64 = 1E-16,keepdeg::Bool=false) where T <: Number
+function svd(AA::Array{W,2};power::Number=2,cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,minm::Integer=2,
+              nozeros::Bool=false,recursive::Bool = false,effZero::Float64 = 1E-16,keepdeg::Bool=false) where W <: Number
     U,D,Vt = recursive ? recursive_SVD(AA) : safesvd(AA)
-    thism,p,sizeD,truncerr,sumD = findnewm(D,m,minm,mag,cutoff,effZero,nozeros,power,keepdeg)
+    thism,sizeD,truncerr,sumD = findnewm(D,m,minm,mag,cutoff,effZero,nozeros,power,keepdeg)
     if sizeD > thism
-      Utrunc = U[:,1:thism]
-      Dtrunc = D[1:thism]
-      Vtrunc = Vt[1:thism,:]
+      @inbounds Utrunc = U[:,1:thism]
+      @inbounds Dtrunc = D[1:thism]
+      @inbounds Vtrunc = Vt[1:thism,:]
     elseif sizeD < thism
       Utrunc = zeros(eltype(U),size(U,1),thism)
       Dtrunc = zeros(eltype(D),thism)
       Vtrunc = zeros(eltype(Vt),thism,size(Vt,2))
-      Utrunc[:,1:size(U,2)] = U
-      Dtrunc[1:size(D,1)] = D
-      Vtrunc[1:size(Vt,1),:] = Vt
+      @inbounds Utrunc[:,1:size(U,2)] = U
+      @inbounds Dtrunc[1:size(D,1)] = D
+      @inbounds Vtrunc[1:size(Vt,1),:] = Vt
     else
       Utrunc = U
       Dtrunc = D
       Vtrunc = Vt
     end
     Darray = Array(LinearAlgebra.Diagonal(Dtrunc))::Array{Float64,2}
-    finaltrunc = (thism != p ? 1 - sum(a->Dtrunc[a]^2,1:thism)/sumD : truncerr)::Float64
-    return Utrunc,Darray,Vtrunc,finaltrunc,sumD
+    return Utrunc,Darray,Vtrunc,truncerr,sumD
 end
 export svd
-
-#         +-----------------+
-#>--------|  Decompositions |------<
-#         +-----------------+
 
 function svd(AA::tens{W};power::Number=2,cutoff::Float64 = 0.,
           m::Integer = 0,mag::Float64=0.,minm::Integer=2,nozeros::Bool=false,
@@ -270,51 +316,53 @@ function svd(AA::tens{W};power::Number=2,cutoff::Float64 = 0.,
 end
 
 """
-    eigen(AA[,B,cutoff=,m=,mag=,minm=,nozeros=])
-eigen-solver routine with truncation; accepts Qtensors; arguments similar to `svd`; can perform generalized eigenvalue problem with `B` overlap matrix
+    D,U = eigen(AA[,B,cutoff=,m=,mag=,minm=,nozeros=])
+
+Eigensolver routine with truncation (output to `D` and `U` just as `LinearAlgebra`'s function); accepts Qtensors; arguments similar to `svd`; can perform generalized eigenvalue problem with `B` overlap matrix
 
 See also: [`svd`](@ref)
 """
-function eigen(AA::Array{T,2},B::Array{T,2}...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,
-                minm::Integer=1,nozeros::Bool=false,power::Number=1,effZero::Float64 = 1E-16,keepdeg::Bool=false) where {T <: Number}
+function eigen(AA::Array{W,2},B::Array{W,2}...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,
+                minm::Integer=1,nozeros::Bool=false,power::Number=1,effZero::Float64 = 1E-16,keepdeg::Bool=false) where {W <: Number}
 
-  if eltype(AA) <: Complex
-    M = LinearAlgebra.Hermitian((AA+AA')/2)
-  else
-    M = LinearAlgebra.Symmetric((AA+AA')/2)
-  end
-  Dsq,U = length(B) == 0 ? LinearAlgebra.eigen(M) : LinearAlgebra.eigen(M,B[1])
+  Dsq,U = libeigen(AA,B...)
 
-  thism,p,sizeD,truncerr,sumD = findnewm(Dsq,m,minm,mag,cutoff,effZero,nozeros,power,keepdeg)
+  thism,sizeD,truncerr,sumD = findnewm(Dsq,m,minm,mag,cutoff,effZero,nozeros,power,keepdeg)
   if sizeD > thism
-    Utrunc = U[:,sizeD-thism+1:sizeD]::Array{W,2} where W <: Number
-    Dtrunc = Dsq[sizeD-thism+1:sizeD]
+    @inbounds Utrunc = U[:,sizeD-thism+1:sizeD]
+    @inbounds Dtrunc = Dsq[sizeD-thism+1:sizeD]
   elseif sizeD < minm
-    Utrunc = zeros(eltype(U),size(U,1),minm)::Array{W,2} where W <: Number
+    Utrunc = zeros(eltype(U),size(U,1),minm)
     Dtrunc = zeros(eltype(Dsq),minm)
-    Utrunc[:,1:thism] = U
-    Dtrunc[1:thism] = Dsq
+    @inbounds Utrunc[:,1:thism] = U
+    @inbounds Dtrunc[1:thism] = Dsq
   else
-    Utrunc = U::Array{W,2} where W <: Number
+    Utrunc = U
     Dtrunc = Dsq
   end
-  finaltrunc = (thism != p ? 1 - sum(Dtrunc)/sumD : truncerr)::Float64
   finalD = Array(LinearAlgebra.Diagonal(Dtrunc))::Array{Float64,2}
-  return finalD,Utrunc,finaltrunc,sumD
+  return finalD,Utrunc,truncerr,sumD
 end
+export eigen
 
-function eigen(AA::tens{T},B::tens{R}...;cutoff::Float64 = 0.,
+function eigen(AA::tens{W},B::tens{R}...;cutoff::Float64 = 0.,
               m::Integer = 0,mag::Float64=0.,minm::Integer=2,
-              nozeros::Bool=false,recursive::Bool = false,keepdeg::Bool=false) where {T <: Number, R <: Number}
+              nozeros::Bool=false,recursive::Bool = false,keepdeg::Bool=false) where {W <: Number,R <: Number}
   X = reshape(AA.T,size(AA)...)
-  D,U,truncerr,sumD = eigen(X,B...,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,keepdeg=keepdeg)#,recursive=recursive)
+  D,U,truncerr,sumD = eigen(X,B...,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,keepdeg=keepdeg)
   tensD = tens(Float64,D)
   tensU = tens(T,U)
   return tensD,tensU,truncerr,mag
 end
-export eigen
 
 import .LinearAlgebra.eigvals
+"""
+  vec = eigvals(A)
+
+Eigenvalues of input `A` (allowing julia's arrays and `denstens` types) output to a vector `vec`
+
+See also: [`svd`](@ref)
+"""
 function eigvals(A::AbstractArray)
   return LinearAlgebra.eigvals(A)
 end
@@ -325,10 +373,11 @@ function eigvals(A::tens{W}) where W <: Number
   return tens(vals)
 end
 
-#         +-------------------------+
-#>--------|  Quantum number part   |--------<
-#         +-------------------------+
+"""
+  rAA,Lsizes,Rsizes = getorder(AA,vec)
 
+Obtains the present state of an input tensor `AA` grouped into two groups `vec` (i.e., [[1,2],[3,4,5]] or any order). The output is the reshaped tensor and sizes of each dimension for rows and columns.
+"""
 function getorder(AA::G,vecA::Array{Array{W,1},1}) where {G <: TensType, W <: Integer}
   order = Array{W,1}(undef,sum(a->length(vecA[a]),1:length(vecA)))
   counter = 0
@@ -354,13 +403,13 @@ function getorder(AA::G,vecA::Array{Array{W,1},1}) where {G <: TensType, W <: In
 end
 
 """
-    svd(AA,vecA[,cutoff=,m=,mag=,minm=,nozeros=])
+    U,D,V,truncerr,mag = svd(AA,vecA[,cutoff=,m=,mag=,minm=,nozeros=])
 
-reshapes `AA` for `svd` and then unreshapes U and V matrices on return; `vecA` is of the form [[1,2],[3,4,5]] and must be length 2
+Reshapes `AA` for `svd` and then unreshapes U and V matrices on return; `vecA` is of the form [[1,2],[3,4,5]] and must be length 2 with the elements representing the grouped indices for the left and right sets of the SVD for use in unreshaping later
 """
-function svd(AA::G,vecA::Array{Array{W,1},1};cutoff::Float64 = 0.,
+function svd(AA::TensType,vecA::Array{Array{W,1},1};cutoff::Float64 = 0.,
             m::Integer = 0,mag::Float64=0.,minm::Integer=1,nozeros::Bool=false,
-            recursive::Bool = false,inplace::Bool=true,power::Number=2,keepdeg::Bool=false) where {G <: TensType, W <: Integer}
+            recursive::Bool = false,power::Number=2,keepdeg::Bool=false) where {W <: Integer}
   AB,Lsizes,Rsizes = getorder(AA,vecA)
   U,D,V,truncerr,newmag = svd(AB,power = power,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,recursive=recursive,keepdeg=keepdeg)
 
@@ -370,13 +419,13 @@ function svd(AA::G,vecA::Array{Array{W,1},1};cutoff::Float64 = 0.,
 end
 
 """
-    eigen(AA,vecA[,B,cutoff=,m=,mag=,minm=,nozeros=])
+    D,U,truncerr,mag = eigen(AA,vecA[,B,cutoff=,m=,mag=,minm=,nozeros=])
 
 reshapes `AA` for `eigen` and then unreshapes U matrix on return; `vecA` is of the form [[1,2],[3,4,5]] and must be length 2
 """
 function eigen(AA::TensType,vecA::Array{Array{W,1},1},
                 B::TensType...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,
-                minm::Integer=1,nozeros::Bool=false,inplace::Bool=true,keepdeg::Bool=false) where W <: Integer
+                minm::Integer=1,nozeros::Bool=false,keepdeg::Bool=false) where W <: Integer
   AB,Lsizes,Rsizes = getorder(AA,vecA)
   D,U,truncerr,newmag = eigen(AB,B...,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,keepdeg=keepdeg)
   outU = unreshape!(U,Lsizes...,size(D,1))
@@ -384,9 +433,9 @@ function eigen(AA::TensType,vecA::Array{Array{W,1},1},
 end   
 
 """
-    qr(AA,vecA[,cutoff=,m=,mag=,minm=,nozeros=])
+    Q,R,0.,1. = qr(AA,vecA[,cutoff=,m=,mag=,minm=,nozeros=])
 
-reshapes `AA` for `svd` and then unreshapes U and V matrices on return; `vecA` is of the form [[1,2],[3,4,5]] and must be length 2
+Reshapes `AA` for `svd` and then unreshapes U and V matrices on return; `vecA` is of the form [[1,2],[3,4,5]] and must be length 2
 """
 function qr(AA::TensType,vecA::Array{Array{W,1},1}) where W <: Integer
   AB,Lsizes,Rsizes = getorder(AA,vecA)
@@ -399,20 +448,20 @@ function qr(AA::TensType,vecA::Array{Array{W,1},1}) where W <: Integer
   return outU,outV,truncerr,newmag
 end
 
-function qr(AA::AbstractArray,decomposer::Function=LinearAlgebra.qr)
+function qr(AA::AbstractArray;decomposer::Function=LinearAlgebra.qr)
   return libqr(AA,decomposer=decomposer)
 end
 
-function qr(AA::denstens,decomposer::Function=LinearAlgebra.qr)
+function qr(AA::denstens;decomposer::Function=LinearAlgebra.qr)
   rAA = makeArray(AA)
-  Q,R,truncerr,mag = libqr(rAA,decomposer=decomposer)
-  return tens(Q),tens(R),truncerr,mag
+  Q,R = libqr(rAA,decomposer=decomposer)
+  return tens(Q),tens(R),0.,1.
 end
 
 """
-    lq(AA,vecA[,cutoff=,m=,mag=,minm=,nozeros=])
+    L,Q,0.,1. = lq(AA,vecA[,cutoff=,m=,mag=,minm=,nozeros=])
 
-reshapes `AA` for `svd` and then unreshapes U and V matrices on return; `vecA` is of the form [[1,2],[3,4,5]] and must be length 2
+Reshapes `AA` for `svd` and then unreshapes U and V matrices on return; `vecA` is of the form [[1,2],[3,4,5]] and must be length 2
 """
 function lq(AA::TensType,vecA::Array{Array{W,1},1}) where W <: Integer
   AB,Lsizes,Rsizes = getorder(AA,vecA)
@@ -425,18 +474,18 @@ function lq(AA::TensType,vecA::Array{Array{W,1},1}) where W <: Integer
   return outU,outV,truncerr,newmag
 end
 
-function lq(AA::AbstractArray,decomposer::Function=LinearAlgebra.lq)
+function lq(AA::AbstractArray;decomposer::Function=LinearAlgebra.lq)
   return libqr(AA,decomposer=decomposer)
 end
 
-function lq(AA::denstens,decomposer::Function=LinearAlgebra.lq)
+function lq(AA::denstens;decomposer::Function=LinearAlgebra.lq)
   rAA = makeArray(AA)
-  L,Q,truncerr,mag = libqr(rAA,decomposer=decomposer)
-  return tens(L),tens(Q),truncerr,mag
+  L,Q = libqr(rAA,decomposer=decomposer)
+  return tens(L),tens(Q),0.,1.
 end
 
 """
-    polar(A[,group=,*])
+    LTens,RTens,D,truncerr,newmag = polar(A,group=[,*])
 
 *-options from `svd`
 
@@ -448,7 +497,7 @@ function polar(AA::TensType,group::Array{Array{W,1},1};
                 right::Bool=true,cutoff::Float64 = 0.,m::Integer = 0,mag::Float64 = 0.,
                 minm::Integer=1,nozeros::Bool=false,recursive::Bool=false,outermaxm::Integer=0,keepdeg::Bool=false) where W <: Integer
   AB,Lsizes,Rsizes = getorder(AA,group)
-  U,D,V = svd(AB,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,keepdeg=keepdeg)
+  U,D,V,truncerr,newmag = svd(AB,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,keepdeg=keepdeg)
   U = unreshape!(U,Lsizes...,size(D,1))
   V = unreshape!(V,size(D,2),Rsizes...)
   #polar decomposition
@@ -479,9 +528,14 @@ function polar(AA::TensType,group::Array{Array{W,1},1};
     lU = contract(U,2,V,1)
     leftTensor,rightTensor = lR,lU
   end
-  return leftTensor,rightTensor,D,0.
+  return leftTensor,rightTensor,D,truncerr,newmag
 end
 export polar
+
+
+
+
+
 
 #       +---------------------------------------+
 #       |                                       |
@@ -490,28 +544,6 @@ export polar
 #       +---------------------------------------+
 #using ..QN
 #using ..Qtensor
-#using ..Qtask
-
-function makeQblocksum(finalUinds::Array{NTuple{2,Array{W,2}},1},finalUQnumMat::Array{Array{W,1},1},finalUQnumSum::Array{Array{Q,1},1}) where {Q <: Qnum, W <: Integer}
-  nQN = length(finalUinds)
-  newQblocksum = [(Q(),Q()) for q = 1:nQN]
-  for q = 1:nQN
-    for i = 1:size(finalUinds[q][1],1)
-      x = finalUinds[q][1][i,1] + 1
-      Qnumber = finalUQnumMat[i][x]
-      qnum = finalUQnumSum[i][Qnumber]
-      add!(newQblocksum[q][1],qnum)
-    end
-    for i = 1:size(finalUinds[q][2],1)
-      index = i + size(finalUinds[q][1],1)
-      y = finalUinds[q][2][i,1] + 1
-      Qnumber = finalUQnumMat[index][y]
-      qnum = finalUQnumSum[index][Qnumber]
-      add!(newQblocksum[q][2],qnum)
-    end
-  end
-  return newQblocksum
-end
 
 function makeU(nQN::Integer,keepq::Array{Bool,1},outU::Array{Array{W,2},1},QtensA::Qtens{W,Q},
                 finalinds::Array{Array{P,2},1},newqindexL::Array{Array{P,1},1},newqindexLsum::Array{Array{Q,1},1},
@@ -527,8 +559,6 @@ function makeU(nQN::Integer,keepq::Array{Bool,1},outU::Array{Array{W,2},1},Qtens
       right = finalinds[q]
       finalUinds[counter] = (left,right)
       
-#      newQN = inv(QtensA.Qblocksum[q][1])
-#      add!(newQN,QtensA.flux)
       newQblocksum[counter] = (QtensA.Qblocksum[q][1],newqindexLsum[1][q])
     end
   end
@@ -539,7 +569,6 @@ function makeU(nQN::Integer,keepq::Array{Bool,1},outU::Array{Array{W,2},1},Qtens
   newUblocks = (newUQsize...,)
   finalUQnumSum = vcat(QtensA.QnumSum[Linds],newqindexLsum)
 
-#  newQblocksum = makeQblocksum(finalUinds,finalUQnumMat,finalUQnumSum)
   return Qtens{W,Q}(newUQsize,outU,finalUinds,newUblocks,newQblocksum,finalUQnumMat,finalUQnumSum,Uflux)
 end
 
@@ -557,8 +586,6 @@ function makeV(nQN::Integer,keepq::Array{Bool,1},outV::Array{Array{W,2},1},Qtens
       right = QtensA.ind[q][2]
       finalVinds[counter] = (left,right)
 
-#      newQN = inv(QtensA.Qblocksum[q][2])
-#      add!(newQN,QtensA.flux)
       newQblocksum[counter] = (newqindexRsum[1][q],QtensA.Qblocksum[q][2])
     end
   end
@@ -569,8 +596,7 @@ function makeV(nQN::Integer,keepq::Array{Bool,1},outV::Array{Array{W,2},1},Qtens
   newVblocks = (newVQsize...,)
 
   finalVQnumSum = vcat(newqindexRsum,QtensA.QnumSum[Rinds])
-  
-#  newQblocksum = makeQblocksum(finalVinds,finalVQnumMat,finalVQnumSum)
+
   return Qtens{W,Q}(newVQsize,outV,finalVinds,newVblocks,newQblocksum,finalVQnumMat,finalVQnumSum,Vflux)
 end
 
@@ -600,8 +626,6 @@ function makeD(nQN::Integer,keepq::Array{Bool,1},outD::Array{Array{W,2},1},Qtens
   newDQsize = [[1],[2]]
   newDblocks = (newDQsize...,)
   finalDQnumSum = vcat(newqindexRsum,newqindexLsum)
-
-#  newQblocksum = makeQblocksum(finalDinds,finalDQnumMat,finalDQnumSum)
 
   return Qtens{W,Q}(newDQsize,outD,finalDinds,newDblocks,newQblocksum,finalDQnumMat,finalDQnumSum,Dflux)
 end
@@ -667,37 +691,12 @@ function truncate(sizeinnerm::Integer,newD::Array{Array{W,1},1},power::Number,
   return finalinds,thism,qstarts,qranges,keepers,truncerr,sumD
 end
 
-#=
-function newqindexes(thism::Integer,QNsummary::Array{Q,1},qranges::Array{R,1}) where {Q <: Qnum, R <: UnitRange}
-
-  newqindexL = [Array{intType,1}(undef,thism)]
-  counter = 1
-  k = 1
-  while k <= thism
-    if k in qranges[counter]
-      newqindexL[k] = counter #copy(QNsummary[counter])
-      k += 1
-    else
-      counter += 1
-    end
-  end
-  
-  newqindexLsum = [QNsummary]
-  newqindexRsum = [inv.(QNsummary)]
-  newqindexR = newqindexL
-
-  return newqindexL,newqindexLsum,newqindexR,newqindexRsum
-end
-=#
-
-
-
 function threeterm(arr::Array{Array{W,2},1},decomposer::Function) where W <: Number
   nQN = length(arr)
   newU = Array{Array{W,2},1}(undef,nQN)
   newD = Array{Array{W,1},1}(undef,nQN)
   newV = Array{Array{W,2},1}(undef,nQN)
-  Threads.@threads for q = 1:nQN
+  #=Threads.@threads=# for q = 1:nQN
     newU[q],newD[q],newV[q] = decomposer(arr[q])
   end
   return newU,newD,newV
@@ -713,10 +712,7 @@ function svd(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
   Linds = Tsize[1]
   Rinds = Tsize[2]
 
-#  println()
-#  println("in SVD: ",size(QtensA))
-
-  #=@time=# A = changeblock(QtensA,Linds,Rinds)
+  A = changeblock(QtensA,Linds,Rinds)
   nQN = length(A.T)
 
   LRinds = 1
@@ -724,18 +720,18 @@ function svd(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
 
   
 
-  #=@time=# newU,newD,newV = threeterm(A.T,safesvd)
+  newU,newD,newV = threeterm(A.T,safesvd)
 
   tempD = Array{Array{W,2},1}(undef,nQN)
-
+  
   sizeinnerm = sum(q->size(newD[q],1),1:nQN)
     
-  #=@time=# finalinds,thism,qstarts,qranges,keepers,truncerr,sumD = truncate(sizeinnerm,newD,power,nozeros,cutoff,m,nQN,mag,keepdeg)
+  finalinds,thism,qstarts,qranges,keepers,truncerr,sumD = truncate(sizeinnerm,newD,power,nozeros,cutoff,m,nQN,mag,keepdeg)
 
   newqindexL = [Array{intType,1}(undef,thism)]
   keepq = Array{Bool,1}(undef,nQN)
 
-  #=@time=# for q = 1:nQN
+  for q = 1:nQN
     keepq[q] = length(keepers[q]) > 0
     if keepq[q]
       newU[q] = newU[q][:,keepers[q]]
@@ -751,9 +747,9 @@ function svd(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
     end
   end
 
-  #=@time=# newqindexLsum = [QNsummary]
-  #=@time=# newqindexRsum = [inv.(QNsummary)]
-  #=@time=# newqindexR = newqindexL
+  newqindexLsum = [QNsummary]
+  newqindexRsum = [inv.(QNsummary)]
+  newqindexR = newqindexL
 
 
   if sum(keepq) < nQN
@@ -767,54 +763,31 @@ function svd(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
   end
 
 
-  #=@time=# U = makeU(nQN,keepq,outU,A,finalinds,newqindexL,newqindexLsum,leftflux,Linds,thism)
-  #=@time=# D = makeD(nQN,keepq,outD,A,finalinds,newqindexL,newqindexR,newqindexRsum,newqindexLsum,thism)
-  #=@time=# V = makeV(nQN,keepq,outV,A,finalinds,newqindexR,newqindexRsum,leftflux,Rinds,thism)
-#println()
+  U = makeU(nQN,keepq,outU,A,finalinds,newqindexL,newqindexLsum,leftflux,Linds,thism)
+  D = makeD(nQN,keepq,outD,A,finalinds,newqindexL,newqindexR,newqindexRsum,newqindexLsum,thism)
+  V = makeV(nQN,keepq,outV,A,finalinds,newqindexR,newqindexRsum,leftflux,Rinds,thism)
   return U,D,V,truncerr,sumD
 end
 
-function symeigen(submatAA::AbstractArray)
-  if eltype(submatAA) <: Complex
-    M = LinearAlgebra.Hermitian((submatAA+submatAA')/2)
-  else
-    M = LinearAlgebra.Symmetric((submatAA+submatAA')/2)
-  end
-  return LinearAlgebra.eigen(M)
-end 
 
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-function twoterm(arr::Array{Array{W,2},1},decomposer::Function) where W <: Number
+function twoterm(arr::Array{Array{W,2},1},decomposer::Function;centerRank::Integer=1) where W <: Number
   nQN = length(arr)
   newU = Array{Array{W,2},1}(undef,nQN)
-  newD = Array{Array{W,1},1}(undef,nQN)
-  Threads.@threads for q = 1:nQN
-    newU[q],newD[q] = decomposer(arr[q])
+  newD = Array{Array{W,centerRank},1}(undef,nQN)
+  #=Threads.@threads=# for q = 1:nQN
+    newD[q],newU[q] = decomposer(arr[q])
   end
-  return newU,newD
+  return newD,newU
 end
 
 function eigen(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
               minm::Integer=1,nozeros::Bool=false,recursive::Bool=false,
-              power::Number=1,leftflux::Bool=false,mag::Float64=0.,decomposer::Function=symeigen,keepdeg::Bool=false) where {W <: Number, Q <: Qnum}
+              power::Number=1,leftflux::Bool=false,mag::Float64=0.,decomposer::Function=libeigen,keepdeg::Bool=false) where {W <: Number, Q <: Qnum}
 
   Tsize = QtensA.size
   Linds = Tsize[1]
@@ -828,7 +801,7 @@ function eigen(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
 
   
 
-  newU,newD = twoterm(A.T,decomposer)
+  newD,newU = twoterm(A.T,decomposer)
 
   tempD = Array{Array{W,2},1}(undef,nQN)
 
@@ -886,7 +859,7 @@ function qr(QtensA::Qtens{W,Q};leftflux::Bool=false,decomposer::Function=libqr,m
   LRinds = 1
   QNsummary = [inv(A.Qblocksum[q][LRinds]) for q = 1:nQN]
 
-  newU,newV = twoterm(A.T,decomposer)
+  newU,newV = twoterm(A.T,decomposer,centerRank=2)
 
   sizeinnerm = sum(q->size(newU[q],2),1:nQN)
 
@@ -900,30 +873,19 @@ function qr(QtensA::Qtens{W,Q};leftflux::Bool=false,decomposer::Function=libqr,m
 
   truncerr = 0.
 
+  newqindexL = [Array{intType,1}(undef,thism)]
   finalinds = [reshape([i-1 for i = qranges[q]],1,length(qranges[q])) for q = 1:length(QNsummary)]
   for q = 1:nQN
-#    keepq[q] = length(keepers[q]) > 0
-#    if keepq[q]
-      #=
-      newU[q] = newU[q][:,keepers[q]]
-
-      dimD = length(keepers[q])
-      inputD = LinearAlgebra.Diagonal(newD[q][1:dimD])
-      tempD[q] = Array(inputD)
-      newV[q] = newV[q][keepers[q],:]=#
-      @inbounds offset = q == 1 ? 0 : sum(w->length(finalinds[w]),1:q-1)
-      @simd for i = 1:length(finalinds[q])
-        @inbounds newqindexL[1][i + offset] = q
-      end
-#    end
+    @inbounds offset = q == 1 ? 0 : sum(w->length(finalinds[w]),1:q-1)
+    @simd for i = 1:length(finalinds[q])
+      @inbounds newqindexL[1][i + offset] = q
+    end
   end
-
 
   newqindexLsum = [QNsummary]
   newqindexRsum = [inv.(QNsummary)]
   newqindexR = newqindexL
 
-#  newqindexL,newqindexLsum,newqindexR,newqindexRsum = newqindexes(thism,QNsummary,qranges)
   keepq = [true for q = 1:nQN]
 
   U = makeU(nQN,keepq,outU,A,finalinds,newqindexL,newqindexLsum,leftflux,Linds,thism)

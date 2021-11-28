@@ -488,14 +488,14 @@ function rand(Qlabels::Array{Array{Q,1},1};currblock::currblockTypes=equalblocks
     rightSummary = QNsummary
   end
 
-  Qtensor.Qblocksum = [[copy(leftSummary[q]),copy(rightSummary[q])] for q = 1:length(QNsummary)]
+  Qtensor.Qblocksum = [(copy(leftSummary[q]),copy(rightSummary[q])) for q = 1:length(QNsummary)]
   
   leftQNs,Lbigtosub,rows,Lindexes,Rbigtosub,columns,Rindexes = QnumList(Qtensor,LR,Linds,Rinds,leftSummary,rightSummary)
 
-  Qtensor.ind = Array{Array{Array{intType,2},1},1}(undef,length(QNsummary))
+  Qtensor.ind = Array{NTuple{2,Array{intType,2}},1}(undef,length(QNsummary))
   Qtensor.T = Array{Array{datatype,2},1}(undef,length(QNsummary))
   for q = 1:length(QNsummary)
-    Qtensor.ind[q] = [Lindexes[q],Rindexes[q]]
+    Qtensor.ind[q] = (Lindexes[q],Rindexes[q])
 
     newblock = blockfct(datatype,rows[q],columns[q])
     Qtensor.T[q] = newblock
@@ -554,12 +554,12 @@ Convert Qtensor `Qt` to type `T`
 """
 function convertTens(T::DataType, Qt::Qtens{Z,Q})::qarray where {Z <: Number, Q <: Qnum}
   newsize = [copy(Qt.size[i]) for i = 1:length(Qt.size)]
-  newQblocksum = [copy(Qt.Qblocksum[i]) for i = 1:length(Qt.Qblocksum)]
+  newQblocksum = [(copy(Qt.Qblocksum[i][1]),copy(Qt.Qblocksum[i][2])) for i = 1:length(Qt.Qblocksum)]
   newT = [copy(Qt.T[w]) for w = 1:length(Qt.T)]
   newcurrblock = (copy(Qt.currblock[1]),copy(Qt.currblock[2]))
   return Qtens{T,Q}(newsize,newT,copy(Qt.ind),newcurrblock,newQblocksum,
                     copy(Qt.QnumMat),copy(Qt.QnumSum),copy(Qt.flux))
-  end
+end
 export convertTens
 
 import Base.copy!
@@ -594,25 +594,24 @@ end
 
 function QnumList(Qt::Qtens{W,Q},LR::Bool,pLinds::Array{P,1},pRinds::Array{P,1},
                 leftSummary::Array{Q,1},rightSummary::Array{Q,1}) where {P <: Integer, W <: Number, Q <: Qnum}
-if LR
-  leftQNs,Lbigtosub,rows,Lindexes = QnumList(Qt,pLinds,leftSummary)
-  Rbigtosub,columns,Rindexes = smallQnumList(Qt,pRinds,rightSummary)
-else
-  Lbigtosub,rows,Lindexes = smallQnumList(Qt,pLinds,leftSummary)
-  leftQNs,Rbigtosub,columns,Rindexes = QnumList(Qt,pRinds,rightSummary)
-end
-return leftQNs,Lbigtosub,rows,Lindexes,Rbigtosub,columns,Rindexes
+  if LR
+    leftQNs,Lbigtosub,rows,Lindexes = QnumList(Qt,pLinds,leftSummary)
+    Rbigtosub,columns,Rindexes = smallQnumList(Qt,pRinds,rightSummary)
+  else
+    Lbigtosub,rows,Lindexes = smallQnumList(Qt,pLinds,leftSummary)
+    leftQNs,Rbigtosub,columns,Rindexes = QnumList(Qt,pRinds,rightSummary)
+  end
+  return leftQNs,Lbigtosub,rows,Lindexes,Rbigtosub,columns,Rindexes
 end
 
 function QnumList(Qtens::Qtens{W,Q},vec::Array{Int64,1},QnumSummary::Array{Q,1}) where {W <: Number, Q <: Qnum}
+  ninds = length(vec)
+  truesize = basesize(Qtens)
+  sizes = ntuple(a->truesize[vec[a]],ninds) #reorders size
+  QnumMat = Qtens.QnumMat
+  QnumSum = Qtens.QnumSum
 
-ninds = length(vec)
-truesize = basesize(Qtens)
-sizes = ntuple(a->truesize[vec[a]],ninds)
-QnumMat = Qtens.QnumMat
-QnumSum = Qtens.QnumSum
-
-return QnumList_worker(sizes,QnumMat,QnumSum,vec,QnumSummary)
+  return QnumList_worker(sizes,QnumMat,QnumSum,vec,QnumSummary)
 end
 
 function QnumList_worker(sizes::NTuple{G,P},QnumMat::Array{Array{P,1},1},QnumSum::Array{Array{Q,1},1},
@@ -626,6 +625,7 @@ if ninds == 0
   saveindexes = reshape([1],1,1)
 else
   =#
+
   pos = makepos(ninds)
 
   numElements = prod(sizes)
@@ -674,11 +674,13 @@ else
     end
   end
 
-  saveindexes = Array{Array{intType,2},1}(undef,numQNs)
-  for q = 1:numQNs
-    @inbounds saveindexes[q] = longsaveindexes[:,keepbools[q]]
-  end
+  saveindexes = [longsaveindexes[:,keepbools[q]] for q = 1:numQNs]
+#  saveindexes = Array{Array{intType,2},1}(undef,numQNs)
+#  for q = 1:numQNs
+#    @inbounds saveindexes[q] = longsaveindexes[:,keepbools[q]]
 #  end
+#  end
+
 
 return matchingQNs,returnvector,QNblocksizes,saveindexes
 end
@@ -825,7 +827,7 @@ function checkorder!(Qt::Qtens{W,Q}) where {W <: Number, Q <: Qnum}
   Lindmat = checkorder!(Qt,1)
   Rindmat = checkorder!(Qt,2)
   for q = 1:length(Qt.ind)
-    Qt.ind[q] = (Lindmat[q],Rindmat[q])
+    @inbounds Qt.ind[q] = (Lindmat[q],Rindmat[q])
   end
   nothing
 end
@@ -887,7 +889,6 @@ function changeblock(Qt::Qtens{W,Q},newblock::NTuple{2,Array{P,1}};
         leftQNs,Rbigtosub,columns,Rindexes,Lbigtosub,rows,Lindexes = simpleQNLists(Qt,Rinds,rightSummary)
       end
     end
-
     newQt = reblock(Qt,newblock,newQblocksum,LR,QNsummary,leftQNs,ninds,Linds,Rinds,Lindexes,Rindexes,rows,columns,Lbigtosub,Rbigtosub)
   end
   return newQt
@@ -903,11 +904,11 @@ export changeblock
       @inbounds x *= S[selector[i]]
       @inbounds x += currpos[selector[i]]
     end
-    @inbounds x += 1 #+ currpos[selector[1]]
+#    @inbounds x += 1 #+ currpos[selector[1]]
 #    else
 #      x = 1
 #    end
-  return x
+  return x+1
 end
 
 @inline function innerloadpos!(y::P,Rorigsize::P,thispos::Array{P,1},thiscurrblock_two::Array{P,1},thisind_two::Array{P,2}) where P <: Integer
@@ -1007,7 +1008,7 @@ end
 
 
 function inner_reblockloop!(newblocks::Array{Array{W,2},1},Qt::Qtens{W,Q},leftQNs::Array{S,1},LR::Bool,
-                          Linds::Array{S,1},Rinds::Array{S,1},Lbigtosub::Array{S,1},Rbigtosub::Array{S,1};minelements::Integer=500) where {W <: Number, Q <: Qnum, S <: Integer}
+                          Linds::Array{S,1},Rinds::Array{S,1},Lbigtosub::Array{S,1},Rbigtosub::Array{S,1};minelements::Integer=800) where {W <: Number, Q <: Qnum, S <: Integer}
 
 thiscurrblock_one = Qt.currblock[1]
 thiscurrblock_two = Qt.currblock[2]
@@ -1072,7 +1073,7 @@ function (reblock(Qt::Qtens{W,Q},newcurrblocks::NTuple{2,Array{S,1}},newQblocksu
         newblocks[q] = zeros(W,rows[q],columns[q])
       end
     end
-  end    
+  end
 
   inner_reblockloop!(newblocks,Qt,leftQNs,LR,Linds,Rinds,Lbigtosub,Rbigtosub,minelements=minelements)
 
@@ -1124,10 +1125,12 @@ function newindexsizeone!(Qt::Qtens{W,Q},S::Integer...) where {W <: Number, Q <:
 
   if  newindices > 0
     for q = 1:length(Qt.ind)
-      Qt.ind[q][2] = vcat(Qt.ind[q][2],zeros(intType,newindices,size(Qt.ind[q][2],2)))
+      newind = vcat(Qt.ind[q][2],zeros(intType,newindices,size(Qt.ind[q][2],2)))
+      Qt.ind[q] = (Qt.ind[q][1],newind)
     end
     newinds = [length(Qt.QnumMat) + w for w = 1:newindices]
-    Qt.currblock[2] = vcat(Qt.currblock[2],newinds)
+    newcurrblock = vcat(Qt.currblock[2],newinds)
+    Qt.currblock = (Qt.currblock[1],newcurrblock)
 
     newindex = [[Q()] for w = 1:newindices]
     Qt.QnumSum = vcat(Qt.QnumSum,newindex)
@@ -1291,7 +1294,9 @@ end
 
 
 
-@inline function mergeQNloop!(ninds::Integer,numElements::Integer,vec::Array{P,1},pos::Array{P,1},sizes::Tuple,currQN::Q,startQN::Q,QNsummary::Array{Q,1},current_QnumMat::Array{P,1},Qt::Qtens{W,Q}) where {W <: Number, Q <: Qnum, P <: Integer}
+function mergeQNloop!(ninds::Integer,numElements::Integer,vec::Array{P,1},pos::Array{P,1},
+                      sizes::Tuple,currQN::Q,startQN::Q,QNsummary::Array{Q,1},
+                      current_QnumMat::Array{P,1},Qt::Qtens{W,Q}) where {W <: Number, Q <: Qnum, P <: Integer}
   for y = 1:numElements
     position_incrementer!(pos,sizes)
     copy!(currQN,startQN)
@@ -1323,8 +1328,6 @@ function mergereshape!(Qt::Qtens{W,Q};currblock::currblockTypes=equalblocks(Qt))
 
   newQnumMat = Array{Array{intType,1},1}(undef,newdim)
   newQnumSum = Array{Array{Q,1},1}(undef,newdim)
-
-  newsizes = ntuple(a->prod(w->length(Qt.QnumMat[w]),Rsize[a]),newdim)
 
   zeroQN = Q()
   currQN = Q()
@@ -1480,28 +1483,25 @@ function matchblocks(conjvar::NTuple{G,Bool},operators::qarray...;
                       ind::NTuple{G,P}=ntuple(i->i==1 ? 2 : 1,length(operators)),
                       matchQN::Q=typeof(operators[1].flux)(),nozeros::Bool=true) where {G,Q <: Qnum, P <: Integer}
 
-  zeroQN = Q()
   A = operators[1]
   Aind = ind[1]
 
   LQNs = [conjvar[1] ? inv(A.Qblocksum[q][Aind]) : A.Qblocksum[q][Aind] for q = 1:length(A.Qblocksum)]
   Aorder = [Array{intType,1}(undef,length(operators)) for q = 1:length(LQNs)]
-  for q = 1:length(LQNs)
-    Aorder[q] = Array{intType,1}(undef,length(operators))
-    Aorder[q][1] = q
+  @simd for q = 1:length(LQNs)
+    @inbounds Aorder[q][1] = q
   end
   matchBool = Array{Bool,1}(undef,length(LQNs))
 
-#    numthreads = Threads.nthreads()
-  storeQN = Q() #for i = 1:numthreads]
+  storeQN = Q()
+  zeroQN = Q()
 
   for k = 2:length(operators)
     B = operators[k]
     Bind = ind[k]
     RQNs = [conjvar[k] ? inv(B.Qblocksum[q][Bind]) : B.Qblocksum[q][Bind] for q = 1:length(B.Qblocksum)]
 
-    #=Threads.@threads=# for q = 1:length(LQNs)
-      thisthread = Threads.threadid()
+   for q = 1:length(LQNs)
       @inbounds matchBool[q] = false
       w = 0
       while w < length(RQNs) && !matchBool[q]
@@ -2349,8 +2349,8 @@ function setindex!(A::Qtens{W,Q},B::Qtens{W,Q},vals::genColType...) where {W <: 
           loadpos!(Rpos,C,Cqind,2,y,unitranges)
           found2,colindex = findmatch(Rpos,A,C,Aqind,2)
           if found2
-            val = pos2ind((x,y),C.size)
-            num = C.T[Cqind].T[val]
+#            val = pos2ind((x,y),size(C))
+            num = C.T[Cqind][x,y]
             A.T[Aqind][rowindex,colindex] = num
           end
         end
@@ -2455,7 +2455,7 @@ end
 
 
 function joinloop!(origAsize::Array{intType,1},A::Qtens{W,Q},B::Qtens{R,Q},commonblocks::Array{Array{intType,1},1},lengthnewinds::Integer) where {W <: Number, R <: Number, Q <: Qnum}
-  #=Threads.@threads=# for q = 1:length(commonblocks)
+  Threads.@threads for q = 1:length(commonblocks)
     Aqind = commonblocks[q][1]
     Bqind = commonblocks[q][2]
 
@@ -2522,7 +2522,7 @@ end
 function Bextraloop!(inds::Array{intType,1},A::Qtens{W,Q},B::Qtens{R,Q},Bleftover::Array{intType,1},
                       newT::Array{Array{P,2},1},newindexlist::Array{NTuple{2,Array{intType,2}},1},
                       inputsize::Tuple,newQblocksum::Array{NTuple{2,Q},1}) where {W <: Number, R <: Number, Q <: Qnum, P <: Number}
-  #=Threads.@threads=# for q = 1:length(Bleftover)
+  for q = 1:length(Bleftover)
     addq = Bleftover[q]
     thisind = q + length(A.T)
     newT[thisind] = B.T[addq]
@@ -2542,46 +2542,49 @@ function Bextraloop!(inds::Array{intType,1},A::Qtens{W,Q},B::Qtens{R,Q},Bleftove
   nothing
 end
 
-function orderloop!(A::Qtens{W,Q},Lsizes::Array{P,1},Rsizes::Array{P,1},Lposes::Array{P,1},Rposes::Array{P,1}) where {W <: Number, Q <: Qnum, P <: Integer}
+function makerowcol(Lposes::Array{P,1},Lsizes::Tuple,A::Qtens{W,Q},q::Integer,LR::Integer) where {P <: Integer, W <: Number, Q <: Qnum}
+  rows = Array{intType,1}(undef,size(A.ind[q][LR],2))
+  for x = 1:length(rows)
+    @simd for i = 1:size(A.ind[q][LR],1)
+      @inbounds Lposes[i] = A.ind[q][LR][i,x]
+    end
+    pos2ind!(rows,x,Lposes,Lsizes)
+  end
+  return rows
+end
+
+function rowcolsort(rows::Array{P,1},A::Qtens{W,Q},LR::Integer) where {P <: Integer, W <: Number, Q <: Qnum}
+  rowsort = issorted(rows)
+  newroworder = rowsort ? sortperm(rows) : [0] #1:size(A.ind[q][LR],2)
+  return rowsort,newroworder
+end
+
+function orderloop!(A::Qtens{W,Q},Lsizes::Tuple,Rsizes::Tuple,Lposes::Array{P,1},Rposes::Array{P,1}) where {W <: Number, Q <: Qnum, P <: Integer}
   #=Threads.@threads=# for q = 1:length(A.ind)
-    rows = Array{intType,1}(undef,size(A.ind[q][1],2))
-    for i = 1:size(A.ind[q][1],1)
-      @simd for x = 1:length(rows)
-        @inbounds Lposes[i] = A.ind[q][1][i,x]
-      end
-      pos2ind!(rows,x,Lposes...,Lsizes)
-    end
+    rows = makerowcol(Lposes,Lsizes,A,q,1)
+    cols = makerowcol(Rposes,Rsizes,A,q,2)
 
-    columns = Array{intType,1}(undef,size(A.ind[q][2],2))
-    for i = 1:size(A.ind[q][2],1)
-      @simd for y = 1:length(columns)
-        @inbounds Rposes[i] = A.ind[q][2][i,y]
-      end
-      pos2ind!(columns,y,Rposes...,Rsizes)
-    end
-
-    rowsort = issorted(rows)
-    colsort = issorted(columns)
-    if rowsort || colsort
-      if rowsort
-        newroworder = sortperm(rows)
-        @inbounds A.ind[q][1] = A.ind[q][1][:,newroworder]
-      else
-        @inbounds newroworder = 1:size(A.ind[q][1],2)
-      end
-      if colsort
-        newcolorder = sortperm(columns)
-        @inbounds A.ind[q][2] = A.ind[q][2][:,newcolorder]
-      else
-        @inbounds newcolorder = 1:size(A.ind[q][2],2)
-      end
+    rowsort,newroworder = rowcolsort(rows,A,1)
+    colsort,newcolorder = rowcolsort(cols,A,2)
+    if rowsort && colsort
       A.T[q] = A.T[q][newroworder,newcolorder]
-      A.ind[q][1] = A.ind[q][1][:,newroworder]
-      A.ind[q][2] = A.ind[q][2][:,newcolorder]
+      loadM!(A.ind[q][1],A.ind[q][1][:,newroworder])
+      loadM!(A.ind[q][2],A.ind[q][2][:,newcolorder])
+    elseif rowsort
+      A.T[q] = A.T[q][newroworder,:]
+      loadM!(A.ind[q][1],A.ind[q][1][:,newroworder])
+    else
+      A.T[q] = A.T[q][:,newcolorder]
+      loadM!(A.ind[q][2],A.ind[q][2][:,newcolorder])
     end
   end
   nothing
 end
+
+function joinindex(bareinds::intvecType,QtensA::Qtens{R,Q},QtensB::Qtens{S,Q};ordered::Bool=false) where {R <: Number, S <: Number, Q <: Qnum}
+  return joinindex!(bareinds,copy(QtensA),QtensB,ordered=ordered)
+end
+export joinindex
 
 
 
@@ -2594,8 +2597,6 @@ function joinindex!(bareinds::intvecType,QtensA::Qtens{R,Q},QtensB::Qtens{S,Q};o
 
   
 
-  Ttype = typeof(eltype(QtensA.T[1])(0)*eltype(QtensB.T[1])(0))
-  Tout = Array{Ttype,1}(undef,length(QtensA.T)+length(QtensB.T))
 
   notcommoninds = setdiff(1:length(QtensA.QnumMat),inds)
 
@@ -2603,7 +2604,6 @@ function joinindex!(bareinds::intvecType,QtensA::Qtens{R,Q},QtensB::Qtens{S,Q};o
   B = changeblock(QtensB,notcommoninds,inds)
 
   lengthnewinds = length(inds)
-
   origAsize = [length(A.QnumMat[inds[w]]) for w = 1:lengthnewinds]
   commonblocks = matchblocks((false,false),A,B,matchQN=A.flux)
 
@@ -2612,6 +2612,7 @@ function joinindex!(bareinds::intvecType,QtensA::Qtens{R,Q},QtensB::Qtens{S,Q};o
 
   joinloop!(origAsize,A,B,commonblocks,lengthnewinds)
 
+  Ttype = typeof(eltype(QtensA.T[1])(0)*eltype(QtensB.T[1])(0))
   newT = Array{Array{Ttype,2},1}(undef,length(A.T)+length(Bleftover))
   newindexlist = Array{NTuple{2,Array{intType,2}},1}(undef,length(newT))
   newQblocksum = Array{NTuple{2,Q},1}(undef,length(newT))
@@ -2628,13 +2629,19 @@ function joinindex!(bareinds::intvecType,QtensA::Qtens{R,Q},QtensB::Qtens{S,Q};o
   A.Qblocksum = newQblocksum
 
   thisQN = Q()
+  zeroQN = Q()
 
   deltaflux = A.flux + inv(B.flux)
   for w = 1:length(inds)
     index = inds[w]
 
-    Bsums = [B.QnumSum[index][i] + deltaflux for i = 1:length(B.QnumSum[index])]
-    newQnumSum = unique(vcat(A.QnumSum[index],Bsums))
+    if deltaflux == zeroQN || w > 1
+      Bsums = B.QnumSum[index]
+    else
+      Bsums = Q[B.QnumSum[index][i] + deltaflux for i = 1:length(B.QnumSum[index])]
+    end
+    thisvec = vcat(A.QnumSum[index],Bsums)
+    newQnumSum = unique!(thisvec)
 
     newQnums = Array{intType,1}(undef,origAsize[w] + size(B,index))
     firstloop!(w,origAsize,A,index,thisQN,newQnums,newQnumSum)
@@ -2672,7 +2679,7 @@ See also: [`applylocalF`](@ref)
 """
 function applylocalF!(M::R, i) where {R <: qarray}
   for (j, (t, index)) in enumerate(zip(M.T, M.ind))
-    pos = ind2pos(index, M.size)
+    pos = ind2pos(index, size(M))
     p = parity(getQnum(i,pos[i],tens))
     M.T[j] *= (-1)^p
   end

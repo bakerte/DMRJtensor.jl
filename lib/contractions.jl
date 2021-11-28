@@ -22,9 +22,9 @@ using ..tensor
 import LinearAlgebra
 =#
 """
-  libmult(C,D[,Z,alpha=,beta=])
+  C = libmult(C,D[,Z,alpha=,beta=])
 
-Chooses the best matrix multiply function for tensor contraction (dense tensor or sub-block)
+Chooses the best matrix multiply function for tensor contraction (dense tensor or sub-block) withoutput matrix `C`
 
 + Outputs `alpha` * `C` * `D` if `Z` is not input
 + Outputs `alpha` * `C` * `D` + `beta` * `Z` if `Z` is input
@@ -56,18 +56,18 @@ export libmult
 #       +------------------------+
 
 """
-  matrixequiv(X,Lsize,Rsize)
+  C = matrixequiv(X,Lsize,Rsize)
 
-Reshapes tensor `X` into an `Lsize` x `Rsize` matrix
+Reshapes tensor `X` into an `Lsize` x `Rsize` matrix with output `C`
 """
 function matrixequiv(X::densTensType,Lsize::Integer,Rsize::Integer)
   return matrixequiv!(copy(X),Lsize,Rsize)
 end
 
 """
-  matrixequiv!(X,Lsize,Rsize)
+  C = matrixequiv!(X,Lsize,Rsize)
 
-Reshapes tensor `X` into an `Lsize` x `Rsize` matrix in-place
+Reshapes tensor `X` into an `Lsize` x `Rsize` matrix in-place with output `C`
 """
 function matrixequiv!(X::AbstractArray,Lsize::Integer,Rsize::Integer)
   return reshape!(X,Lsize,Rsize)
@@ -87,9 +87,9 @@ function permutedims_2matrix!(X::denstens,vec::Tuple,Lsize::Integer,Rsize::Integ
 end
 
 """
-  prepareT(A,Lvec,Rev,conjvar)
+  C = prepareT(A,Lvec,Rev,conjvar)
 
-Forms the matrix-equivlanet of a tensor defined by `Lvec` indices forming the rows and `Rvec` indices forming the columns; toggle conjugate (`conjvar`)
+Forms the matrix-equivlanet of a tensor `C` defined by `Lvec` indices forming the rows and `Rvec` indices forming the columns; toggle conjugate (`conjvar`)
 """
 function prepareT(A::densTensType,Lvec::Tuple,Rvec::Tuple,conjvar::Bool)
   vec = (Lvec...,Rvec...)
@@ -128,9 +128,9 @@ function prepareT(A::densTensType,Lvec::Tuple,Rvec::Tuple,conjvar::Bool)
 end
 
 """
-  corecontractor(A,iA,B,iB,conjA,conjB,Z...[,alpha=,beta=])
+  C = corecontractor(A,iA,B,iB,conjA,conjB,Z...[,alpha=,beta=])
 
-Primary contraction function.  Contracts `A` along indices `iA` to `B` along `iB`; toggle conjugation (`conjA` and `conjB`)
+Primary contraction function.  Contracts `A` along indices `iA` to `B` along `iB` to give tensor `C`; toggle conjugation (`conjA` and `conjB`)
 """
 function corecontractor(conjA::Bool,conjB::Bool,A::densTensType,iA::intvecType,B::densTensType,iB::intvecType,
                         Z::densTensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
@@ -157,9 +157,9 @@ function corecontractor(conjA::Bool,conjB::Bool,A::densTensType,iA::intvecType,B
 end
 
 """
-  maincontractor(A,iA,B,iB,conjA,conjB[,Z,alpha=,beta=])
+  C = maincontractor(A,iA,B,iB,conjA,conjB[,Z,alpha=,beta=])
 
-Primary contraction function.  Contracts `A` along indices `iA` to `B` along `iB`; toggle conjugation (`conjA` and `conjB`)
+Primary contraction function.  Contracts `A` along indices `iA` to `B` along `iB` to give tensor `C`; toggle conjugation (`conjA` and `conjB`)
 """
 function maincontractor(conjA::Bool,conjB::Bool,A::AbstractArray,iA::intvecType,B::AbstractArray,iB::intvecType,
                           Z::AbstractArray...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
@@ -168,9 +168,9 @@ function maincontractor(conjA::Bool,conjB::Bool,A::AbstractArray,iA::intvecType,
 end
 
 """
-  maincontractor(A,iA,B,iB,conjA,conjB[,Z,alpha=,beta=])
+  C = maincontractor(A,iA,B,iB,conjA,conjB[,Z,alpha=,beta=])
 
-Primary contraction function.  Contracts `A` along indices `iA` to `B` along `iB`; toggle conjugation (`conjA` and `conjB`)
+Primary contraction function.  Contracts `A` along indices `iA` to `B` along `iB` to give tensor `C`; toggle conjugation (`conjA` and `conjB`)
 """
 function maincontractor(conjA::Bool,conjB::Bool,A::tens{X},iA::Tuple,B::tens{Y},iB::Tuple,
                         Z::tens{W}...;alpha::Number=eltype(A)(1),
@@ -187,7 +187,7 @@ export maincontractor
 #       +----------------------------+
 
 """
-  contract(A,B[,alpha=])
+  C = contract(A,B[,alpha=])
 
 Contracts to (alpha * A * B and returns a scalar output...if only `A` is specified, then the norm is evaluated
 
@@ -477,11 +477,11 @@ function contractloopZ(outType::DataType,numQNs::Integer,conjA::Bool,conjB::Bool
   Ablocks = A.currblock[1]
   Bblocks = B.currblock[2]
 
-  newrowcols = Array{Array{Array{intType,2},1},1}(undef,numQNs)
-  newQblocksum = Array{Array{Q,1},1}(undef,numQNs)
+  newrowcols = Array{NTuple{2,Array{intType,2}},1}(undef,numQNs)
+  newQblocksum = Array{NTuple{2,Q},1}(undef,numQNs)
   outTens = Array{Array{outType,2},1}(undef,numQNs)
 
-  Threads.@threads for q = 1:numQNs
+  #=Threads.@threads=# for q = 1:numQNs
     Aqind = commonblocks[q][1]
     Bqind = commonblocks[q][2]
 
@@ -521,7 +521,7 @@ function contractloop(outType::DataType,numQNs::Integer,conjA::Bool,conjB::Bool,
   newQblocksum = Array{NTuple{2,Q},1}(undef,numQNs)
   outTens = Array{Array{outType,2},1}(undef,numQNs)
 
-  Threads.@threads for q = 1:numQNs
+  #=Threads.@threads=# for q = 1:numQNs
     Aqind = commonblocks[q][1]
     Bqind = commonblocks[q][2]
 
