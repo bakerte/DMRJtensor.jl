@@ -20,10 +20,16 @@ If you want to view documentation in the code, open the julia terminal, type `?`
 
 ## Papers and documentation:
 
-Introduction to tensor networks:
+### Tensor recipes for algorithms in DMRjulia
+
+T.E. Baker, et. al. "Tensor Recipes for entanglement renormalization computations" arxiv:2112.XXXX  (2021)
+
+### Introduction to tensor networks:
 
 [Français] T.E. Baker, S. Desrosiers, M. Tremblay, M. Thompson, "Méthodes de calcul avec réseaux de tenseurs en physique" Can. J. Phys. 99, 4 (2021); https://cdnsciencepub.com/doi/abs/10.1139/cjp-2019-0611
 
 [English] ibid., "Basic tensor network computations in physics" https://arxiv.org/abs/1911.11566 (2019), pp. 19
 
-Introduction to DMRG: T.E. Baker, M.P. Thompson "Build your own tensor network library: DMRjulia I. Basic library for the density matrix renormalization group" https://arxiv.org/abs/2109.03120 (2021)
+### Introduction to DMRG: 
+
+T.E. Baker, M.P. Thompson "Build your own tensor network library: DMRjulia I. Basic library for the density matrix renormalization group" https://arxiv.org/abs/2109.03120 (2021)
