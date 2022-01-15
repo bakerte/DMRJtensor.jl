@@ -47,16 +47,16 @@ using ..tensor
   import Base.isgreater
   ##All comparison operator are available for every derived Qnum Types
   ## if the operator > and the operator == are available.
-  @inline function !=(a::T,b::T)::Bool where {T<:Qnum}
+  Base.@pure function !=(a::T,b::T)::Bool where {T<:Qnum}
     return !(a==b)
   end
-  @inline function <(a::T,b::T)::Bool where {T<:Qnum}
+  Base.@pure function <(a::T,b::T)::Bool where {T<:Qnum}
     return a!=b && !(a>b)
   end
-  @inline function >=(a::T,b::T)::Bool where {T<:Qnum}
+  Base.@pure function >=(a::T,b::T)::Bool where {T<:Qnum}
     return !(a<b)
   end
-  @inline function <=(a::T,b::T)::Bool where {T<:Qnum}
+  Base.@pure function <=(a::T,b::T)::Bool where {T<:Qnum}
     return !(a>b)
   end
 
@@ -71,10 +71,20 @@ using ..tensor
   end
 
   @inline function parity(a::T) where {T <: fermionQnum}
-	return a.parity.val&1
+	return a.parity.val & 1
   end
   export parity
 
+
+  @inline function inv(a::Qnum)
+    return -a
+  end
+  export inv
+#=
+  Base.@pure function -(A::Qnum)
+    return inv(A)
+  end
+=#
   """
       U1(q)
 
@@ -101,65 +111,73 @@ using ..tensor
 
   See also: [`U1`](@ref) [`@makeQNs`](@ref)
   """
-  mutable struct U1<:Qnum
-    val::Int64
+  struct U1<:Qnum
+    val::intType
   end
 
-  function U1()::U1
+  @inline function U1()::U1
     return U1(0)
   end
 
-  function U1(a::U1)::U1
+  @inline function U1(a::U1)::U1
     return U1(a.val)
   end
   export U1
 
-  @inline function >(a::U1,b::U1)::Bool
+  Base.@pure function >(a::U1,b::U1)::Bool
     return a.val>b.val
   end
-  @inline function <(a::U1,b::U1)::Bool
+  Base.@pure function <(a::U1,b::U1)::Bool
     return a.val<b.val
   end
-  @inline function ==(a::U1,b::U1)::Bool
+  Base.@pure function ==(a::U1,b::U1)::Bool
     return a.val==b.val
   end
-
+#=
   import Base.copy
   @inline function copy(a::U1)::U1
     return U1(a.val)
   end
-
-  Base.@pure function +(a::U1,b::U1)::U1
-    ap = copy(a)
-    return add!(ap,b)
-#    return U1(a.val+b.val)
+=#
+  Base.@pure function +(a::U1,b::U1...)::U1
+#    ap = copy(a)
+#    return add!(ap,b)
+    c = a.val
+    @inbounds @simd for k = 1:length(b)
+      c += b[k].val
+    end
+    return U1(c)
   end
-
+#=
 #  import .tensor.add!
   Base.@pure function add!(a::U1,b::U1)::U1
-    a.val += b.val
-    a
+#    a.val += b.val
+#    a
+    a+b
     # nothing
   end
+=#
 
-
-
-  @inline function inv(a::U1)::U1
-    return U1(-a.val)
+  Base.@pure function -(a::U1,b::U1...)::U1
+    c = length(b) == 0 ? -a.val : a.val
+    @inbounds @simd for k = 1:length(b)
+      c -= b[k].val
+    end
+    return U1(c)
   end
-  export inv
-
+#=
   @inline function inv!(a::U1)::U1
 	a.val *=-1;
 	a
 #   nothing
   end
-
-
+=#
+#=
   @inline function hash(a::U1)::number
     return a.val
   end
-  export inv!
+  =#
+#  export inv!
 
   """
       Zn{N}(q)
@@ -186,62 +204,90 @@ using ..tensor
 
   See also: [`U1`](@ref) [`@makeQNs`](@ref)
   """
-  mutable struct Zn{T} <: Qnum
-    val::UInt64
-
+  struct Zn{T} <: Qnum
+    val::unsigned(intType)
+#=
     function Zn{T}(a) where {T}
 #      @assert(typeof(T) <: Integer, "The template parameter must be an integral value")
       return a < T ? new{T}(a) : error("Value in Zn{$T} must be smaller than $T")
     end
+    =#
   end
 
-  function Zn{N}(a::Zn{N})::Zn{N} where{N}
+  @inline function Zn{N}(a::Zn{N})::Zn{N} where{N}
     return Zn{N}(a.val)
   end
-  function Zn{N}()::Zn{N} where {N}
+  @inline function Zn{N}()::Zn{N} where {N}
     return Zn{N}(0)
   end
   export Zn
 
-  @inline function >(a::Zn{N},b::Zn{N})::Bool where{N}
+  Base.@pure function >(a::Zn{N},b::Zn{N})::Bool where{N}
     return a.val>b.val
   end
-  @inline function <(a::Zn{N},b::Zn{N})::Bool where{N}
+  Base.@pure function <(a::Zn{N},b::Zn{N})::Bool where{N}
     return a.val<b.val
   end
-  @inline function ==(a::Zn{N},b::Zn{N})::Bool where{N}
+  Base.@pure function ==(a::Zn{N},b::Zn{N})::Bool where{N}
     return a.val==b.val
   end
-
-  Base.@pure function add!(a::Zn{N},b::Zn{N})::Zn{N} where{N}
-    a.val += b.val
+#=
+  Base.@pure function add!(a::Zn{N},b::Zn{N}...)::Zn{N} where{N}
+    c = a.val
+    for k = 1:length(b)
+      c += b[k].val
 	# a.val %= N
 	# this conditionnal is less costly than the full modulo.
 	# It is correct if both b.val and a.val are smaller than N
-    if a.val >= N
-      a.val -= N
+      if c >= N
+        c -= N
+      end
     end
-    a
+    Zn{N}(c)
     # nothing
   end
-
+=#
+#=
   @inline function copy(a::Zn{N})::Zn{N} where{N}
     return Zn{N}(a.val)
   end
-
-  Base.@pure function +(a::Zn{N},b::Zn{N})::Zn{N} where{N}
+=#
+  Base.@pure function +(a::Zn{N},b::Zn{N}...)::Zn{N} where{N}
     #implemented in term of the in place addition.
-    ap = copy(a)
-    return add!(ap,b)
-  end
-  export add!
-
-  @inline function inv(a::Zn{N})::Zn{N} where{N}
-    if a.val == 0 #The neutral element is always its own inverse.
-      return Zn{N}()
+    c = a.val
+    @inbounds @simd for k = 1:length(b)
+      c += b[k].val
+	# a.val %= N
+	# this conditionnal is less costly than the full modulo.
+	# It is correct if both b.val and a.val are smaller than N
+      if c >= N
+        c -= N
+      end
     end
+    return Zn{N}(c)
+  end
+#  export add!
+#=
+  @inline function inv(a::Zn{N})::Zn{N} where{N}
+#    if a.val == 0 #The neutral element is always its own inverse.
+#      return Zn{N}()
+#    end
     return Zn{N}(N-a.val)
   end
+=#
+  Base.@pure function -(a::Zn{N},b::Zn{N}...) where N
+    c = length(b) == 0 ? N-a.val : a.val
+    @inbounds @simd for k = 1:length(b)
+      c += N - b[k].val
+      if c < 0
+        c += N
+      elseif c >= N
+        c -= N
+      end
+    end
+    return Zn{N}(c)
+  end
+  #=
   @inline function inv!(a::Zn{N})::Zn{N}  where{N}
     if a.val != 0 #The neutral element is always its own inverse.
       a.val = (N-a.val);
@@ -249,11 +295,12 @@ using ..tensor
 	a
 #   nothing
   end
-
+=#
+#=
   function hash(a::Zn{N}) where{N}
     return a.val
   end
-
+=#
   #no varargs template in julia, for some reason... so the simple solution is not possible.
   #must resort to macro...
   # struct compQn{T...}
@@ -371,43 +418,45 @@ using ..tensor
 		error("more names than there are quantum number to compose")
 	end
 #	@assert(Inheritfrom <: Qnum)
-    structstr = "mutable struct $name <:$Inheritfrom\n"
-    funadd = "function +(a::$name,b::$name)::$name\n	return $name("
-    fungreater = "function >(a::$name,b::$name)::Bool\n\t"
-    funequal = "function ==(a::$name,b::$name)::Bool\n"
-    funinv = "function inv(a::$name)::$name\n	return $name("
-    funinv! ="function inv!(a::$name)::$name\n"
-    funadd! ="function add!(a::$name,b::$name)::$name\n"
-    funNeut = "function $name()\n	return $name("
-    funpropercopy = "function copy(a::$name)\n        $name("
-    funcopy = "function copy!(a::$name,b::$name)\n for w = 1:$(length(valfield))\n"
+    structstr = "struct $name <:$Inheritfrom\n"
+    funadd = "Base.@pure function +(a::$name,b::$name...)::$name\n	return $name("
+    funminus = "Base.@pure function -(a::$name,b::$name...)::$name\n	return $name("
+    fungreater = "Base.@pure function >(a::$name,b::$name)::Bool\n\t"
+    funequal = "Base.@pure function ==(a::$name,b::$name)::Bool\n"
+    funinv = "@inline function inv(a::$name)::$name\n	return $name("
+#    funinv! ="function inv!(a::$name)::$name\n"
+#    funadd! ="function add!(a::$name,b::$name)::$name\n"
+    funNeut = "@inline function $name()\n	return $name("
+#    funpropercopy = "function copy(a::$name)\n        $name("
+#    funcopy = "function copy!(a::$name,b::$name)\n for w = 1:$(length(valfield))\n"
 #    funcinv = "function copyinv!(a::$name,b::$name)::$name\n"
 #    funaddinv = "function addinv!(a::$name,b::$name)::$name\n"
-    funsize = "function length(Q::$name)\n\t return $(length(valfield))\nend"
-    fungetindex = "function getindex(a::$name,i::Integer)\n        if i == 1"
-     funsetindex = "function setindex!(a::$name,b::Integer,i::Integer)\n        if i == 1"
+    funsize = "@inline function length(Q::$name)\n\t return $(length(valfield))\nend"
+    fungetindex = "@inline function getindex(a::$name,i::Integer)\n        if i == 1"
+#    funsetindex = "function setindex!(a::$name,b::Integer,i::Integer)\n        if i == 1"
     constructname = "$name("
     constructbody = "new("
-    copyconst = "function $name(a::$name)\n\t$name("
+    copyconst = "@inline function $name(a::$name)\n\t$name("
     counter = 2
 
-    funcopy = "$(funcopy) \ta[w] = b[w]\n"
+#    funcopy = "$(funcopy) \ta[w] = b[w]\n"
     funequal = "$funequal	for w = 1:$(length(valfield)) \n if a[w] != b[w]\n\t\treturn false\n\tend\n end\n"
     for (field,T) in zip(valfield,Types)
       # @assert $T <: Qnum
       structstr = "$structstr	$field::$T\n"
-      funadd = "$(funadd)a.$field+b.$field, "
+      funadd = "$(funadd)+(a.$field,ntuple(k->b[k].$field,length(b))...), "
+      funminus = "$(funminus)-(a.$field,ntuple(k->b[k].$field,length(b))...), "
       fungreater = "$(fungreater)if a.$field != b.$field \n\t\treturn a.$field>b.$field\n\tend\n\t"
       funinv = "$(funinv)inv(a.$field), "
-      funinv! = "$funinv!	inv!(a.$field);\n"
-      funadd! = "$funadd!	add!(a.$field,b.$field);\n"
+#      funinv! = "$funinv!	inv!(a.$field);\n"
+#      funadd! = "$funadd!	add!(a.$field,b.$field);\n"
       funNeut = "$(funNeut)$T(), "
-      funpropercopy = "$(funpropercopy) a.$field,"
+#      funpropercopy = "$(funpropercopy) a.$field,"
 #      funcinv = "$(funcinv) \ta.$field = inv(b.$field)\n"
 #      funaddinv = "$(funaddinv) \tadd!(a.$field, inv(b.$field))\n"
   #		funsize = "function size(Q::$name,i::Integer...)\n"
       fungetindex = "$(fungetindex)\n\treturn a.$field.val\n\telseif i == $counter "
-       funsetindex = "$(funsetindex)\n\t a.$field.val = b\n\telseif i == $counter "
+#      funsetindex = "$(funsetindex)\n\t a.$field.val = b\n\telseif i == $counter "
       constructname = "$(constructname)l$field, "
       constructbody = "$(constructbody)$T(l$field), "
       copyconst = "$(copyconst) a.$field, "
@@ -416,16 +465,17 @@ using ..tensor
     constructor = "\t$(constructname[1:end-2])) = $(constructbody[1:end-2]))"
     structstr = "$(structstr)\n$(constructor)\nend\n"
     funadd = "$(funadd[1:end-2]))\nend"
+    funminus = "$(funminus[1:end-2]))\nend"
     fungreater = "$(fungreater)\n	return false\n end"
     funequal = "$funequal	return true\n end"
     funinv = "$(funinv[1:end-2]))\nend"
-    funinv! = "$funinv!\n\ta\nend"
-    funadd! = "$funadd!\n\ta\nend"
+#    funinv! = "$funinv!\n\ta\nend"
+#    funadd! = "$funadd!\n\ta\nend"
     funNeut = "$(funNeut[1:end-2]))\nend"
-    funpropercopy = "$(funpropercopy[1:end-1]) )\nend\n"
-    funcopy = "$(funcopy) \n end\n\ta\nend\n"
+#    funpropercopy = "$(funpropercopy[1:end-1]) )\nend\n"
+#    funcopy = "$(funcopy) \n end\n\ta\nend\n"
     fungetindex = "$(fungetindex[1:end-14])end\nend"
-     funsetindex = "$(funsetindex[1:end-14])end\nend"
+#     funsetindex = "$(funsetindex[1:end-14])end\nend"
     copyconst = "$(copyconst[1:end-2]))\nend"
 #    funcinv = "$(funcinv) \n\ta\nend\n"
 #    funaddinv = "$(funaddinv) \n\ta\nend\n"
@@ -433,20 +483,16 @@ using ..tensor
     output = """begin
     $(structstr)\n
     $(copyconst)\n
-    import Base.>;import Base.<;import Base.==;import Base.+;import Base.length;import Base.getindex;import Base.setindex!; import Base.copy; import Base.copy!\n
+    import Base.>;import Base.<;import Base.==;import Base.+;import Base.-;import Base.length;import Base.getindex;import Base.setindex!; import Base.copy; import Base.copy!\n
     $funadd\n
+    $funminus\n
     $fungreater\n
     $funequal\n
     $funinv\n
-    $funinv!\n
-    $funadd!\n
     $funNeut\n
     $funsize\n
     $fungetindex\n
-    $funsetindex\n
-    $funcopy\n
     $copyconst\n
-    $funpropercopy\n
     export $name\n
     end"""
     return output
@@ -483,17 +529,9 @@ using ..tensor
 
   See also: [`unique!`](@ref)
   """
-  function unique(T::Array{Q,1}) where Q <: Qnum
-    B = copy(T)
-    sort!(B)
-    counter = 1
-    for a = 2:length(B)
-      if B[a-1] != B[a]
-        counter += 1
-        B[counter] = B[a]
-      end
-    end
-    return B[1:counter]
+  function unique(B::Array{Q,1}) where Q <: Qnum
+    A = copy(B)
+    return unique!(A)
 #    return unique!(B)
   end
 
