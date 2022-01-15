@@ -22,7 +22,7 @@ If you want to view documentation in the code, open the julia terminal, type `?`
 
 ### Tensor recipes for algorithms in DMRjulia
 
-T.E. Baker, et. al. "Tensor Recipes for entanglement renormalization computations" arxiv:2112.XXXX  (2021)
+T.E. Baker, et. al. "Tensor Recipes for entanglement renormalization computations" arxiv:2111.14530  (2021)
 
 ### Introduction to tensor networks:
 
