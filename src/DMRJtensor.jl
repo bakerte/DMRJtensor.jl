@@ -30,6 +30,7 @@ println("Code: https://github.com/bakerte/dmrjulia ")
 println()
 println("Documentation: T.E. Baker, S. Desrosiers, M. Tremblay, M.P. Thompson \"Méthodes de calcul avec réseaux de tenseurs en physique\" Canadian Journal of Physics 99, 4 (2021)")
 println("                 [ibid. \"Basic tensor network computations in physics\" https://arxiv.org/abs/1911.11566]")
+println("          and  T.E. Baker, M.P. Thompson \"Build your own tensor network library: DMRjulia I. Basic library for the density matrix renormalization group\" arxiv: 2109.03120\n")
 println("Funding for this program is graciously provided by:")
 println("   + Institut quantique (Université de Sherbrooke)")
 println("   + Département de physique, Université de Sherbrooke")
@@ -46,7 +47,7 @@ println("julia threads: ",juliathreads,"    (modify with 'export JULIA_NUM_THREA
   libpath = "../lib/"
 
   include(libpath*"tensor.jl")
-  include(libpath*"Opt.jl")
+  include(libpath*"models.jl")
 
   include(libpath*"QN.jl")
   include(libpath*"Qtensor.jl")
