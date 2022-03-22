@@ -46,14 +46,14 @@ qpsi = makeqMPS(psi,Qlabels)
 qmpo = makeqMPO(mpo,Qlabels)
 
 println("#############")
-println("nonQN version")
-println("#############")
-
-@time energy = dmrg(psi,mpo,maxm=45,sweeps=20,cutoff=1E-9,method="twosite")
-
-println("#############")
 println("QN version")
 println("#############")
 
 @time energy = dmrg(qpsi,qmpo,maxm=45,sweeps=20,cutoff=1E-9,method="twosite")
+
+println("#############")
+println("nonQN version")
+println("#############")
+
+@time energy = dmrg(psi,mpo,maxm=45,sweeps=20,cutoff=1E-9,method="twosite")
 
