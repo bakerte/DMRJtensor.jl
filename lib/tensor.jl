@@ -761,7 +761,7 @@ See also: [`conj`](@ref) [`denstens`](@ref)`
 """
 function conj!(currtens::tens{W}) where W <: Number
   if !(W <: Real)
-    LinearAlgebra.conj!(currtens.T)
+    LinearAlgebra.conj!.(currtens.T)
   end
   return currtens
 end
@@ -1547,7 +1547,7 @@ function reshape!(M::Array{W,P}, S::NTuple{N,intType};merge::Bool=false) where {
 end
 
 function reshape!(M::Array{W,P}, S::intType...;merge::Bool=false) where {P,W <: Number}
-  return reshape(M,S)
+  return reshape!(M,S)
 end
 
 function reshape!(M::Array{W,P}, S::Array{intType,1};merge::Bool=false) where {P,W <: Number}
@@ -1586,15 +1586,20 @@ Reshape for dense tensors (other types make a copy) with output `G`; can also ma
 See also: [`reshape!`](@ref)
 """
 function reshape(M::tens{W}, S::intType...;merge::Bool=false) where W <: Number
-  return reshape!(copy(M),S)
+  newMsize = Array{intType,1}(undef,ndims(M))
+  @inbounds @simd for w = 1:length(newMsize)
+    newMsize[w] = S[w]
+  end
+  newM = tens{W}(newMsize,M.T)
+  return reshape!(newM,S)
 end
 
 function reshape(M::tens{W}, S::Array{intType,1};merge::Bool=false) where W <: Number
-  return reshape(copy(M),S...)
+  return reshape(M,S...)
 end
 
 function reshape(M::Array{W,N}, S::Array{intType,1};merge::Bool=false) where {W <: Number, N}
-  return reshape(copy(M),S...)
+  return reshape(M,S...)
 end
 
 """
@@ -1667,10 +1672,6 @@ function permutedims!(M::tens{W}, vec::NTuple{N,intType}) where {N, W <: Number}
 end
 
 function permutedims!(M::AbstractArray, vec::NTuple{N,intType}) where {N, W <: Number}
-  return permutedims(M,vec)
-end
-
-function permutedims!(M::AbstractArray, vec::Array{intType,1}) where {N, W <: Number}
   return permutedims(M,vec)
 end
 

@@ -1319,39 +1319,41 @@ function matchblocks(conjvar::NTuple{2,Bool},A::Qtens{W,Q},B::Qtens{S,Q};
 end
 
 function matchblocks(LQNs::Array{Q,1},RQNs::Array{Q,1};matchQN::Q=Q()) where Q <: Qnum
-  Aorder = Array{intType,1}(undef,length(LQNs))
-  outmatches = 0
+  Aorder = Array{NTuple{2,intType},1}(undef,length(LQNs))
+  matchBool = Array{Bool,1}(undef,length(LQNs))
+
   @inbounds for q = 1:length(LQNs)
-    matchBool = false
+    matchBool[q] = false
     w = 0
-    @inbounds while w < length(RQNs) && !matchBool
+    @inbounds while w < length(RQNs) && !matchBool[q]
       w += 1
       thisQN = LQNs[q] + RQNs[w]
-      matchBool = thisQN == matchQN
+      matchBool[q] = thisQN == matchQN
     end
-    if matchBool
-      Aorder[q] = w
-      outmatches += 1
-    else
-      Aorder[q] = 0
-    end
+    newblock = matchBool[q] ? w : 0
+    loadtup!(Aorder,q,newblock)
   end
 
-  outAorder = Array{NTuple{2,intType},1}(undef,outmatches)
-  counter = 0
-  k = 0
-  @inbounds while counter < outmatches
-    k += 1
-    if Aorder[k] != 0
-      counter += 1
-      loadtup!(outAorder,counter,k,Aorder[k])
+  outmatches = sum(matchBool)
+  if outmatches < length(Aorder)
+    outAorder = Array{NTuple{2,intType},1}(undef,outmatches) #Aorder[matchBool]
+    counter = 0
+    k = 0
+    @inbounds while counter < outmatches
+      k += 1
+      if matchBool[k]
+        counter += 1
+        outAorder[counter] = Aorder[k]
+      end
     end
+  else
+    outAorder = Aorder
   end
   return outAorder
 end
 
-@inline function loadtup!(Aorder::Array{NTuple{2,intType},1},q::intType,k::intType,newblock::intType)
-  Aorder[q] = (k,newblock)
+@inline function loadtup!(Aorder::Array{NTuple{2,intType},1},q::intType,newblock::intType) where G
+  Aorder[q] = (q,newblock)
   nothing
 end
 
@@ -1715,10 +1717,7 @@ function permutedims!(currQtens::Qtens{W,Q}, vec::Union{NTuple{N,P},Array{P,1}})
 
   permorder = Array{intType,1}(undef,length(order))
 
-  newRsize = Array{Array{intType,1},1}(undef,length(vec))
-  @inbounds for q = 1:length(vec)
-    newRsize[q] = Rsize[vec[q]]
-  end
+  newRsize = Rsize[[vec...]]
   counting = 0
   for k = 1:length(Rsize)
     @inbounds @simd for m = 1:length(Rsize[k])

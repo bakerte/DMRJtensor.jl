@@ -105,9 +105,8 @@ for (gemm, elty) in
             C
         end
         function libmult(transA::AbstractChar, transB::AbstractChar, alpha::($elty), A::Union{AbstractArray{$elty,N},tens{$elty}},B::Union{AbstractArray{$elty,M},tens{$elty}},m::Integer,ka::Integer,kb::Integer,n::Integer) where {N,M}
-            C = Array{($elty),1}(undef,m*n) #ndims(A) == 1 && ndims(B) == 1 ? Array{($elty),1}(undef,m*n) : Array{($elty),2}(undef,m,n)
+            C = ndims(A) == 1 && ndims(B) == 1 ? Array{($elty),1}(undef,m*n) : Array{($elty),2}(undef,m,n)
             libmult!(transA, transB, alpha, A, B, zero($elty), C,m,ka,kb,n)
-            reshape(C,m,n)
         end
         function libmult(transA::AbstractChar, transB::AbstractChar, A::Union{AbstractArray{$elty,N},tens{$elty}},B::Union{AbstractArray{$elty,M},tens{$elty}},m::Integer,ka::Integer,kb::Integer,n::Integer) where {N,M}
             libmult(transA, transB, one($elty), A, B,m,ka,kb,n)
@@ -808,37 +807,18 @@ end
   nothing
 end
 
-function permq(A::Qtens{W,Q},iA::Array{intType,1}) where {W <: Number, Q <: Qnum} #K
-  #=
-  sortAL = true
-  w = 0
-  @inbounds while sortAL && w < length(A.currblock[1])-1
-    w += 1
-    sortAL = A.currblock[1][w] < A.currblock[1][w+1]
-  end
-  =#
-  #println("start permq")
+function permq(A::qarray,iA::Union{Array{intType,1},NTuple{K,intType}}) where K
   nopermL = length(iA) == length(A.currblock[1]) && issorted(A.currblock[1])
   w = 0
-  @inbounds while nopermL && w < length(iA)
+  while nopermL && w < length(iA)
     w += 1
     nopermL = w == A.currblock[1][w] && w == iA[w]
   end
-
-  #=
-  sortAR = true
-  w = 0
-  @inbounds while sortAR && w < length(A.currblock[2])-1
-    w += 1
-    sortAR = A.currblock[2][w] < A.currblock[2][w+1]
-  end
-  =#
   nopermR = !nopermL && length(iA) == length(A.currblock[2]) && issorted(A.currblock[2])
-  #println(nopermR)
   if nopermR
     w =length(iA)
     end_dim = length(A.QnumMat)
-    @inbounds while nopermR && w > 0
+    while nopermR && w > 0
       nopermR = A.currblock[2][w] == end_dim && iA[w] == end_dim
       end_dim -= 1
       w -= 1
@@ -864,17 +844,17 @@ function maincontractor(conjA::Bool,conjB::Bool,QtensA::Qtens{W,Q},vecA::Tuple,Q
   Aperm,transA = willperm(conjA,eltype(QtensA),AnopermL,AnopermR)
   Bperm,transB = willperm(conjB,eltype(QtensB),BnopermR,BnopermL)
 
-  if Aperm
-    A = QtensA
-  else
+  if !Aperm
     A = changeblock(QtensA,notconA,conA)
     transA = 'N'
-  end
-  if Bperm
-    B = QtensB
   else
+    A = QtensA
+  end
+  if !Bperm
     B = changeblock(QtensB,conB,notconB)
     transB = 'N'
+  else
+    B = QtensB
   end
 
   Aretind,notAretind = transA == 'N' ? (2,1) : (1,2)
@@ -902,6 +882,8 @@ function maincontractor(conjA::Bool,conjB::Bool,QtensA::Qtens{W,Q},vecA::Tuple,Q
 
 
   ############
+  Ablocks = A.currblock[1]
+  Bblocks = B.currblock[2]
 
   newrowcols = Array{NTuple{2,Array{intType,2}},1}(undef,numQNs)
   newQblocksum = Array{NTuple{2,Q},1}(undef,numQNs)
@@ -909,17 +891,17 @@ function maincontractor(conjA::Bool,conjB::Bool,QtensA::Qtens{W,Q},vecA::Tuple,Q
 
   #optional types like alpha input into functions from upstream calls create perhaps a type instability? Disabling alpha saves one allocation
 
-  @inbounds for q = 1:numQNs
+  for q = 1:numQNs
     Aqind = commonblocks[q][1]
     Bqind = commonblocks[q][2]
 
-    if conjA && W <: Complex && transA == 'N'
+    if conjA && !(eltype(A.T[Aqind]) <: Real) && transA == 'N'
       inputA = conj(A.T[Aqind])
     else
       inputA = A.T[Aqind]
     end
 
-    if conjB && R <: Complex && transB == 'N'
+    if conjB && !(eltype(B.T[Bqind]) <: Real) && transB == 'N'
       inputB = conj(B.T[Bqind])
     else
       inputB = B.T[Bqind]
@@ -945,7 +927,7 @@ function maincontractor(conjA::Bool,conjB::Bool,QtensA::Qtens{W,Q},vecA::Tuple,Q
 
     newrowcols[q] = (A.ind[Aqind][notAretind],B.ind[Bqind][notBretind])
   end
-  ############
+    ############
 
   newQnumMat = Array{Array{intType,1},1}(undef,length(notconA)+length(notconB))
   loadnewQnumMat(newQnumMat,0,notconA,A)
@@ -996,6 +978,7 @@ function maincontractor(conjA::Bool,conjB::Bool,QtensA::Qtens{W,Q},vecA::Tuple,Q
     newinds = newrowcols
     newQblocks = newQblocksum
   end
+
   return Qtens{outType,Q}(newsize,newT,newinds,newcurrblocks,newQblocks,newQnumMat,newQnumSum,newflux)
 end
 

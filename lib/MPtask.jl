@@ -146,9 +146,9 @@ Inputs tensors `P` representing an `MPS` or an `MPO` into environment `V`
 
 See also: [`MPS`](@ref) [`MPO`](@ref)
 """
-function environment(network::G) where G <: Union{MPS,MPO}
-  Ns = length(network)
-  return environment(network[1],Ns)
+function environment(network::G...) where G <: Union{MPS,MPO}
+  Ns = length(network[1])
+  return environment(typeof(network[1]),Ns)
 end
 
 """
@@ -454,27 +454,18 @@ end
 constructor for MPO with tensors `H` either a vector of tensors or the `MPO`; can request an element type `T` for the tensors. `regtens` outputs with the julia Array type
 """
 function MPO(T::DataType,H::Array{W,1};regtens::Bool=false) where W <: TensType
-  if W <: AbstractArray
-#    if regtens
-      newH = Array{Array{eltype(H[1]),4},1}(undef,size(H,1))
-      #=
-    else
-      newH = Array{tens{eltype(H[1])},1}(undef,size(H,1))
-    end=#
-  else
-    newH = Array{W,1}(undef,size(H,1))
-  end
+  newH = Array{W,1}(undef,size(H,1))
 
   for a = 1:size(H,1)
     if ndims(H[a]) == 2
       rP = reshape(H[a],size(H[a],1),size(H[a],2),1,1)
-      newH[a] = permutedims(rP,[4,2,1,3])
+      newH[a] = permutedims!(rP,[4,1,2,3])
     else
       newH[a] = H[a]
     end
   end
 
-  if !regtens && (typeof(newH[1]) <: AbstractArray)
+  if !regtens && (typeof(newH[1]) <: Array)
     finalH = [tens(newH[a]) for a = 1:length(newH)]
   else
     finalH = newH
@@ -1450,13 +1441,12 @@ Updates right environment tensor `Renv` with dual MPS `dualpsi`, MPS `psi`, and 
 """
 @inline function  Rupdate(Renv::TensType,dualpsi::TensType,psi::TensType,mpo::TensType...)
   nMPOs = length(mpo)
-  nLsize = nMPOs+2
-  nRsize = nLsize+1
-  tempRenv = ccontract(dualpsi,3,Renv,nLsize)
+  nRsize = nMPOs+2
+  tempRenv = contract(Renv,1,psi,3)
   for j = 1:nMPOs
-    tempRenv = contract(mpo[j],(3,4),tempRenv,(2,nRsize))
+    tempRenv = contract(tempRenv,(nRsize+1,1),mpo[j],(2,4))
   end
-  return contract(psi,(2,3),tempRenv,(2,nRsize))
+  return contractc(tempRenv,(nRsize+1,1),dualpsi,(2,3))
 end
 export Rupdate
 
@@ -1781,7 +1771,7 @@ export correlationmatrix
 function localizeOp(psi::MPS,Oparray::Array{G,1},sites::Array{R,1};centerpsi::TensType=psi[psi.oc],order::Array{intType,1}=[1,2,3],trail::Tuple=()) where {G <: TensType, R <: Integer}
 
   #trail operations....
-  isId = [isapprox(norm(trail[r])^2,size(trail[r],1)) for r = 1:length(trail)]
+  isId = [norm(trail[r]) for r = 1:length(trail)]
   if length(trail) > 0
     for r = 1:length(isId)
       index = 0
@@ -1811,8 +1801,8 @@ function localizeOp(psi::MPS,Oparray::Array{G,1},sites::Array{R,1};centerpsi::Te
       end
     else
       p = findfirst(r->minsite==sites[r],1:length(sites))
-      psiOp = contract(Oparray[p],2,psi[minsite],2)
-      Lenv = ccontract(psiOp,(2,1),psi[minsite],(1,2))
+      psiOp = ccontract(psi[minsite],2,Oparray[p],1)
+      Lenv = contract(psiOp,(3,2),psi[minsite],(1,2))
     end
     for w = minsite+1:psi.oc-1
       if w in sites
@@ -1823,25 +1813,21 @@ function localizeOp(psi::MPS,Oparray::Array{G,1},sites::Array{R,1};centerpsi::Te
       end
       Lenv = Lupdate(Lenv,psi[w],temp)
     end
-  else
-    Lenv = ccontract(psi[psi.oc-1],(1,2),psi[psi.oc-1],(1,2))
   end
 
   if psi.oc in sites
     p = findfirst(r->psi.oc==sites[r],1:length(sites))
-#    cpsi = contract([2,1,3],Oparray[p],2,centerpsi,2)
-    outOp = Oparray[p]
+    cpsi = contract([2,1,3],Oparray[p],2,centerpsi,2)
   else
-    outOp = makeId(eltype(psi[1]),size(psi[psi.oc],2))
-#    cpsi = centerpsi
+    cpsi = centerpsi
   end
 
 #  Renv = makeBoundary(psi,psi,left=false)
   if maxsite > psi.oc
     p = findfirst(r->maxsite==sites[r],1:length(sites))
-    psiOp = contract(Oparray[p],2,psi[maxsite],2)
-    Renv = contractc(psiOp,(1,3),psi[maxsite],(2,3))
-    for w = maxsite-1:-1:psi.oc+1
+    psiOp = contract([2,1,3],Oparray[p],2,psi[maxsite],2)
+    Renv = contractc(psiOp,(2,3),psi[maxsite],(1,2))
+    for w = maxsite:-1:psi.oc+1
       if w in sites
         p = findfirst(r->w==sites[r],1:length(sites))
         temp = contract([2,1,3],Oparray[p],2,psi[w],2)
@@ -1850,11 +1836,9 @@ function localizeOp(psi::MPS,Oparray::Array{G,1},sites::Array{R,1};centerpsi::Te
       end
       Renv = Rupdate(Renv,psi[w],temp)
     end
-  else
-    Renv = contractc(psi[psi.oc+1],(2,3),psi[psi.oc+1],(2,3))
   end
-#  Lpsi = contract(Lenv,2,outOp,1)
-  return Lenv,outOp,Renv #contract(order,Lpsi,3,Renv,1)
+  Lpsi = contract(Lenv,2,cpsi,1)
+  return contract(order,Lpsi,3,Renv,1)
 end
 
 function localizeOp(psi::MPS,mpo::MPO...;centerpsi::TensType=psi[psi.oc],Hpsi::Function=singlesite_update) where {G <: TensType, R <: Integer}
@@ -2173,21 +2157,6 @@ function makeBoundary(dualpsi::MPS,psi::MPS,mpovec::MPO...;left::Bool=true,right
 end
 export makeBoundary
 
-
-
-
-
-function makeEdgeEnv(dualpsi::MPS,psi::MPS,mpovec::MPO...;boundary::TensType=typeof(psi[1])(),left::Bool=true)
-  expsize = 2+length(mpovec)
-  Lnorm = norm(boundary)
-  if ndims(boundary) != expsize || isapprox(Lnorm,0) || isnan(Lnorm) || isinf(Lnorm)
-    Lout = makeBoundary(dualpsi,psi,mpovec...,left=left)
-  else
-    Lout = copy(boundary)
-  end
-  return Lout
-end
-
 """
     makeEnds(dualpsi,psi[,mpovec,Lbound=,Rbound=])
 
@@ -2201,7 +2170,20 @@ Generates first and last environments for a given system of variable MPOs
 + `Rbound::TensType`: right boundary
 """
 function makeEnds(dualpsi::MPS,psi::MPS,mpovec::MPO...;Lbound::TensType=typeof(psi[1])(),Rbound::TensType=typeof(psi[end])())
-  return makeEdgeEnv(dualpsi,psi,mpovec...,boundary=Lbound),makeEdgeEnv(dualpsi,psi,mpovec...,boundary=Rbound,left=false)
+  expsize = 2+length(mpovec)
+  Lnorm = norm(Lbound)
+  if ndims(Lbound) != expsize || isapprox(Lnorm,0) || isnan(Lnorm) || isinf(Lnorm)
+    Lout = makeBoundary(dualpsi,psi,mpovec...)
+  else
+    Lout = copy(Lbound)
+  end
+  Rnorm = norm(Rbound)
+  if ndims(Rbound) != expsize || isapprox(Rnorm,0) || isnan(Rnorm) || isinf(Rnorm)
+    Rout = makeBoundary(dualpsi,psi,mpovec...,left=false)
+  else
+    Rout = copy(Rbound)
+  end
+  return Lout,Rout
 end
 
 """
@@ -2220,21 +2202,13 @@ function makeEnds(psi::MPS,mpovec::MPO...;Lbound::TensType=typeof(psi[1])(),Rbou
 end
 export makeEnds
 
-
-
-function genEnv(dualpsi::MPS,psi::MPS,mpo::MPO...;bound::TensType=typeof(psi[1])())
-
-end
-
-
-
-
 """
     makeEnv(dualpsi,psi,mpo[,Lbound=,Rbound=])
 
 Generates environment tensors for a MPS (`psi` and its dual `dualpsi`) with boundaries `Lbound` and `Rbound`
 """
-function makeEnv(dualpsi::MPS,psi::MPS,mpo::MPO...;Lbound::TensType=typeof(psi[1])(),Rbound::TensType=typeof(psi[1])())
+function makeEnv(dualpsi::MPS,psi::MPS,mpo::MPO...;Lbound::TensType=typeof(psi[1])(),
+          Rbound::TensType=typeof(psi[1])())
   Ns = length(psi)
   numtype = elnumtype(dualpsi,psi,mpo...)
   C = psi[1]
@@ -2242,16 +2216,16 @@ function makeEnv(dualpsi::MPS,psi::MPS,mpo::MPO...;Lbound::TensType=typeof(psi[1
   if typeof(psi) <: largeMPS || typeof(mpo) <: largeMPO
     Lenv,Renv = largeEnv(numtype,Ns)
   else
-    Lenv = environment(psi)
-    Renv = environment(psi)
+    Lenv = environment(psi[1],Ns)
+    Renv = environment(psi[1],Ns)
   end
-  Lenv[1],Renv[Ns] = makeEnds(dualpsi,psi,mpo...;Lbound=Lbound,Rbound=Rbound)
-  for i = 1:psi.oc-1
-    Lupdate!(i,Lenv,dualpsi,psi,mpo...)
-  end
+  Lenv[1],Renv[Ns] = makeEnds(dualpsi,psi,mpo...,Lbound=Lbound,Rbound=Rbound)
 
   for i = Ns:-1:psi.oc+1
     Rupdate!(i,Renv,dualpsi,psi,mpo...)
+  end
+  for i = 1:psi.oc-1
+    Lupdate!(i,Lenv,dualpsi,psi,mpo...)
   end
   return Lenv,Renv
 end
@@ -3071,27 +3045,19 @@ function mpoterm(operator::TensType,ind::Array{P,1},base::Array{G,1},trail::Tens
   return mpoterm(1.,operator,ind,base,trail...)
 end
 
-function mpoterm(W::DataType,base::Array{G,1}) where G <: densTensType
-  mpotens = Array{Array{W,4},1}(undef,length(base))
+function mpoterm(base::Array{G,1}) where G <: densTensType
+  mpotens = Array{Array{eltype(base[1]),2},1}(undef,length(base))
   O = zero(base[1])
-  d = size(O,1)
-  temp = [O base[1]]
-  mpotens[1] = reshape(temp,1,d,d,2)
+  mpotens[1] = [base[i];
+                O]
   @inbounds for i = 2:length(base)-1
     O = zero(base[i])
-    d = size(O,1)
-    mpotens[i] = reshape([base[i] O;
-                  O base[i]],2,d,d,2)
+    mpotens[i] = [base[i] O;
+                  O base[i]]
   end
   O = zero(base[end])
-  d = size(O,1)
-  mpotens[end] = reshape([base[end];
-                  O],2,d,d,1)
+  mpotens[end] = [O base[i]]
   return MPO(mpotens)
-end
-
-function mpoterm(base::Array{G,1}) where G <: densTensType
-  return mpoterm(eltype(base[1]),base)
 end
 
 function mpoterm(val::Number,operator::TensType,ind::Integer,base::Array{G,1},trail::TensType...)::MPO where {P <: Integer, G <: densTensType}
