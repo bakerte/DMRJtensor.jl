@@ -351,9 +351,71 @@ function eigen(AA::tens{W},B::tens{R}...;cutoff::Float64 = 0.,
   X = reshape(AA.T,size(AA)...)
   D,U,truncerr,sumD = eigen(X,B...,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,keepdeg=keepdeg)
   tensD = tens(Float64,D)
-  tensU = tens(T,U)
+  tensU = tens(W,U)
   return tensD,tensU,truncerr,mag
 end
+
+
+
+
+
+
+#=
+"""
+    D,U = eigenUDU(AA[,B,cutoff=,m=,mag=,minm=,nozeros=])
+
+Eigensolver routine with truncation (output to `D` and `U` just as `LinearAlgebra`'s function); accepts Qtensors; arguments similar to `svd`; can perform generalized eigenvalue problem with `B` overlap matrix
+
+See also: [`svd`](@ref)
+"""
+function eigenUDU(AA::Array{W,2},B::Array{W,2}...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,
+                minm::Integer=1,nozeros::Bool=false,power::Number=1,effZero::Float64 = 1E-16,keepdeg::Bool=false) where {W <: Number}
+
+  Dsq,U = libeigen(AA,B...)
+
+  thism,sizeD,truncerr,sumD = findnewm(Dsq,m,minm,mag,cutoff,effZero,nozeros,power,keepdeg)
+  if sizeD > thism
+    @inbounds truncU = U[:,sizeD-thism+1:sizeD]
+    @inbounds truncD = Dsq[sizeD-thism+1:sizeD]
+  elseif sizeD < minm
+    truncU = zeros(eltype(U),size(U,1),minm)
+    truncD = zeros(eltype(Dsq),minm)
+    @inbounds truncU[:,1:thism] = U
+    @inbounds truncD[1:thism] = Dsq
+  else
+    truncU = U
+    truncD = Dsq
+  end
+  finalD = Array(LinearAlgebra.Diagonal(truncD))::Array{Float64,2}
+  tensUt = conj!(permutedims(truncU,[2,1]))
+  return truncU,finalD,tensUt,truncerr,sumD
+end
+
+function eigenUDU(AA::tens{W},B::tens{R}...;cutoff::Float64 = 0.,
+              m::Integer = 0,mag::Float64=0.,minm::Integer=2,
+              nozeros::Bool=false,recursive::Bool = false,keepdeg::Bool=false) where {W <: Number,R <: Number}
+  X = reshape(AA.T,size(AA)...)
+  D,U,truncerr,sumD = eigen(X,B...,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,keepdeg=keepdeg)
+  tensD = tens(Float64,D)
+  tensU = tens(W,U)
+  tensUt = conj!(permutedims(tensU,[2,1]))
+  return tensU,tensD,tensUt,truncerr,mag
+end
+
+function eigenUDU(AA::TensType,vecA::Array{Array{W,1},1},
+                B::TensType...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,
+                minm::Integer=1,nozeros::Bool=false,keepdeg::Bool=false) where W <: Integer
+  AB,Lsizes,Rsizes = getorder(AA,vecA)
+  U,D,Ut,truncerr,newmag = eigenUDU(AB,B...,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,keepdeg=keepdeg)
+  outU = unreshape!(U,Lsizes...,size(D,1))
+  Ut = unreshape!(Ut,size(D,1),Lsizes...)
+  outUt = permutedims!(Ut,vcat([1],[i for i = ndims(Ut):-1:2]))
+  return outU,D,outUt,truncerr,newmag
+end  
+export eigenUDU
+=#
+
+
 
 import .LinearAlgebra.eigvals
 """
@@ -439,7 +501,8 @@ Reshapes `AA` for `svd` and then unreshapes U and V matrices on return; `vecA` i
 """
 function qr(AA::TensType,vecA::Array{Array{W,1},1}) where W <: Integer
   AB,Lsizes,Rsizes = getorder(AA,vecA)
-  Qmat,Rmat,truncerr,newmag = qr(AB)
+  Qmat,Rmat = qr(AB)
+  truncerr,newmag = 0.,1.
 
   innerdim = size(Qmat,2)
 
@@ -465,7 +528,9 @@ Reshapes `AA` for `svd` and then unreshapes U and V matrices on return; `vecA` i
 """
 function lq(AA::TensType,vecA::Array{Array{W,1},1}) where W <: Integer
   AB,Lsizes,Rsizes = getorder(AA,vecA)
-  Lmat,Qmat,truncerr,newmag = lq(AB)
+  Lmat,Qmat = lq(AB)
+
+  truncerr,newmag = 0.,1.
 
   innerdim = size(Qmat,1)
 
@@ -546,8 +611,9 @@ export polar
 #using ..Qtensor
 
 function makeU(nQN::Integer,keepq::Array{Bool,1},outU::Array{Array{W,2},1},QtensA::Qtens{W,Q},
-                finalinds::Array{Array{P,2},1},newqindexL::Array{Array{P,1},1},newqindexLsum::Array{Array{Q,1},1},
+                finalinds::Array{Array{P,2},1},newqindexL::Array{P,1},newqindexLsum::Array{Q,1},
                 leftflux::Bool,Linds::Array{P,1},thism::Integer) where {W <: Number, Q <: Qnum, P <: Integer}
+
   finalnQN = sum(keepq)
   finalUinds = Array{NTuple{2,Array{P,2}},1}(undef,finalnQN)
   newQblocksum = Array{NTuple{2,Q},1}(undef,finalnQN)
@@ -559,44 +625,67 @@ function makeU(nQN::Integer,keepq::Array{Bool,1},outU::Array{Array{W,2},1},Qtens
       right = finalinds[q]
       finalUinds[counter] = (left,right)
       
-      newQblocksum[counter] = (QtensA.Qblocksum[q][1],newqindexLsum[1][q])
+      newQblocksum[counter] = (QtensA.Qblocksum[q][1],newqindexLsum[q])
     end
   end
-  finalUQnumMat = vcat(QtensA.QnumMat[Linds],newqindexL)
+  finalUQnumMat = Array{Array{intType,1},1}(undef,length(Linds)+1)
+  @inbounds @simd for q = 1:length(Linds)
+    finalUQnumMat[q] = QtensA.QnumMat[Linds[q]]
+  end
+  finalUQnumMat[end] = newqindexL
+
   Uflux = leftflux ? QtensA.flux : Q()
 
-  newUQsize = [[i for i = 1:length(Linds)],[length(Linds) + 1]]
-  newUblocks = (newUQsize...,)
-  finalUQnumSum = vcat(QtensA.QnumSum[Linds],newqindexLsum)
+  leftinds = [i for i = 1:length(Linds)]
+  rightinds = [length(Linds) + 1]
+  newUQsize = [leftinds,rightinds]
+  newUblocks = (leftinds,rightinds)
+  finalUQnumSum = Array{Array{Q,1},1}(undef,length(Linds)+1)
+  @inbounds for q = 1:length(Linds)
+    finalUQnumSum[q] = QtensA.QnumSum[Linds[q]]
+  end
+  finalUQnumSum[end] = newqindexLsum
 
   return Qtens{W,Q}(newUQsize,outU,finalUinds,newUblocks,newQblocksum,finalUQnumMat,finalUQnumSum,Uflux)
 end
 
 function makeV(nQN::Integer,keepq::Array{Bool,1},outV::Array{Array{W,2},1},QtensA::Qtens{W,Q},
-                finalinds::Array{Array{P,2},1},newqindexR::Array{Array{P,1},1},newqindexRsum::Array{Array{Q,1},1},
+                finalinds::Array{Array{P,2},1},newqindexR::Array{P,1},newqindexRsum::Array{Q,1},
                 leftflux::Bool,Rinds::Array{P,1},thism::Integer) where {W <: Number, Q <: Qnum, P <: Integer}
+       
   finalnQN = sum(keepq)
   finalVinds = Array{NTuple{2,Array{P,2}},1}(undef,finalnQN)
   newQblocksum = Array{NTuple{2,Q},1}(undef,finalnQN)
   counter = 0
-  for q = 1:nQN
+  @inbounds for q = 1:nQN
     if keepq[q]
       counter += 1
       left = finalinds[q]
       right = QtensA.ind[q][2]
       finalVinds[counter] = (left,right)
 
-      newQblocksum[counter] = (newqindexRsum[1][q],QtensA.Qblocksum[q][2])
+      newQblocksum[counter] = (newqindexRsum[q],QtensA.Qblocksum[q][2])
     end
   end
-  finalVQnumMat = vcat(newqindexR,QtensA.QnumMat[Rinds])
+  finalVQnumMat = Array{Array{intType,1},1}(undef,length(Rinds)+1)
+  finalVQnumMat[1] = newqindexR
+  for q = 1:length(Rinds)
+    finalVQnumMat[q+1] = QtensA.QnumMat[Rinds[q]]
+  end
+
+
   Vflux = !leftflux ? QtensA.flux : Q()
 
-  newVQsize = [[1],[i+1 for i = 1:length(Rinds)]]
-  newVblocks = (newVQsize...,)
+  leftinds = [1]
+  rightinds = [i+1 for i = 1:length(Rinds)]
+  newVQsize = [leftinds,rightinds]
+  newVblocks = (leftinds,rightinds)
 
-  finalVQnumSum = vcat(newqindexRsum,QtensA.QnumSum[Rinds])
-
+  finalVQnumSum = Array{Array{Q,1},1}(undef,length(Rinds)+1)
+  finalVQnumSum[1] = newqindexRsum
+  @inbounds for q = 1:length(Rinds)
+    finalVQnumSum[q+1] = QtensA.QnumSum[Rinds[q]]
+  end
   return Qtens{W,Q}(newVQsize,outV,finalVinds,newVblocks,newQblocksum,finalVQnumMat,finalVQnumSum,Vflux)
 end
 
@@ -604,28 +693,31 @@ end
 
 
 function makeD(nQN::Integer,keepq::Array{Bool,1},outD::Array{Array{W,2},1},QtensA::Qtens{W,Q},
-                finalinds::Array{Array{P,2},1},newqindexL::Array{Array{P,1},1},newqindexR::Array{Array{P,1},1},
-                newqindexRsum::Array{Array{Q,1},1},newqindexLsum::Array{Array{Q,1},1},thism::Integer) where {W <: Number, Q <: Qnum, P <: Integer}
+                finalinds::Array{Array{P,2},1},newqindexL::Array{P,1},newqindexR::Array{P,1},
+                newqindexRsum::Array{Q,1},newqindexLsum::Array{Q,1},thism::Integer) where {W <: Number, Q <: Qnum, P <: Integer}
+
   finalnQN = sum(keepq)
   finalDinds = Array{NTuple{2,Array{P,2}},1}(undef,finalnQN)
   newQblocksum = Array{NTuple{2,Q},1}(undef,finalnQN)
   counter = 0
-  for q = 1:nQN
+  @inbounds @simd for q = 1:nQN
     if keepq[q]
       counter += 1
       left = finalinds[q]
       right = finalinds[q]
       finalDinds[counter] = (left,right)
 
-      newQblocksum[counter] = (newqindexRsum[1][q],newqindexLsum[1][q])
+      newQblocksum[counter] = (newqindexRsum[q],newqindexLsum[q])
     end
   end
-  finalDQnumMat = vcat(newqindexR,newqindexL)
+  finalDQnumMat = [newqindexR,newqindexL]
 
   Dflux = Q()
-  newDQsize = [[1],[2]]
-  newDblocks = (newDQsize...,)
-  finalDQnumSum = vcat(newqindexRsum,newqindexLsum)
+  leftinds = [1]
+  rightinds = [2]
+  newDQsize = [leftinds,rightinds]
+  newDblocks = (leftinds,rightinds)
+  finalDQnumSum = [newqindexRsum,newqindexLsum]
 
   return Qtens{W,Q}(newDQsize,outD,finalDinds,newDblocks,newQblocksum,finalDQnumMat,finalDQnumSum,Dflux)
 end
@@ -636,16 +728,23 @@ function truncate(sizeinnerm::Integer,newD::Array{Array{W,1},1},power::Number,
   rhodiag = Array{Float64,1}(undef,sizeinnerm)
   counter = 0
 
-  @inbounds #=Threads.@threads=# for q = 1:nQN
-    offset = q == 1 ? 0 : sum(w->length(newD[w]),1:q-1)
+  @inbounds for q = 1:nQN
+    offset = 0
+    @inbounds @simd for w = 1:q-1
+      offset += length(newD[w])
+    end
+
     newvals = newD[q]
-    for x = 1:length(newvals)
+    @inbounds @simd for x = 1:length(newvals)
       rhodiag[x + offset] = abs(newvals[x])^power
     end
   end
 
   if isapprox(mag,0.)
-    sumD = sum(x->rhodiag[x],1:length(rhodiag))
+    sumD = 0.
+    @inbounds @simd for x = 1:length(rhodiag)
+      sumD += rhodiag[x]
+    end
   else
     sumD = mag
   end
@@ -669,34 +768,61 @@ function truncate(sizeinnerm::Integer,newD::Array{Array{W,1},1},power::Number,
   end
   thism = max(m == 0 ? y : min(m,y),1)
 
-  qstarts = vcat([0],[sum(w->length(newD[w]),1:q-1) for q = 2:nQN],[sizeinnerm])
-  qranges = [UnitRange(qstarts[q]+1,qstarts[q+1]) for q = 1:nQN]  
-  keepers = [Array{intType,1}(undef,thism) for q = 1:nQN]
+  qstarts = Array{intType,1}(undef,nQN+1)
+  qstarts[1] = 0
+  @inbounds @simd for q = 2:nQN
+    qstarts[q] = 0
+    @inbounds @simd for w = 1:q-1
+      qstarts[q] += length(newD[w])
+    end
+  end
+  qstarts[end] = sizeinnerm
+  
+  qranges = Array{UnitRange{intType},1}(undef,nQN)
+  @inbounds @simd for q = 1:nQN
+    qranges[q] = UnitRange(qstarts[q]+1,qstarts[q+1])
+  end
+  
+  keepers = Array{Array{intType,1},1}(undef,nQN)
+  @inbounds @simd for q = 1:nQN
+    keepers[q] = Array{intType,1}(undef,thism)
+  end
   sizekeepers = zeros(intType,nQN)
-  #=Threads.@threads=# for q = 1:nQN
-    for x = 1:thism
-      if order[x] in qranges[q]
+  for q = 1:nQN
+    @inbounds for x = 1:thism
+      if qranges[q][1] <= order[x] <= qranges[q][end] #order[x] in qranges[q]
         sizekeepers[q] += 1
         keepers[q][sizekeepers[q]] = order[x] - qstarts[q]
       end
     end
   end
-  keepers = [keepers[q][1:sizekeepers[q]] for q = 1:nQN]
+  @inbounds for q = 1:nQN
+    if sizekeepers[q] != length(keepers[q])
+      keepers[q] = keepers[q][1:sizekeepers[q]]
+    end
+  end
+  
   finalinds = Array{Array{intType,2},1}(undef,nQN)
-  #=Threads.@threads=# for q = 1:nQN
-    offset = q > 1 ? sum(w->length(keepers[w]),1:(q-1)) : 0
-    tempvec = [i + offset - 1 for i = 1:length(keepers[q])]
-    finalinds[q] = reshape(tempvec,1,length(keepers[q]))
+  @inbounds for q = 1:nQN
+    offset = 0
+    @inbounds @simd for w = 1:q-1
+      offset += length(keepers[w])
+    end
+    tempvec = Array{intType,2}(undef,1,length(keepers[q])) #[i + offset - 1 for i = 1:sizekeepers[q]]
+    @inbounds @simd for i = 1:length(keepers[q])
+      tempvec[i] = i + offset - 1
+    end
+    finalinds[q] = tempvec
   end
   return finalinds,thism,qstarts,qranges,keepers,truncerr,sumD
 end
 
-function threeterm(arr::Array{Array{W,2},1};decomposer::Function=safesvd) where W <: Number
+@inline function threeterm(arr::Array{Array{W,2},1};decomposer::Function=safesvd) where W <: Number
   nQN = length(arr)
   newU = Array{Array{W,2},1}(undef,nQN)
   newD = Array{Array{W,1},1}(undef,nQN)
   newV = Array{Array{W,2},1}(undef,nQN)
-  #=Threads.@threads=# for q = 1:nQN
+  for q = 1:nQN
     newU[q],newD[q],newV[q] = decomposer(arr[q])
   end
   return newU,newD,newV
@@ -716,17 +842,24 @@ function svd(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
   nQN = length(A.T)
 
   LRinds = 1
-  QNsummary = [inv(A.Qblocksum[q][LRinds]) for q = 1:nQN]
+  QNsummary = Array{Q,1}(undef,nQN)
+  invQNsummary = Array{Q,1}(undef,nQN)
+  @inbounds @simd for q = 1:nQN
+    invQNsummary[q] = A.Qblocksum[q][LRinds]
+    QNsummary[q] = inv(A.Qblocksum[q][LRinds])
+  end
 
   newU,newD,newV = threeterm(A.T)
   
-  sizeinnerm = sum(q->size(newD[q],1),1:nQN)
+  sizeinnerm = 0
+  @inbounds @simd for q = 1:nQN
+    sizeinnerm += size(newD[q],1)
+  end
     
   finalinds,thism,qstarts,qranges,keepers,truncerr,sumD = truncate(sizeinnerm,newD,power,nozeros,cutoff,m,nQN,mag,keepdeg)
 
-  newqindexL = [Array{intType,1}(undef,thism)]
+  newqindexL = Array{intType,1}(undef,thism)
   keepq = Array{Bool,1}(undef,nQN)
-
   tempD = Array{Array{W,2},1}(undef,nQN)
   @inbounds for q = 1:nQN
     keepq[q] = length(keepers[q]) > 0
@@ -737,15 +870,20 @@ function svd(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
       inputD = LinearAlgebra.Diagonal(newD[q][1:dimD])
       tempD[q] = Array(inputD)
       newV[q] = newV[q][keepers[q],:]
-      offset = q == 1 ? 0 : sum(w->length(finalinds[w]),1:q-1)
-      @simd for i = 1:length(finalinds[q])
-        newqindexL[1][i + offset] = q
+
+      offset = 0
+      @inbounds @simd for w = 1:q-1
+        offset += length(finalinds[w])
+      end
+      
+      @inbounds @simd for i = 1:length(finalinds[q])
+        newqindexL[i + offset] = q
       end
     end
   end
 
-  newqindexLsum = [QNsummary]
-  newqindexRsum = [inv.(QNsummary)]
+  newqindexLsum = QNsummary
+  newqindexRsum = invQNsummary
   newqindexR = newqindexL
 
 
@@ -763,6 +901,7 @@ function svd(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
   U = makeU(nQN,keepq,outU,A,finalinds,newqindexL,newqindexLsum,leftflux,Linds,thism)
   D = makeD(nQN,keepq,outD,A,finalinds,newqindexL,newqindexR,newqindexRsum,newqindexLsum,thism)
   V = makeV(nQN,keepq,outV,A,finalinds,newqindexR,newqindexRsum,leftflux,Rinds,thism)
+
   return U,D,V,truncerr,sumD
 end
 
@@ -772,17 +911,17 @@ end
 
 
 
-function twoterm(arr::Array{Array{W,2},1};decomposer::Function=libeigen,centerRank::Integer=1) where W <: Number
+@inline function twoterm(arr::Array{Array{W,2},1};decomposer::Function=libeigen,centerRank::Integer=1) where W <: Number
   nQN = length(arr)
   newU = Array{Array{W,2},1}(undef,nQN)
   newD = Array{Array{W,centerRank},1}(undef,nQN)
-  #=Threads.@threads=# for q = 1:nQN
+  for q = 1:nQN
     newD[q],newU[q] = decomposer(arr[q])
   end
   return newD,newU
 end
-
-function eigen(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
+#=
+function eigenUDU(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
               minm::Integer=1,nozeros::Bool=false,recursive::Bool=false,
               power::Number=1,leftflux::Bool=false,mag::Float64=0.,decomposer::Function=libeigen,keepdeg::Bool=false) where {W <: Number, Q <: Qnum}
 
@@ -837,50 +976,233 @@ function eigen(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
     outD = tempD
   end
 
+  outV = [conj!(permutedims(outU[q],[2,1])) for q = 1:length(outU)]
+
+  U = makeU(nQN,keepq,outU,A,finalinds,newqindexL,newqindexLsum,leftflux,Linds,thism)
+  D = makeD(nQN,keepq,outD,A,finalinds,newqindexL,newqindexR,newqindexRsum,newqindexLsum,thism)
+  V = makeV(nQN,keepq,outV,A,finalinds,newqindexR,newqindexRsum,leftflux,Rinds,thism)
+
+  return U,D,V,truncerr,sumD
+end
+=#
+function eigen(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
+              minm::Integer=1,nozeros::Bool=false,recursive::Bool=false,
+              power::Number=1,leftflux::Bool=false,mag::Float64=0.,decomposer::Function=libeigen,keepdeg::Bool=false) where {W <: Number, Q <: Qnum}
+
+  Tsize = QtensA.size
+  Linds = Tsize[1]
+  Rinds = Tsize[2]
+
+  A = changeblock(QtensA,Linds,Rinds)
+  nQN = length(A.T)
+
+  LRinds = 1
+  QNsummary = Array{Q,1}(undef,nQN)
+  invQNsummary = Array{Q,1}(undef,nQN)
+  @inbounds @simd for q = 1:nQN
+    invQNsummary[q] = A.Qblocksum[q][LRinds]
+    QNsummary[q] = inv(A.Qblocksum[q][LRinds])
+  end
+
+  
+
+  newD,newU = twoterm(A.T,decomposer=decomposer)
+
+
+  sizeinnerm = 0
+  @inbounds @simd for q = 1:nQN
+    sizeinnerm += size(newD[q],1)
+  end
+    
+  finalinds,thism,qstarts,qranges,keepers,truncerr,sumD = truncate(sizeinnerm,newD,power,nozeros,cutoff,m,nQN,mag,keepdeg)
+
+  newqindexL = Array{intType,1}(undef,thism)
+  keepq = Array{Bool,1}(undef,nQN)
+  tempD = Array{Array{W,2},1}(undef,nQN)
+  @inbounds for q = 1:nQN
+    keepq[q] = length(keepers[q]) > 0
+    if keepq[q]
+      newU[q] = newU[q][:,keepers[q]]
+      dimD = length(keepers[q])
+ 
+      inputD = LinearAlgebra.Diagonal(newD[q][1:dimD])
+      tempD[q] = Array(inputD)
+
+      offset = 0
+      @inbounds @simd for w = 1:q-1
+        offset += length(finalinds[w])
+      end
+      
+      @inbounds @simd for i = 1:length(finalinds[q])
+        newqindexL[i + offset] = q
+      end
+    end
+  end
+
+  newqindexLsum = QNsummary
+  newqindexRsum = invQNsummary
+  newqindexR = newqindexL
+
+
+  if sum(keepq) < nQN
+    outU = newU[keepq]
+    outD = tempD[keepq]
+  else
+    outU = newU
+    outD = tempD
+  end
+
   U = makeU(nQN,keepq,outU,A,finalinds,newqindexL,newqindexLsum,leftflux,Linds,thism)
   D = makeD(nQN,keepq,outD,A,finalinds,newqindexL,newqindexR,newqindexRsum,newqindexLsum,thism)
 
   return D,U,truncerr,sumD
 end
 
-function qr(QtensA::Qtens{W,Q};leftflux::Bool=false,decomposer::Function=libqr,mag::Number=1.) where {W <: Number, Q <: Qnum}
 
+
+
+
+
+
+
+
+
+
+
+
+
+#=
+
+function xmakeU(nQN::Integer,keepq::Array{Bool,1},outU::Array{Array{W,2},1},QtensA::Qtens{W,Q},
+                finalinds::Array{Array{P,2},1},newqindexL::Array{Array{P,1},1},newqindexLsum::Array{Array{Q,1},1},
+                leftflux::Bool,Linds::Array{P,1},thism::Integer) where {W <: Number, Q <: Qnum, P <: Integer}
+  finalnQN = sum(keepq)
+  finalUinds = Array{NTuple{2,Array{P,2}},1}(undef,finalnQN)
+  newQblocksum = Array{NTuple{2,Q},1}(undef,finalnQN)
+  counter = 0
+  for q = 1:nQN
+    if keepq[q]
+      counter += 1
+      left = QtensA.ind[q][1]
+      right = finalinds[q]
+      finalUinds[counter] = (left,right)
+      
+      newQblocksum[counter] = (QtensA.Qblocksum[q][1],newqindexLsum[1][q])
+    end
+  end
+  finalUQnumMat = vcat(QtensA.QnumMat[Linds],newqindexL)
+  Uflux = leftflux ? QtensA.flux : Q()
+
+  newUQsize = [[i for i = 1:length(Linds)],[length(Linds) + 1]]
+  newUblocks = (newUQsize...,)
+  finalUQnumSum = vcat(QtensA.QnumSum[Linds],newqindexLsum)
+
+  return Qtens{W,Q}(newUQsize,outU,finalUinds,newUblocks,newQblocksum,finalUQnumMat,finalUQnumSum,Uflux)
+end
+
+function xmakeV(nQN::Integer,keepq::Array{Bool,1},outV::Array{Array{W,2},1},QtensA::Qtens{W,Q},
+                finalinds::Array{Array{P,2},1},newqindexR::Array{Array{P,1},1},newqindexRsum::Array{Array{Q,1},1},
+                leftflux::Bool,Rinds::Array{P,1},thism::Integer) where {W <: Number, Q <: Qnum, P <: Integer}
+  finalnQN = sum(keepq)
+  finalVinds = Array{NTuple{2,Array{P,2}},1}(undef,finalnQN)
+  newQblocksum = Array{NTuple{2,Q},1}(undef,finalnQN)
+  counter = 0
+  for q = 1:nQN
+    if keepq[q]
+      counter += 1
+      left = finalinds[q]
+      right = QtensA.ind[q][2]
+      finalVinds[counter] = (left,right)
+
+      newQblocksum[counter] = (newqindexRsum[1][q],QtensA.Qblocksum[q][2])
+    end
+  end
+  finalVQnumMat = vcat(newqindexR,QtensA.QnumMat[Rinds])
+  Vflux = !leftflux ? QtensA.flux : Q()
+
+  newVQsize = [[1],[i+1 for i = 1:length(Rinds)]]
+  newVblocks = (newVQsize...,)
+
+  finalVQnumSum = vcat(newqindexRsum,QtensA.QnumSum[Rinds])
+
+  return Qtens{W,Q}(newVQsize,outV,finalVinds,newVblocks,newQblocksum,finalVQnumMat,finalVQnumSum,Vflux)
+end
+=#
+
+
+function qr(QtensA::Qtens{W,Q};leftflux::Bool=false,decomposer::Function=libqr,mag::Number=1.) where {W <: Number, Q <: Qnum}
   Rsize = QtensA.size
   Linds = Rsize[1]
   Rinds = Rsize[2]
 
+#  checkflux(QtensA)
+
   A = changeblock(QtensA,Linds,Rinds)
+
+#  checkflux(A)
 
   nQN = length(A.T)
 
   LRinds = 1
-  QNsummary = [inv(A.Qblocksum[q][LRinds]) for q = 1:nQN]
+  QNsummary = Array{Q,1}(undef,nQN)
+  invQNsummary = Array{Q,1}(undef,nQN)
+  @inbounds @simd for q = 1:nQN
+    invQNsummary[q] = A.Qblocksum[q][LRinds]
+    QNsummary[q] = inv(A.Qblocksum[q][LRinds])
+  end
 
   newU,newV = twoterm(A.T,decomposer=decomposer,centerRank=2)
 
-  sizeinnerm = sum(q->size(newU[q],2),1:nQN)
-
-  thism = sizeinnerm
+  thism = 0
+  @inbounds @simd for q = 1:length(newU)
+    thism += size(newU[q],2)
+  end
   sumD = mag
 
   outU,outV = newU,newV
 
-  qstarts = vcat([0],[sum(w->size(newU[w],2),1:q-1) for q = 2:nQN],[thism])
-  qranges = [UnitRange(qstarts[q]+1,qstarts[q+1]) for q = 1:nQN]
+
+  qstarts = Array{intType,1}(undef,nQN+1)
+  qstarts[1] = 0
+  @inbounds for q = 2:nQN
+    qstarts[q] = 0
+    @inbounds @simd for w = 1:q-1
+      qstarts[q] += size(newU[w],2)
+    end
+  end
+  qstarts[end] = thism
+#  qranges = [UnitRange(qstarts[q]+1,qstarts[q+1]) for q = 1:nQN]
+  qranges = Array{UnitRange{intType},1}(undef,nQN)
+  @inbounds @simd for q = 1:nQN
+    qranges[q] = UnitRange(qstarts[q]+1,qstarts[q+1])
+  end
 
   truncerr = 0.
 
-  newqindexL = [Array{intType,1}(undef,thism)]
-  finalinds = [reshape([i-1 for i = qranges[q]],1,length(qranges[q])) for q = 1:length(QNsummary)]
+  newqindexL = Array{intType,1}(undef,thism)
+  finalinds = Array{Array{intType,2},1}(undef,nQN)
+  @inbounds @simd for q = 1:nQN
+    finalinds[q] = Array{intType,2}(undef,1,length(qranges[q]))
+    @inbounds @simd for i = 1:length(qranges[q])
+      w = qranges[q][i]
+      finalinds[q][i] = w-1
+    end
+  end
+#  finalinds = [reshape([i-1 for i = qranges[q]],1,length(qranges[q])) for q = 1:length(QNsummary)]
   @inbounds for q = 1:nQN
-    offset = q == 1 ? 0 : sum(w->length(finalinds[w]),1:q-1)
-    @simd for i = 1:length(finalinds[q])
-      newqindexL[1][i + offset] = q
+    offset = 0
+    @inbounds @simd for w = 1:q-1
+      offset += length(finalinds[w])
+    end
+
+    @inbounds @simd for i = 1:length(finalinds[q])
+      newqindexL[i + offset] = q
     end
   end
 
-  newqindexLsum = [QNsummary]
-  newqindexRsum = [inv.(QNsummary)]
+
+  newqindexLsum = QNsummary
+  newqindexRsum = invQNsummary
   newqindexR = newqindexL
 
   keepq = [true for q = 1:nQN]
@@ -888,6 +1210,79 @@ function qr(QtensA::Qtens{W,Q};leftflux::Bool=false,decomposer::Function=libqr,m
   U = makeU(nQN,keepq,outU,A,finalinds,newqindexL,newqindexLsum,leftflux,Linds,thism)
   V = makeV(nQN,keepq,outV,A,finalinds,newqindexR,newqindexRsum,leftflux,Rinds,thism)
 
+#=
+
+  newU,newV = twoterm(A.T,decomposer=decomposer,centerRank=2)
+
+  thism = 0
+  @simd for q = 1:length(newU)
+    thism += size(newU[q],2)
+  end
+  sumD = mag
+
+  outU,outV = newU,newV
+
+  qstarts = Array{intType,1}(undef,nQN+1)
+  qstarts[1] = 0
+  @inbounds for q = 2:nQN
+    qstarts[q] = 0
+    @inbounds @simd for w = 1:q-1
+      qstarts[q] += size(newU[w],2)
+    end
+  end
+  qstarts[end] = thism
+#  qstarts = vcat([0],[sum(w->size(newU[w],2),1:q-1) for q = 2:nQN],[thism])
+  qranges = Array{UnitRange{intType},1}(undef,nQN)
+  @inbounds @simd for q = 1:nQN
+    qranges[q] = UnitRange(qstarts[q]+1,qstarts[q+1])
+  end
+  
+  truncerr = 0.
+
+  newqindexL = Array{intType,1}(undef,thism)
+  finalinds = Array{Array{intType,2},1}(undef,nQN)
+  @inbounds @simd for q = 1:nQN
+    finalinds[q] = Array{intType,2}(undef,1,length(qranges[q]))
+    @inbounds @simd for i = 1:length(qranges[q])
+      w = qranges[q][i]
+      finalinds[q][i] = w-1
+    end
+  end
+#  finalinds = [reshape([i-1 for i = qranges[q]],1,length(qranges[q])) for q = 1:length(QNsummary)]
+  @inbounds for q = 1:nQN
+    offset = 0
+    @inbounds @simd for w = 1:q-1
+      offset += length(finalinds[w])
+    end
+
+    @inbounds @simd for i = 1:length(finalinds[q])
+      newqindexL[i + offset] = q
+    end
+  end
+
+  newqindexLsum = QNsummary
+  newqindexRsum = invQNsummary
+  newqindexR = newqindexL
+
+  keepq = [true for q = 1:nQN]
+
+  U = makeU(nQN,keepq,outU,A,finalinds,newqindexL,newqindexLsum,leftflux,Linds,thism)
+  V = makeV(nQN,keepq,outV,A,finalinds,newqindexR,newqindexRsum,leftflux,Rinds,thism)
+
+
+=#
+#=
+  println(U)
+  println(V)
+
+  checkflux(U)
+  checkflux(V)
+
+#  checkcontract(U,2,V,1)
+
+  gg = contract(U,2,V,1)
+  println("qr test: ",isapprox(norm(A),norm(gg)))
+=#
   return U,V,truncerr,mag
 end
 export qr
@@ -925,8 +1320,8 @@ function svdvals(A::denstens)
 end
 
 function makeDvec(nQN::Integer,keepq::Array{Bool,1},outD::Array{Array{W,2},1},QtensA::Qtens{W,Q},
-                finalinds::Array{Array{P,2},1},newqindexL::Array{Array{P,1},1},newqindexR::Array{Array{P,1},1},
-                newqindexRsum::Array{Array{Q,1},1},newqindexLsum::Array{Array{Q,1},1},thism::Integer) where {W <: Number, Q <: Qnum, P <: Integer}
+                finalinds::Array{Array{P,2},1},newqindexL::Array{P,1},newqindexR::Array{P,1},
+                newqindexRsum::Array{Q,1},newqindexLsum::Array{Q,1},thism::Integer) where {W <: Number, Q <: Qnum, P <: Integer}
   finalnQN = sum(keepq)
   finalDinds = Array{NTuple{2,Array{P,2}},1}(undef,finalnQN)
   newQblocksum = Array{NTuple{2,Q},1}(undef,finalnQN)
@@ -941,12 +1336,14 @@ function makeDvec(nQN::Integer,keepq::Array{Bool,1},outD::Array{Array{W,2},1},Qt
       newQblocksum[counter] = (newqindexRsum[1][q],newqindexLsum[1][q])
     end
   end
-  finalDQnumMat = vcat(newqindexR,newqindexL)
+  finalDQnumMat = [newqindexR,newqindexL]
 
   Dflux = Q()
-  newDQsize = [[1],intType[]]
-  newDblocks = (newDQsize...,)
-  finalDQnumSum = vcat(newqindexRsum,Q)
+  leftinds = intType[1]
+  rightinds = intType[]
+  newDQsize = [leftinds,rightinds]
+  newDblocks = (leftinds,rightinds)
+  finalDQnumSum = [newqindexRsum,newqindexLsum]
 
   return Qtens{W,Q}(newDQsize,outD,finalDinds,newDblocks,newQblocksum,finalDQnumMat,finalDQnumSum,Dflux)
 end

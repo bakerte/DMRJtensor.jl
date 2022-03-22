@@ -370,8 +370,8 @@ using ..tensor
   See also: [`@makeQNs`](@ref) [`U1`](@ref) [`Zn`](@ref) [`parity`](@ref) [`@makeQNs_printcode`](@ref) [`_generatecompositestring`](@ref)
   """
   macro fermion_makeQNs(name::String,Types...)
-	output = _generatecompositestring(name,Types...,Inheritfrom=fermionQnum,valfield=["parity"])
-	EExp = Meta.parse(output)
+    output = _generatecompositestring(name,Types...,Inheritfrom=fermionQnum,valfield=["parity"])
+    EExp = Meta.parse(output)
     return eval(EExp)
   end
   export @fermion_makeQNs
