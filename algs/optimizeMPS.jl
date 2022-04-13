@@ -249,8 +249,7 @@ function setEnv(dualpsi::MPS,psi::MPS,mpo::MPO,params::TNparams,
     params.psiRenv = environment(psiRenv)
   end
 
-  return params.Lenv,params.Renv,params.psiLenv,params.psiRenv,#=SvN,lastSvN,params.maxm,maxtrunc,biggestm,Ns,Nsteps,timer,=#
-         Nsteps,j#=,SvNvec,startoc=#
+  return params.Lenv,params.Renv,params.psiLenv,params.psiRenv,Nsteps,j
 end
 
 
@@ -310,8 +309,7 @@ function randRexpand(B::qarray,alpha::Float64,maxdim::Int64;bonddimfrac::Integer
   return B
 end
 
-function NsiteOps(mpo::MPO,params::TNparams)
-  nsites = params.nsites
+function NsiteOps(mpo::MPO,nsites::Integer)
   if nsites == 1
     out_mpo = mpo
   else
@@ -337,9 +335,7 @@ function NsiteOps(mpo::MPO,params::TNparams)
   return out_mpo
 end
 
-function singlesite_update(Lenv::TensType,Renv::TensType,tensors::TensType...)
-  AA = tensors[1]
-  ops = tensors[2]
+function singlesite_update(Lenv::TensType,Renv::TensType,AA::TensType,ops::TensType)
   LAA = contract(Lenv,(3,),AA,(1,))
   LopsAA = contract(LAA,(2,3),ops,(1,2))
   return contract(LopsAA,(2,4),Renv,(1,2))
@@ -347,6 +343,7 @@ function singlesite_update(Lenv::TensType,Renv::TensType,tensors::TensType...)
 #  LHpsi = contract(Lenv,[2,3],Hpsi,[1,4])
 #  return contract(LHpsi,[4,3],Renv,[1,2])
 end
+export singlesite_update
 
 function algvars(Q::DataType) #where Qn <: Qnum
   algvars{Float64,Q}(true, #load
@@ -550,7 +547,7 @@ function optmps(dualpsi::MPS,psi::MPS,mpo::MPO,beta::Array{P,1},prevpsi::MPS...;
   params.Lenv,params.Renv,params.psiLenv,params.psiRenv,#=SvN,lastSvN,m,maxtrunc,biggestm,Ns,=#Nsteps,#=timer,=#j#=,SvNvec,startoc=# = out
 
   #make operators...or identity
-  ops = makeOps(mpo,params)
+  ops = makeOps(mpo,params.nsites)
   
   range = max(2,params.nsites)-1
 
