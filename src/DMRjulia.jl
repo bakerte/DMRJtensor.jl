@@ -32,7 +32,7 @@ Funding for this program is graciously provided by:
 Running the julia kernel with --check-bounds=no can decrease runtimes by 20%
 
 """
-module DMRjulia
+module DMRJtensor
 import LinearAlgebra
 import Printf
 import Serialization
@@ -74,8 +74,8 @@ println()
 
 
 
-const DMRJtensor = DMRjulia
-export DMRJtensor
+const DMRjulia = DMRJtensor
+export DMRjulia
 
 libpath = "../lib/"
 
