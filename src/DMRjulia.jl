@@ -107,6 +107,8 @@ include(libpath*"autoMPO.jl")
 #basic models (Hubbard, Heisenberg, t-J)
 include(libpath*"models.jl")
 
+#General tensor networks
+include(libpath*"tensornetwork.jl")
 
 
 algpath = "../algs/"
