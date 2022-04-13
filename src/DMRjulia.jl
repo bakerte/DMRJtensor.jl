@@ -119,4 +119,4 @@ include(algpath*"DMRG.jl")
 
 end
 
-using .DMRjulia
+using .DMRJtensor
