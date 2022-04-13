@@ -66,7 +66,7 @@ export libmult
 #>------|    Matrix multiply     |---------<
 #       +------------------------+
 
-import LinearAlgebra.BLAS: BlasReal, BlasComplex, BlasFloat, BlasInt, DimensionMismatch, checksquare, axpy!
+import LinearAlgebra.BLAS: BlasReal, BlasComplex, BlasFloat, BlasInt, DimensionMismatch, checksquare, axpy!, @blasfunc, libblastrampoline
 
 function libmult! end
 
@@ -83,34 +83,41 @@ for (gemm, elty) in
              #       CHARACTER TRANSA,TRANSB
              # *     .. Array Arguments ..
              #       DOUBLE PRECISION A(LDA,*),B(LDB,*),C(LDC,*)
-        function libmult!(transA::AbstractChar, transB::AbstractChar,
-                       alpha::Union{($elty), Bool},
-                       A::Union{AbstractArray{$elty,N},tens{$elty}},
-                       B::Union{AbstractArray{$elty,M},tens{$elty}},
-                       beta::Union{($elty), Bool},
-                       C::Union{AbstractArray{$elty,G},tens{$elty}},
-                       m::Integer,ka::Integer,kb::Integer,n::Integer) where {N,M,G}
-            lda = max(1,transA == 'N' ? m : ka)
-            ldb = max(1,transB == 'N' ? ka : n)
-            ldc = max(1,m)
-            ccall((LinearAlgebra.BLAS.@blasfunc($gemm), LinearAlgebra.BLAS.libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                 Ref{BlasInt}, Ref{$elty}, Ptr{$elty}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ref{$elty}, Ptr{$elty},
-                 Ref{BlasInt}, Clong, Clong),
-                 transA, transB, m, n,
-                 ka, alpha, A,  lda,
-                 B, ldb, beta, C,
-                 ldc, 1, 1)
-            C
-        end
-        function libmult(transA::AbstractChar, transB::AbstractChar, alpha::($elty), A::Union{AbstractArray{$elty,N},tens{$elty}},B::Union{AbstractArray{$elty,M},tens{$elty}},m::Integer,ka::Integer,kb::Integer,n::Integer) where {N,M}
-            C = ndims(A) == 1 && ndims(B) == 1 ? Array{($elty),1}(undef,m*n) : Array{($elty),2}(undef,m,n)
-            libmult!(transA, transB, alpha, A, B, zero($elty), C,m,ka,kb,n)
-        end
-        function libmult(transA::AbstractChar, transB::AbstractChar, A::Union{AbstractArray{$elty,N},tens{$elty}},B::Union{AbstractArray{$elty,M},tens{$elty}},m::Integer,ka::Integer,kb::Integer,n::Integer) where {N,M}
-            libmult(transA, transB, one($elty), A, B,m,ka,kb,n)
-        end
+    function libmult!(transA::AbstractChar, transB::AbstractChar,
+                  alpha::Union{($elty), Bool},
+                  A::AbstractArray{$elty,N},
+                  B::AbstractArray{$elty,M},
+                  beta::Union{($elty), Bool},
+                  C::AbstractArray{$elty,G},
+                  m::Integer,ka::Integer,kb::Integer,n::Integer) where {N,M,G}
+        lda = max(1,transA == 'N' ? m : ka)
+        ldb = max(1,transB == 'N' ? ka : n)
+        ldc = max(1,m)
+        ccall((@blasfunc($gemm), libblastrampoline), Cvoid,
+            (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
+            Ref{BlasInt}, Ref{$elty}, Ptr{$elty}, Ref{BlasInt},
+            Ptr{$elty}, Ref{BlasInt}, Ref{$elty}, Ptr{$elty},
+            Ref{BlasInt}, Clong, Clong),
+            transA, transB, m, n,
+            ka, alpha, A,  lda,
+            B, ldb, beta, C,
+            ldc, 1, 1)
+        C
+    end
+    function libmult(transA::AbstractChar, transB::AbstractChar, alpha::($elty), A::AbstractArray{$elty,N},B::AbstractArray{$elty,M},m::Integer,ka::Integer,kb::Integer,n::Integer) where {N,M}
+        C = Array{($elty),2}(undef,m,n)
+        libmult!(transA, transB, alpha, A, B, zero($elty), C,m,ka,kb,n)
+        return C
+    end
+    function libmult(transA::AbstractChar, transB::AbstractChar, A::Union{AbstractArray{$elty,N},tens{$elty}},B::Union{AbstractArray{$elty,M},tens{$elty}},m::Integer,ka::Integer,kb::Integer,n::Integer) where {N,M}
+        libmult(transA, transB, one($elty), A, B,m,ka,kb,n)
+    end
+
+    function libmult(transA::AbstractChar, transB::AbstractChar, alpha::($elty), A::tens{$elty},B::tens{$elty},m::Integer,ka::Integer,kb::Integer,n::Integer) where {N,M}
+      C = Array{($elty),1}(undef,m*n)
+      libmult!(transA, transB, alpha, A.T, B.T, zero($elty), C,m,ka,kb,n)
+      return C
+    end
     end
 end
 
