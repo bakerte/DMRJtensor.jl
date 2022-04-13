@@ -9,8 +9,11 @@
 # This code is native to the julia programming language (v1.5.4+)
 #
 
+const libblastrampoline = "libblastrampoline"
+libblastrampoline_handle = C_NULL
 
-import LinearAlgebra.BLAS: BlasReal, BlasComplex, BlasFloat, BlasInt, DimensionMismatch, checksquare, axpy!, @blasfunc, libblastrampoline
+import LinearAlgebra: BlasReal, BlasComplex, BlasFloat, BlasInt, DimensionMismatch, checksquare, axpy!
+import LinearAlgebra.BLAS: @blasfunc #, libblastrampoline
 
 
 for elty in (:Float32,:Float64,:ComplexF32,:ComplexF64)
