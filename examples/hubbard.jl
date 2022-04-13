@@ -12,6 +12,7 @@
 
 path = "../src/"
 include(path*"DMRjulia.jl")
+using .DMRJtensor
 
 Ns = 10
 

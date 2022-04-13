@@ -11,6 +11,7 @@
 
 path = "../src/"
 include(path*"DMRjulia.jl")
+using .DMRJtensor
 
 #create reduced site problem (step 2)
 function make2site(Lenv,Renv,psiL,psiR,mpoL,mpoR)
