@@ -42,7 +42,7 @@ See also: [`Qnum`](@ref) [`makedens`](@ref) [`checkflux`](@ref)
 mutable struct Qtens{W <: Number,Q <: Qnum} <: qarray
   size::Array{Array{intType,1},1} #the size of the tensor if it were represented densely
   #^This is an array since it can change on reshape
-  T::Array{Array{W,2},1}
+  T::Union{Array{Array{W,2},1},Array{LinearAlgebra.Diagonal{W,Vector{W}},1}}
   ind::Array{NTuple{2,Array{intType,2}},1}
   currblock::NTuple{2,Array{intType,1}}
   Qblocksum::Array{NTuple{2,Q},1}
@@ -263,15 +263,18 @@ function Qtens(Op::densTensType,Qlabels::Array{Array{Q,1},1};zero::R=eltype(Op)(
   Op_mat = reshape(makeArray(Op),[pLinds,pRinds])
 
   pos = makepos(length(sizes))
+
   currval = 0
   saveval = 0
-  savepos = Int64[]
+  savepos = Array{Int64,1}(undef,length(pos))
   for x = 1:length(Op_mat)
-    position_incrementer!(pos,sizes)
+    position_incrementer!(pos,sizes) #could be faster, but isn't necessary here)
     if abs(Op_mat[x]) > currval
       currval = abs(Op_mat[x])
       saveval = x
-      savepos = copy(pos)
+      @inbounds for w = 1:length(pos)
+        savepos[w] = pos[w]
+      end
     end
   end
   x = saveval
@@ -455,7 +458,7 @@ function convertTens(T::DataType, Qt::Qtens{Z,Q}) where {Z <: Number, Q <: Qnum}
   else
     newsize = Qt.size #[copy(Qt.size[i]) for i = 1:length(Qt.size)]
     newQblocksum = Qt.Qblocksum
-    newT = [copy(Qt.T[w]) for w = 1:length(Qt.T)]
+    newT = [convert(Array{T,2},Qt.T[w]) for w = 1:length(Qt.T)]
     newcurrblock = Qt.currblock #(Qt.currblock[1],Qt.currblock[2]) #(copy(Qt.currblock[1]),copy(Qt.currblock[2]))
     return Qtens{T,Q}(newsize,newT,copy(Qt.ind),newcurrblock,newQblocksum,
                       Qt.QnumMat,Qt.QnumSum,Qt.flux)
@@ -1319,41 +1322,39 @@ function matchblocks(conjvar::NTuple{2,Bool},A::Qtens{W,Q},B::Qtens{S,Q};
 end
 
 function matchblocks(LQNs::Array{Q,1},RQNs::Array{Q,1};matchQN::Q=Q()) where Q <: Qnum
-  Aorder = Array{NTuple{2,intType},1}(undef,length(LQNs))
-  matchBool = Array{Bool,1}(undef,length(LQNs))
-
+  Aorder = Array{intType,1}(undef,length(LQNs))
+  outmatches = 0
   @inbounds for q = 1:length(LQNs)
-    matchBool[q] = false
+    matchBool = false
     w = 0
-    @inbounds while w < length(RQNs) && !matchBool[q]
+    @inbounds while w < length(RQNs) && !matchBool
       w += 1
       thisQN = LQNs[q] + RQNs[w]
-      matchBool[q] = thisQN == matchQN
+      matchBool = thisQN == matchQN
     end
-    newblock = matchBool[q] ? w : 0
-    loadtup!(Aorder,q,newblock)
+    if matchBool
+      Aorder[q] = w
+      outmatches += 1
+    else
+      Aorder[q] = 0
+    end
   end
 
-  outmatches = sum(matchBool)
-  if outmatches < length(Aorder)
-    outAorder = Array{NTuple{2,intType},1}(undef,outmatches) #Aorder[matchBool]
-    counter = 0
-    k = 0
-    @inbounds while counter < outmatches
-      k += 1
-      if matchBool[k]
-        counter += 1
-        outAorder[counter] = Aorder[k]
-      end
+  outAorder = Array{NTuple{2,intType},1}(undef,outmatches)
+  counter = 0
+  k = 0
+  @inbounds while counter < outmatches
+    k += 1
+    if Aorder[k] != 0
+      counter += 1
+      loadtup!(outAorder,counter,k,Aorder[k])
     end
-  else
-    outAorder = Aorder
   end
   return outAorder
 end
 
-@inline function loadtup!(Aorder::Array{NTuple{2,intType},1},q::intType,newblock::intType) where G
-  Aorder[q] = (q,newblock)
+@inline function loadtup!(Aorder::Array{NTuple{2,intType},1},q::intType,k::intType,newblock::intType)
+  Aorder[q] = (k,newblock)
   nothing
 end
 
@@ -1379,6 +1380,10 @@ function findextrablocks(B::Qtens{W,Q},commoninds::Array{NTuple{2,intType},1}) w
   return Bleftover
 end
 
+
+function -(M::Qtens{W,Q}) where {W <: Number, Q <: Qnum}
+  return tensorcombination(M,coeffs=(W(-1),))
+end
 
 
 function tensorcombination!(M::Qtens{W,Q}...;alpha::NTuple{N,W}=ntuple(i->eltype(M[1])(1),length(M)),fct::Function=*) where {Q <: Qnum, W <: Number, N}
@@ -1717,7 +1722,10 @@ function permutedims!(currQtens::Qtens{W,Q}, vec::Union{NTuple{N,P},Array{P,1}})
 
   permorder = Array{intType,1}(undef,length(order))
 
-  newRsize = Rsize[[vec...]]
+  newRsize = Array{Array{intType,1},1}(undef,length(vec))
+  @inbounds for q = 1:length(vec)
+    newRsize[q] = Rsize[vec[q]]
+  end
   counting = 0
   for k = 1:length(Rsize)
     @inbounds @simd for m = 1:length(Rsize[k])

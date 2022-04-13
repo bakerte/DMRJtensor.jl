@@ -761,7 +761,7 @@ See also: [`conj`](@ref) [`denstens`](@ref)`
 """
 function conj!(currtens::tens{W}) where W <: Number
   if !(W <: Real)
-    LinearAlgebra.conj!.(currtens.T)
+    LinearAlgebra.conj!(currtens.T)
   end
   return currtens
 end
@@ -1547,7 +1547,7 @@ function reshape!(M::Array{W,P}, S::NTuple{N,intType};merge::Bool=false) where {
 end
 
 function reshape!(M::Array{W,P}, S::intType...;merge::Bool=false) where {P,W <: Number}
-  return reshape!(M,S)
+  return reshape(M,S)
 end
 
 function reshape!(M::Array{W,P}, S::Array{intType,1};merge::Bool=false) where {P,W <: Number}
@@ -1586,20 +1586,15 @@ Reshape for dense tensors (other types make a copy) with output `G`; can also ma
 See also: [`reshape!`](@ref)
 """
 function reshape(M::tens{W}, S::intType...;merge::Bool=false) where W <: Number
-  newMsize = Array{intType,1}(undef,ndims(M))
-  @inbounds @simd for w = 1:length(newMsize)
-    newMsize[w] = S[w]
-  end
-  newM = tens{W}(newMsize,M.T)
-  return reshape!(newM,S)
+  return reshape!(copy(M),S)
 end
 
 function reshape(M::tens{W}, S::Array{intType,1};merge::Bool=false) where W <: Number
-  return reshape(M,S...)
+  return reshape(copy(M),S...)
 end
 
 function reshape(M::Array{W,N}, S::Array{intType,1};merge::Bool=false) where {W <: Number, N}
-  return reshape(M,S...)
+  return reshape(copy(M),S...)
 end
 
 """
@@ -1675,6 +1670,10 @@ function permutedims!(M::AbstractArray, vec::NTuple{N,intType}) where {N, W <: N
   return permutedims(M,vec)
 end
 
+function permutedims!(M::AbstractArray, vec::Array{intType,1}) where {N, W <: Number}
+  return permutedims(M,vec)
+end
+
 import Base.permutedims
 """
   G = permutedims(A,[1,3,2,...])
@@ -1683,90 +1682,95 @@ Permutes dimensions of `A` (identical usage to dense `size` call)
 
 See also: [`permutedims!`](@ref)
 """
-function permutedims(M::tens{W}, vec::Array{P,1}) where {W <: Number, P <: intType}
+function permutedims(M::Union{Array{W,G},tens{W}}, vec::Array{P,1}) where {W <: Number, P <: intType, G}
   return permutedims(M,(vec...,))
 end
 
-function permutedims(A::Array{W,G},iA::Union{Array{intType,1},NTuple{G,intType}}) where {W <: Number, G}
+function permutedims(A::Array{W,G},iA::NTuple{G,intType}) where {W <: Number, G}
   if issorted(iA)
     out = A
   else
     Asizes = ntuple(w->size(A,w),G)
     newsizes = ntuple(w->Asizes[iA[w]],G)
 
-    psize = 1
-    @inbounds @simd for w = 1:G
-      psize *= Asizes[w]
+    P = Array{W,G}(undef,newsizes...)
+
+    permutedims!(P,A,iA,Asizes,newsizes)
+  end
+  return P
+end
+
+function permutedims!(P::Array{W,R},A::Union{Array{W,R},tens{W}},iA::NTuple{G,intType},Asizes::NTuple{G,intType},newsizes::NTuple{G,intType}) where {W <: Number, G, R}
+  startind = 0
+  @inbounds while startind < G && iA[startind+1] == startind+1
+    startind += 1
+  end
+
+  permutevec = makepos(G)
+  if startind > 0
+    startindex = 1
+    @inbounds @simd for w = 1:startind
+      startindex *= newsizes[w]
+      permutevec[w] = newsizes[w]
+    end
+    @inbounds @simd for w = 1:startindex
+      P[w] = A[w]
+    end
+  else
+    startindex = 0
+  end
+
+  d1 = 1
+  @inbounds while iA[d1] != 1
+    d1 += 1
+  end
+  
+  notfirst = d1 > 1
+
+  i = startindex
+  @inbounds while i < length(A) 
+    i += 1
+    position_incrementer!(permutevec,Asizes)
+    newvec = ntuple(w->permutevec[iA[w]],G)
+
+    backZ = newvec[G]
+    @inbounds @simd for w = G-1:-1:d1
+      backZ -= 1
+      backZ *= newsizes[w]
+      backZ += newvec[w]
     end
 
+    foreZ = notfirst ? newvec[d1-1] : 0
+    @inbounds @simd for w = d1-2:-1:1
+      foreZ -= 1
+      foreZ *= newsizes[w]
+      foreZ += newvec[w]
+    end
     
-    P = similar(A)
-
-    startind = 0
-    @inbounds while startind < G && iA[startind+1] == startind+1
-      startind += 1
+    factor = 1
+    @inbounds @simd for h = d1-1:-1:1
+      factor *= newsizes[h]
     end
 
-    permutevec = makepos(G)
-    if startind > 0
-      startindex = 1
-      @inbounds @simd for w = 1:startind
-        startindex *= newsizes[w]
-        permutevec[w] = newsizes[w]
-      end
-      @inbounds @simd for w = 1:startindex
-        P[w] = A[w]
-      end
-    else
-      startindex = 0
-    end
-
-    d1 = 1
-    @inbounds while iA[d1] != 1
-      d1 += 1
-    end
-
-    i = startindex
-    @inbounds while i < length(A) 
-      i += 1
-      position_incrementer!(permutevec,Asizes)
-      newvec = ntuple(w->permutevec[iA[w]],G)
-
-      backZ = newvec[G]
-      @inbounds @simd for w = G-1:-1:d1
-        backZ -= 1
-        backZ *= newsizes[w]
-        backZ += newvec[w]
-      end
-
-      foreZ = d1 > 1 ? newvec[d1-1] : 0
-      @inbounds @simd for w = d1-2:-1:1
-        foreZ -= 1
-        foreZ *= newsizes[w]
-        foreZ += newvec[w]
-      end
-      
-      factor = 1
-      @inbounds @simd for h = d1-1:-1:1
-        factor *= newsizes[h]
-      end
-
+    if notfirst
       @inbounds for x = 0:Asizes[1]-1
         z = x + backZ
-        if d1 > 1
-          z -= 1
-          z *= factor
-          z += foreZ
-        end
+        z -= 1
+        z *= factor
+        z += foreZ
 
         P[z] = A[i+x]
       end
-      permutevec[1] = Asizes[1]
-      i += Asizes[1]-1
+    else
+      @inbounds for x = 0:Asizes[1]-1
+        z = x + backZ
+        P[z] = A[i+x]
+      end
     end
-    out = P
+    permutevec[1] = Asizes[1]
+    i += Asizes[1]-1
   end
-  return out
+  nothing
 end
 
 function permutedims(A::tens{W},iA::NTuple{G,intType}) where {W <: Number, G}
@@ -1780,71 +1784,10 @@ function permutedims(A::tens{W},iA::NTuple{G,intType}) where {W <: Number, G}
     @inbounds @simd for w = 1:G
       psize *= Asizes[w]
     end
-    
     P = Array{W,1}(undef,psize)
 
-    startind = 0
-    @inbounds while startind < G && iA[startind+1] == startind+1
-      startind += 1
-    end
+    permutedims!(P,A.T,iA,Asizes,newsizes)
 
-    permutevec = makepos(G)
-    if startind > 0
-      startindex = 1
-      @inbounds @simd for w = 1:startind
-        startindex *= newsizes[w]
-        permutevec[w] = newsizes[w]
-      end
-      @inbounds @simd for w = 1:startindex
-        P[w] = A.T[w]
-      end
-    else
-      startindex = 0
-    end
-
-    d1 = 1
-    @inbounds while iA[d1] != 1
-      d1 += 1
-    end
-
-    i = startindex
-    @inbounds while i < length(A.T) 
-      i += 1
-      position_incrementer!(permutevec,Asizes)
-      newvec = ntuple(w->permutevec[iA[w]],G)
-
-      backZ = newvec[G]
-      @inbounds @simd for w = G-1:-1:d1
-        backZ -= 1
-        backZ *= newsizes[w]
-        backZ += newvec[w]
-      end
-
-      foreZ = d1 > 1 ? newvec[d1-1] : 0
-      @inbounds @simd for w = d1-2:-1:1
-        foreZ -= 1
-        foreZ *= newsizes[w]
-        foreZ += newvec[w]
-      end
-      
-      factor = 1
-      @inbounds @simd for h = d1-1:-1:1
-        factor *= newsizes[h]
-      end
-
-      @inbounds for x = 0:Asizes[1]-1
-        z = x + backZ
-        if d1 > 1
-          z -= 1
-          z *= factor
-          z += foreZ
-        end
-
-        P[z] = A.T[i+x]
-      end
-      permutevec[1] = Asizes[1]
-      i += Asizes[1]-1
-    end
     vecnewsizes = [newsizes[w] for w = 1:G]
     out = tens{W}(vecnewsizes,P)
   end
@@ -1856,6 +1799,132 @@ end
 
 In-place joinindexenatation of tensors `A` (replaced for Qtensors only) and `B` along indices specified in `vec`
 """
+
+function joinindex!(bareinds::intvecType,A::Union{tens{W},Array{W,N}},B::Union{tens{W},Array{W,N}}) where {W <: Number, N}
+  inds = convIn(bareinds)
+
+  nA = ndims(A)
+  if typeof(A) <: denstens || typeof(B) <: denstens
+    finalsize = Array{intType,1}(undef,nA)
+    @inbounds @simd for w = 1:nA
+      finalsize[w] = size(A,w)
+    end
+    for w = 1:length(inds)
+      finalsize[inds[w]] += size(B,inds[w])
+    end
+  else
+    finalsize = ntuple(w-> w in inds ? size(A,w) + size(B,w) : size(A,w),nA)
+  end
+
+  Asize = size(A)
+  Bsize = size(B)
+
+  
+
+  if length(inds) > 1
+    if typeof(A) <: denstens || typeof(B) <: denstens
+      Csize = 1
+      for w = 1:nA
+        Csize *= finalsize[w]
+      end
+      C = zeros(W,Csize)
+    else
+      C = zeros(W,finalsize)
+    end
+  else
+    if typeof(A) <: denstens || typeof(B) <: denstens
+      Csize = 1
+      for w = 1:nA
+        Csize *= finalsize[w]
+      end
+      C = Array{W,1}(undef,Csize)
+    else
+      C = Array{W,nA}(undef,finalsize)
+    end
+  end
+  Aloop!(C,A,finalsize,Asize)
+  Bloop!(C,B,finalsize,Bsize,inds,Asize)
+
+  if typeof(A) <: denstens || typeof(B) <: denstens
+    C = tens{W}(finalsize,C)
+  end
+  return C
+end
+
+function Aloop!(C::Union{Array{W,nA},Array{W,1}},A::Union{tens{W},Array{W,nA}},finalsize::Union{NTuple{nA,intType},Array{intType,1}},Asize::NTuple{nA,intType}) where {nA, W <: Number}
+  pos = makepos(nA)
+  d1 = 1
+#  @inbounds while d1 < nA && Asize[d1] == 1
+#    d1 += 1
+#  end
+  dimA = size(A,d1)
+
+  Aysize = 1
+  @inbounds @simd for w = d1+1:nA
+    Aysize *= size(A,w)
+  end
+
+  p = 0
+  for y = 1:Aysize
+    position_incrementer!(pos,Asize)
+    backZ = pos[nA]
+    @inbounds @simd for w = nA-1:-1:d1
+      backZ -= 1
+      backZ *= finalsize[w]
+      backZ += pos[w]
+    end
+    @inbounds @simd for x = 0:dimA-1
+      p += 1
+      C[x + backZ] = A[p]
+    end
+    pos[d1] += dimA
+  end
+  nothing
+end
+
+function Bloop!(C::Union{Array{W,nA},Array{W,1}},B::Union{tens{W},Array{W,nA}},finalsize::Union{NTuple{nA,intType},Array{intType,1}},Bsize::NTuple{nA,intType},inds::NTuple{G,intType},Asize::NTuple{nA,intType}) where {nA, G, W <: Number}
+  pos = makepos(nA) #makepos!(pos)
+  Bpos = makepos(nA)
+
+  d1 = 1
+#  @inbounds while d1 < nA && Bsize[d1] == 1
+#    d1 += 1
+#  end
+  dimB = size(B,d1)
+
+  Bysize = 1
+  @inbounds @simd for w = d1+1:nA
+    Bysize *= size(B,w)
+  end
+  p = 0
+  for y = 1:Bysize
+
+    position_incrementer!(Bpos,Bsize)
+
+    @inbounds @simd for w = 1:nA
+      pos[w] = Bpos[w]
+    end
+
+    @inbounds @simd for w = 1:length(inds)
+      pos[inds[w]] += Asize[inds[w]]
+    end
+
+    backZ = pos[nA]
+    @inbounds @simd for w = nA-1:-1:d1
+      backZ -= 1
+      backZ *= finalsize[w]
+      backZ += pos[w]
+    end
+    @inbounds @simd for x = 0:dimB-1
+      p += 1
+      C[x + backZ] = B[p]
+    end
+    Bpos[d1] += dimB
+  end
+  nothing
+end
+#=
+
 function joinindex!(bareinds::intvecType,A::Union{tens{W},Array{W,N}},B::Union{tens{W},Array{W,N}}) where {W <: Number, N}
 
   inds = convIn(bareinds)
@@ -1873,9 +1942,9 @@ function joinindex!(bareinds::intvecType,A::Union{tens{W},Array{W,N}},B::Union{t
     a = inds[i]
     finalsize[a] += size(B,a)
   end
-  tupsize = ntuple(w->finalsize[w],nA)
+#  tupsize = ntuple(w->finalsize[w],nA)
 #  if length(inds) > 1
-    newTensor = zeros(W,tupsize)
+    newTensor = zeros(W,finalsize...) #tupsize)
 #  else
 #    newTensor = Array{W,nA}(undef,tupsize)
 #  end
@@ -1897,22 +1966,16 @@ function joinindex!(bareinds::intvecType,A::Union{tens{W},Array{W,N}},B::Union{t
   #=@time=# @inbounds newTensor[axesout...] = B
 
   if typeof(A) <: denstens || typeof(B) <: denstens
-    #=@time=#newTensor = tens{W}(newTensor)
+    newTensor = tens{W}(newTensor)
   end
 
   return newTensor
 end
-
-
-#=
-function joinindex!(bareinds::intvecType,A::tens{S},B::tens{W}) where {W <: Number, S <: Number}
-  rA = reshape!(A.T,A.size...)
-  rB = reshape(B.T,B.size...)
-  C = joinindex!(bareinds,rA,rB)
-  retType = typeof(S(1)*W(1))
-  return tens(retType,C)
-end
 =#
+
+
+
+
 function joinindex!(A::Array{S,N},B::Array{W,N}) where {W <: Number, S <: Number, N}
   return joinindex!(A,B,[i for i = 1:N])
 end
@@ -1926,13 +1989,13 @@ end
 
 Concatenatation of tensors `A` and any number of `B` along indices specified in `vec`
 """
-function joinindex(inds::intvecType,A::W,B::R...) where {W <: TensType, R <: TensType}
+function joinindex(inds::intvecType,A::W,B::R) where {W <: TensType, R <: TensType}
   if typeof(A) <: densTensType
     C = A
   else
     C = copy(A)
   end
-  return joinindex!(inds,C,B...)
+  return joinindex!(inds,C,B)
 end
 
 """

@@ -32,7 +32,7 @@ function spinOps(;s=0.5)
   ox = (op+om)/2 #x matrix
   oy = (op-om)/(2*im) #y matrix
 
-  return ox,oy,oz,op,om,O,Id
+  return ox,oy,oz,op,om,O,Id # equal to Sx,Sy,Sz,Sp,Sm,O,Id
 end
 
 function spinOps(a::Float64)
@@ -92,7 +92,7 @@ function tJOps()
   Sz[3,3] = -0.5
 
   Sp = copy(O) #spin raising operator
-  Sp[3,2] = 1/sqrt(2)
+  Sp[3,2] = 1#/sqrt(2)
   Sm = Array(Sp') #spin lowering operator
 
   return Cup,Cdn,Nup,Ndn,Ndens,F,Sz,Sp,Sm,O,Id
