@@ -10,7 +10,7 @@
 #
 
 const libblastrampoline = "libblastrampoline"
-libblastrampoline_handle = C_NULL
+#libblastrampoline_handle = C_NULL
 
 import LinearAlgebra: BlasReal, BlasComplex, BlasFloat, BlasInt, DimensionMismatch, checksquare, axpy!
 import LinearAlgebra.BLAS: @blasfunc #, libblastrampoline
@@ -147,6 +147,78 @@ for (gemm, elty) in
       return C
     end
   end
+end
+
+for (mmname, smname, elty) in
+        ((:dtrmm_,:dtrsm_,:Float64),
+         (:strmm_,:strsm_,:Float32),
+         (:ztrmm_,:ztrsm_,:ComplexF64),
+         (:ctrmm_,:ctrsm_,:ComplexF32))
+    @eval begin
+        #       SUBROUTINE DTRMM(SIDE,UPLO,TRANSA,DIAG,M,N,ALPHA,A,LDA,B,LDB)
+        # *     .. Scalar Arguments ..
+        #       DOUBLE PRECISION ALPHA
+        #       INTEGER LDA,LDB,M,N
+        #       CHARACTER DIAG,SIDE,TRANSA,UPLO
+        # *     .. Array Arguments ..
+        #       DOUBLE PRECISION A(LDA,*),B(LDB,*)
+        function trmm!(A::AbstractMatrix{$elty}, nA,m,B::AbstractMatrix{$elty},n;side::Char='R', uplo::Char='U', transa::Char='N', diag::Char='N', alpha::Number=one($elty))
+#            require_one_based_indexing(A, B)
+#            m, n = size(B)
+
+#            nA = checksquare(A)
+            #=
+            if nA != (side == 'L' ? m : n)
+                throw(DimensionMismatch("size of A, $(size(A)), doesn't match $side size of B with dims, $(size(B))"))
+            end
+            =#
+#            chkstride1(A)
+#            chkstride1(B)
+            ccall((@blasfunc($mmname), libblastrampoline), Cvoid,
+                  (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
+                   Ref{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                   Clong, Clong, Clong, Clong),
+                  side, uplo, transa, diag, m, n,
+                  alpha, A, max(1,nA), B, max(1,m),
+                  1, 1, 1, 1)
+            B
+        end
+        function trmm(side::AbstractChar, uplo::AbstractChar, transa::AbstractChar, diag::AbstractChar,
+                      alpha::$elty, A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
+            trmm!(side, uplo, transa, diag, alpha, A, copy(B))
+        end
+        #       SUBROUTINE DTRSM(SIDE,UPLO,TRANSA,DIAG,M,N,ALPHA,A,LDA,B,LDB)
+        # *     .. Scalar Arguments ..
+        #       DOUBLE PRECISION ALPHA
+        #       INTEGER LDA,LDB,M,N
+        #       CHARACTER DIAG,SIDE,TRANSA,UPLO
+        # *     .. Array Arguments ..
+        #       DOUBLE PRECISION A(LDA,*),B(LDB,*)
+        function trsm!(side::AbstractChar, uplo::AbstractChar, transa::AbstractChar, diag::AbstractChar,
+                       alpha::$elty, A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
+            require_one_based_indexing(A, B)
+            m, n = size(B)
+            k = checksquare(A)
+            if k != (side == 'L' ? m : n)
+                throw(DimensionMismatch("size of A is ($k,$k), size of B is ($m,$n), side is $side, and transa='$transa'"))
+            end
+            chkstride1(A)
+            chkstride1(B)
+            ccall((@blasfunc($smname), libblastrampoline), Cvoid,
+                (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
+                 Ref{BlasInt}, Ref{BlasInt}, Ref{$elty}, Ptr{$elty},
+                 Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                 Clong, Clong, Clong, Clong),
+                 side, uplo, transa, diag,
+                 m, n, alpha, A,
+                 max(1,stride(A,2)), B, max(1,stride(B,2)),
+                 1, 1, 1, 1)
+            B
+        end
+        function trsm(side::AbstractChar, uplo::AbstractChar, transa::AbstractChar, diag::AbstractChar, alpha::$elty, A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
+            trsm!(side, uplo, transa, diag, alpha, A, copy(B))
+        end
+    end
 end
 
 #         +-----------------------------+
@@ -1328,17 +1400,18 @@ libLQmake! = orglq!
 libRQmake! = orgrq!
 libQLmake! = orgql!
 
-libLowerHessenberg! = gelqf!
-libUpperHessenberg! = geqrf!
+function libUpperHessenberg!(A::Array{W,P};a::Integer=size(A,1),b::Integer=size(A,2),tau::Array{W,1}=Array{W,1}(undef,min(a,b)),m::Integer=length(tau)) where {W <: Number, P}
+  return libUpperHessenberg!(A,a,b,tau=tau,m=m)
+end
 
-function libqr!(A::Array{W,P},a::Integer,b::Integer;m::Integer=min(a,b)) where {W <: Number, P}
-  X,Y = LinearAlgebra.qr(A)
+function libUpperHessenberg!(A::Array{W,P},a::Integer,b::Integer,tau::Array{W,1};m::Integer=length(tau)) where {W <: Number, P}
+  return libUpperHessenberg!(A,a,b,tau=tau,m=m)
+end
 
-  tau = Array{W,1}(undef,m)
-  G,tau = libUpperHessenberg!(A,a,b,tau) #geqrf!
+function libUpperHessenberg!(A::Array{W,P},a::Integer,b::Integer;tau::Array{W,1}=Array{W,1}(undef,min(a,b)),m::Integer=length(tau)) where {W <: Number, P}
+  G,tau = geqrf!(A,a,b,tau)
 
   R = P == 1 ? Array{W,1}(undef,m*b) : Array{W,2}(undef,m,b)
-
   for y = 1:b
     thisind = m*(y-1)
     thisotherind = a*(y-1)
@@ -1349,13 +1422,20 @@ function libqr!(A::Array{W,P},a::Integer,b::Integer;m::Integer=min(a,b)) where {
       R[x + thisind] = 0
     end
   end
+  return R
+end
+export libUpperHessenberg!
+
+function libqr!(A::Array{W,P},a::Integer,b::Integer;m::Integer=min(a,b)) where {W <: Number, P}
+  tau = Array{W,1}(undef,m)
+  R = libUpperHessenberg!(A,a,b,tau=tau) #geqrf!
 
   sizetau = length(tau)
-  @inbounds while sizetau > 0 && !isapprox(tau[sizetau],0)
-    sizetau -= 1
-  end
+#  @inbounds while sizetau > 0 && !isapprox(tau[sizetau],0)
+#    sizetau -= 1
+#  end
 
-  Q = libQRmake!(G,a,b,tau,sizetau) #orgqr
+  Q = libQRmake!(A,a,b,tau,sizetau) #orgqr
   return Q,R
 end
 
@@ -1373,28 +1453,41 @@ function libqr!(A::tens{W},a::Integer,b::Integer;m::Integer=min(a,b)) where W <:
   return tens{W}([a,m],Q),tens{W}([m,b],R)
 end
 
-function liblq!(A::Array{W,P},a::Integer,b::Integer;m::Integer=min(a,b)) where {W <: Number, P}
-  tau = Array{W,1}(undef,m)
-  G,tau = libLowerHessenberg!(A,a,b,tau) #gelqf!
-  
-  L = P == 1 ? Array{W,1}(undef,a*m) : Array{W,2}(undef,a,m)
+function libLowerHessenberg!(A::Array{W,P};a::Integer=size(A,1),b::Integer=size(A,2),tau::Array{W,1}=Array{W,1}(undef,min(a,b)),m::Integer=length(tau)) where {W <: Number, P}
+  return libLowerHessenberg!(A,a,b,tau=tau,m=m)
+end
 
+function libLowerHessenberg!(A::Array{W,P},a::Integer,b::Integer,tau::Array{W,1};m::Integer=length(tau)) where {W <: Number, P}
+  return libLowerHessenberg!(A,a,b,tau=tau,m=m)
+end
+
+function libLowerHessenberg!(A::Array{W,P},a::Integer,b::Integer;tau::Array{W,1}=Array{W,1}(undef,min(a,b)),m::Integer=length(tau)) where {W <: Number, P}
+  G,tau = gelqf!(A,a,b,tau)
+
+  L = P == 1 ? Array{W,1}(undef,a*m) : Array{W,2}(undef,a,m)
   for y = 1:m
     thisind = a*(y-1)
     @inbounds @simd for x = 1:y-1
       L[x+thisind] = 0
     end
     @inbounds @simd for x = y:a
-      L[x+thisind] = G[x+thisind]
+      L[x+thisind] = A[x+thisind]
     end
   end
+  return L
+end
+export libLowerHessenberg!
+
+function liblq!(A::Array{W,P},a::Integer,b::Integer;m::Integer=min(a,b)) where {W <: Number, P}
+  tau = Array{W,1}(undef,m)
+  L = libLowerHessenberg!(A,a,b,tau=tau) #gelqf!
 
   sizetau = length(tau)
-  @inbounds while sizetau > 0 && !isapprox(tau[sizetau],0)
-    sizetau -= 1
-  end
+#  @inbounds while sizetau > 0 && !isapprox(tau[sizetau],0)
+#    sizetau -= 1
+#  end
 
-  Q = libLQmake!(G,a,b,tau,sizetau) #orglq
+  Q = libLQmake!(A,a,b,tau,sizetau) #orglq
 
   return L,Q
 end
