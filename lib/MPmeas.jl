@@ -447,7 +447,7 @@ function correlation(dualpsi::MPS, psi::MPS, inputoperators...;
   if length(trail) != 0
     if typeof(trail) <: Tuple || ndims(trail) == 1
       subtrail = [trail[(w-1) % length(inputoperators) + 1] for w = 1:length(inputoperators)]
-    else
+    elseif trail != ()
       subtrail = [trail for w = 1:length(inputoperators)]
     end
   end
