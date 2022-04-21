@@ -444,10 +444,12 @@ function correlation(dualpsi::MPS, psi::MPS, inputoperators...;
   move!(psi,1)
   move!(dualpsi,1)
 
-  if (typeof(trail) <: Tuple && length(trail) != 0) || ndims(trail) == 1
-    subtrail = [trail[(w-1) % length(inputoperators) + 1] for w = 1:length(inputoperators)]
-  elseif trail != ()
-    subtrail = [trail for w = 1:length(inputoperators)]
+  if length(trail) != 0
+    if typeof(trail) <: Tuple || ndims(trail) == 1
+      subtrail = [trail[(w-1) % length(inputoperators) + 1] for w = 1:length(inputoperators)]
+    else
+      subtrail = [trail for w = 1:length(inputoperators)]
+    end
   end
 
   isId = [isapprox(norm(subtrail[r])^2,size(subtrail[r],1)) for r = 1:length(subtrail)]
