@@ -21,7 +21,7 @@ for elty in (:Float32,:Float64,:ComplexF32,:ComplexF64)
 
     #tridiagonal
     function libeigen!(dv::AbstractVector{$elty}, ev::AbstractVector{$elty},n::Integer; job::Char='V', rank::Integer=2,fct::Function=stev!)
-      return fct(dv, ev,n, job=job, rank=rank)
+      return fct(dv, ev, n, job=job, rank=rank)
     end
 
     function libeigen!(dv::AbstractVector{$elty}, ev::AbstractVector{$elty};job::Char='V', rank::Integer=2) #stev!
@@ -405,7 +405,7 @@ for (syev, syevr, sygvd, elty, relty) in
       function syev!(A::Union{AbstractMatrix{$elty},Vector{$elty}},n::Integer;job::Char='V',uplo::Char='U') #syev!
 #          chkstride1(A)
 #          n = checksquare(A)
-          W     = similar(A, $elty, n)
+          W     = Array{$elty,1}(undef, n)
           work  = Vector{$elty}(undef, 1)
           lwork = BlasInt(-1)
           cmplx = eltype(A) <: Complex

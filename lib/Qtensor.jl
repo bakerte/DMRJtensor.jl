@@ -214,16 +214,22 @@ Creates a dense `operator` as a Qtensor with quantum numbers `QnumMat` on each i
 end
 
 @inline function Qtens(Qlabels::Array{Array{Q,1},1},Op#=::R=#...;zero::Number=0.,currblock::currblockTypes=([i for i = 1:ndims(Op[1])-1],[ndims(Op[1])]),datatype::DataType=eltype(Op)) where {Q <: Qnum, W <: Number, R <: densTensType, U <: Union{Bool,Array{Bool,1}}}
-  return ntuple(w->Qtens(Op[w],Qlabels,zero=zero,currblock=currblock,datatype=datatype),length(Op))
+  if length(Op) > 1
+    out = ntuple(w->Qtens(Op[w],Qlabels,zero=zero,currblock=currblock,datatype=datatype),length(Op))
+  else
+    out = Qtens(Op[1],Qlabels,zero=zero,currblock=currblock,datatype=datatype)
+  end
+  return out
 end
 
 function Qtens(Qlabels::Array{Q,1},Op::R...;zero::Number=0.,currblock::currblockTypes=([i for i = 1:ndims(Op[1])-1],[ndims(Op[1])]),datatype::DataType=eltype(Op)) where {Q <: Qnum, W <: Number, R <: densTensType, U <: Union{Bool,Array{Bool,1}}}
-  Qnumvec = [inv.(Qlabels),Qlabels]
+  Qnumvec = [Qlabels,inv.(Qlabels)]
   if length(Op) == 1
-    return Qtens(Op[1],Qnumvec,zero=zero,currblock=currblock,datatype=datatype)
+    out = Qtens(Op[1],Qnumvec,zero=zero,currblock=currblock,datatype=datatype)
   else
-    return ntuple(w->Qtens(Op[w],Qnumvec,zero=zero,currblock=currblock,datatype=datatype),length(Op))
+    out = ntuple(w->Qtens(Op[w],Qnumvec,zero=zero,currblock=currblock,datatype=datatype),length(Op))
   end
+  return out
 end
 
 function makeQNsummaries(Qlabels::Array{Array{Q,1},1},Linds::Array{P,1},Rinds::Array{P,1},LR::Bool,flux::Q) where {W <: Number, Q <: Qnum, P <: Integer}
@@ -484,7 +490,10 @@ Copies a Qtensor; `deepcopy` is inherently not type stable, so this function sho
 """
 function copy(Qt::Qtens{W,Q}) where {W <: Number, Q <: Qnum}
   newsize = [copy(Qt.size[i]) for i = 1:length(Qt.size)]
-  copyQtT = [copy(Qt.T[q]) for q = 1:length(Qt.T)]
+  copyQtT = Array{typeof(Qt.T[1]),1}(undef,length(Qt.T))
+  @inbounds @simd for q = 1:length(copyQtT)
+    copyQtT[q] = copy(Qt.T[q])
+  end
   copyQtind = Qt.ind #[(copy(Qt.ind[q][1]),copy(Qt.ind[q][2])) for q = 1:length(Qt.ind)]
   newcurrblock = (copy(Qt.currblock[1]),copy(Qt.currblock[2]))
   newQblocksum = Qt.Qblocksum
@@ -1692,7 +1701,7 @@ permutes dimensions of `A`  (identical usage to dense `size` call)
 
 See also: [`permutedims!`](@ref)
 """
-function permutedims(currQtens::Qtens{W,Q}, vec::Array{P,1}) where {W <: Number, Q <: Qnum, P <: Integer}
+function permutedims(currQtens::Qtens{W,Q}, vec::Union{NTuple{N,P},Array{P,1}}) where {N, W <: Number, Q <: Qnum, P <: Integer}
   Qtens = copy(currQtens)
   permutedims!(Qtens, vec)
   return Qtens

@@ -146,6 +146,11 @@ function mpoterm(val::Number,operator::Array{W,1},ind::Array{P,1},base::Array{X,
   end
   finalType = typeof(finalnum)
 
+  applytrail = length(trail) > 0
+  if applytrail
+    fulltrail = [trail[(a-1) % length(trail) + 1] for a = 1:length(ind)]
+  end
+
   isdens = W <: denstens
   if isdens
     opString = Array{tens{finaltype},1}(undef,length(base))
@@ -154,29 +159,13 @@ function mpoterm(val::Number,operator::Array{W,1},ind::Array{P,1},base::Array{X,
   end
   a = 0
   @inbounds for i = 1:length(base)
-    if i in ind
-      a = findfirst(p->i==ind[p],1:length(ind))
-      temp = (a == 1 ? val : 1.) * copy(operator[a])
-      if isdens
-        opString[ind[a]] = tens{finalType}(temp)
-      else
-        opString[ind[a]] = convert(Array{finalType,2},makeArray(temp))
-      end
-      if length(trail) > 0
-        @inbounds for b = 1:ind[a]-1
-          temp = contract(trail[1],2,opString[b],1)
-          if isdens
-            opString[b] = tens{finalType}(temp)
-          else
-            opString[b] = convert(Array{finalType,2},makeArray(temp))
-          end
-        end
-      end
-    else
-      if isdens
-        opString[i] = tens{finalType}(base[i])
-      else
-        opString[i] = convert(Array{finalType,2},makeArray(base[i]))
+    opString[i] = base[i]
+  end
+  for i = length(ind):-1:1
+    opString[ind[i]] = contract(operator[i],2,opString[ind[i]],1)
+    if applytrail
+      for b = 1:ind[i]-1
+        opString[b] = contract(fulltrail[i],2,opString[b],1)
       end
     end
   end

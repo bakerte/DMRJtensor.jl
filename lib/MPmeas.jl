@@ -22,12 +22,12 @@ Applies operator `Op` (any `TensType`) in-place to the MPS `psi` at sites `sites
 """
 function applyOps!(psi::MPS,sites::Array{W,1},Op::TensType;trail::TensType=ones(1,1)) where W <: Integer
   def_trail = ones(1,1)
-  @inbounds for i = 1:length(sites)
+  #=@inbounds=# for i = 1:length(sites)
     site = sites[i]
     p = site
     psi[p] = contract([2,1,3],Op,2,psi[p],2)
     if trail != def_trail
-      @inbounds for j = 1:p-1
+      #=@inbounds=# for j = 1:p-1
         psi[j] = contract([2,1,3],trail,2,psi[j],2)
       end
     end
@@ -244,7 +244,7 @@ function localizeOp(psi::MPS,Oparray::Array{G,1},sites::Array{R,1};centerpsi::Te
   if length(trail) > 0
     for r = 1:length(isId)
       index = 0
-      @inbounds while isId[r]
+      #=@inbounds=# while isId[r]
         index += 1
         isId[r] = searchindex(trail[r],index,index) == 1
       end
@@ -372,9 +372,9 @@ Increments elements of input vector `pos` with sizes of a tensor `sizes` such th
   pos[w] += 1
   while w > 1 && pos[w] > sizes[w]
     w -= 1
-    @inbounds pos[w] += 1
+    #=@inbounds=# pos[w] += 1
     @simd for x = w:length(pos)-1
-      @inbounds pos[x+1] = pos[x]
+      #=@inbounds=# pos[x+1] = pos[x]
     end
   end
   nothing
@@ -438,134 +438,146 @@ Computes the general correlation on the input MPS `psi` with operators defined i
 See also: [`expect`](@ref) [`correlationmatrix`](@ref)
 """
 function correlation(dualpsi::MPS, psi::MPS, inputoperators...;
-                      sites::intvecType=ntuple(i->1:length(psi),length(inputoperators)),
-                      trail::Tuple=()) #where S <: Union{Vector{AbstractMatrix{Float64}},TensType}
+                      sites::intvecType=ntuple(i->1:length(psi) - (ndims(inputoperators[i]) == 1 ? length(inputoperators[i]) : 0),length(inputoperators)),
+                      trail::Union{Tuple,TensType}=()) #where S <: Union{Vector{AbstractMatrix{Float64}},TensType}
 
-  opsize = length(inputoperators)
-  operators = Array{Array{TensType,1},1}(undef,opsize)
-  lengthops = Array{intType,1}(undef,opsize)
-  @inbounds for k = 1:opsize
-    if typeof(inputoperators[k][1]) <: Number
-      operators[k] = [inputoperators[k]]
-      lengthops[k] = 1
-    else
-      operators[k] = inputoperators[k]
-      lengthops[k] = length(operators[k])
+  move!(psi,1)
+  move!(dualpsi,1)
+
+  if typeof(trail) <: Tuple || ndims(trail) == 1
+    subtrail = [trail[(w-1) % length(inputoperators) + 1] for w = 1:length(inputoperators)]
+  else
+    subtrail = [trail for w = 1:length(inputoperators)]
+  end
+
+  isId = [isapprox(norm(subtrail[r])^2,size(subtrail[r],1)) for r = 1:length(subtrail)]
+  if length(subtrail) > 0
+    for r = 1:length(isId)
+      index = 0
+      @inbounds while isId[r]
+        index += 1
+        isId[r] = searchindex(subtrail[r],index,index) == 1
+      end
     end
   end
 
-  Ns = length(psi)
-  maxOplength = maximum(lengthops)
+  Lenv,Renv = makeEnv(dualpsi,psi)
+
+  savepsi = Array{typeof(psi[1]),1}(undef,length(psi))
+
+
+  numops = length(inputoperators)
+  operators = Array{Array{TensType,1},1}(undef,numops)
+  lengthops = Array{intType,1}(undef,numops)
+  for k = 1:numops
+    if ndims(inputoperators[k]) == 1
+      operators[k] = inputoperators[k]
+      lengthops[k] = length(operators[k])
+    else
+      operators[k] = [inputoperators[k]]
+      lengthops[k] = 1
+    end
+  end
+
+  totalOPs = 1
+  for w = 1:numops
+    totalOPs *= length(sites[w])
+  end
+
+
+
 
   temp = eltype(dualpsi[1])(1)
   temp *= eltype(psi[1])(1)
-  for w = 1:opsize
+  for w = 1:numops
     @inbounds @simd for a = 1:lengthops[w]
       temp *= eltype(operators[w][a][1])(1)
     end
   end
-  @inbounds @simd for r = 1:length(trail)
-    temp *= eltype(trail[r])(1)
+  @inbounds @simd for r = 1:length(subtrail)
+    temp *= eltype(subtrail[r])(1)
   end
   retType = typeof(temp)
 
   base_sizes = Array{intType,1}(undef,length(sites))
   @inbounds @simd for i = 1:length(sites)
-    base_sizes[i] = length(sites[i]) - (lengthops[i] - 1)
+    base_sizes[i] = length(sites[i])
   end
+
+
+  pos = Array{intType,1}(undef,numops)
+
+  base_pos = Array{intType,1}(undef,numops) #ones(intType,numops)
 
   omega = zeros(retType,base_sizes...)
 
-  perm = permutations(opsize)
-
-  move!(psi,1)
-  move!(dualpsi,1)
-
-  Lenv,Renv = makeEnv(dualpsi,psi)
-  @inbounds for b = 1:length(Renv)
-    Renv[b] = permutedims(Renv[b],[2,1])
+  @inbounds @simd for w = 1:numops
+    base_pos[w] = 1
   end
 
-  isId = Array{retType,1}(undef,length(trail))
-  @inbounds @simd for r = 1:length(trail)
-    isId[r] = sum(trail[r]) == size(trail[r],1)
-  end
-  if length(trail) > 0
-    for r = 1:length(isId)
-      index = 0
-      @inbounds while isId[r]
-        index += 1
-        isId[r] = searchindex(trail[r],index,index) == 1
-      end
-    end
-  end
+  while sum(w->base_pos[w]<=base_sizes[w],1:length(base_pos)) == length(base_sizes)
 
-  pos = Array{intType,1}(undef,opsize)
-  prevpos = Array{intType,1}(undef,opsize)
-  finalpos = Array{intType,1}(undef,opsize)
-
-  @inbounds for i = 1:length(perm)
-
-    order = perm[i]
-
-    base_pos = ones(intType,opsize)
-
-    @inbounds @simd for i = 1:opsize
-      pos[i] = sites[1][1]
-      prevpos[i] = sites[1][1]
+    @inbounds @simd for w = 1:length(psi)
+      savepsi[w] = psi[w]
     end
 
-    @inbounds while sum(base_sizes - pos) >= 0
+    @inbounds @simd for w = 1:length(pos)
+      pos[w] = sites[w][base_pos[w]]
+    end
 
-      startsite = 1
-      @inbounds while startsite < length(pos) && pos[startsite] == prevpos[startsite]
-        startsite += 1
+    maxopspos = 1
+
+    @inbounds for g = numops:-1:2
+      maxopspos = max(pos[g]+lengthops[g]-1,maxopspos)
+      @inbounds for p = 1:lengthops[g]
+        currsite = pos[g] + p-1
+        savepsi[currsite] = contract([2,1,3],operators[g][p],2,savepsi[currsite],2)
       end
-
-      @inbounds while startsite > 1 && pos[startsite-1] == prevpos[startsite]
-        startsite -= 1
-      end
-
-      beginsite = prevpos[startsite]
-      finalsite = pos[end]
-
-      thisLenv = Lenv[beginsite]
-
-      @inbounds for w = beginsite:finalsite
-        newpsi = psi[w]
-        @inbounds for g = 1:opsize
-          opdist = w - pos[g]
-          if 0 <= opdist < lengthops[g]
-            newpsi = contract([2,1,3],operators[order[g]][opdist + 1],2,newpsi,2)
-          end
+      if length(isId) > 0 && !isId[g]
+        @inbounds for w = 1:pos[g]-1
+          savepsi[w] = contract([2,1,3],subtrail[g],2,savepsi[w],2)
         end
-        @inbounds for r = 1:opsize
-          if  length(isId) > 0 && w < pos[r] && !isId[r]
-            newpsi = contract([2,1,3],trail[r],2,newpsi,2)
-          end
-        end
-        thisLenv = Lupdate(thisLenv,dualpsi[w],newpsi)
-        if w < Ns
-          Lenv[w+1] = thisLenv
-        end
-      end
-
-      thisRenv = Renv[finalsite]
-      res = contract(thisLenv,thisRenv)
-      @inbounds @simd for w = 1:length(pos)
-        finalpos[w] = pos[order[w]]
-      end
-      
-      omega[finalpos...] = res
-
-      @inbounds @simd for b = 1:opsize
-        prevpos[b] = pos[b]
-      end
-      operator_in_order!(base_pos,base_sizes)
-      @inbounds @simd for b = 1:opsize
-        pos[b] = sites[b][base_pos[b]]
       end
     end
+
+    @inbounds for a = maxopspos:-1:2
+      Renv[a-1] = Rupdate(Renv[a],dualpsi[a],savepsi[a])
+    end
+
+    @inbounds for y = 1:length(sites[1]) #w in sites[1]
+      w = sites[1][y]
+      thisLenv = Lenv[w]
+
+      @inbounds for p = 1:lengthops[1]
+        currsite = w + p-1
+
+        newpsi = contract([2,1,3],operators[1][p],2,savepsi[currsite],2)
+        thisLenv = Lupdate(thisLenv,dualpsi[currsite],newpsi)
+      end
+#=
+      thisRenv = Renv[w+lengthops[1]-1] #
+      res = contract(thisLenv,(1,2),thisRenv,(2,1))
+      pos[1] = w
+      omega[pos...] = res[1]
+=#
+
+thisRenv = permutedims(Renv[w+lengthops[1]-1],(2,1))
+res = contract(thisLenv,thisRenv)
+pos[1] = w
+omega[pos...] = res
+
+      if length(isId) > 0 && !isId[1]
+        savepsi[w] = contract([2,1,3],subtrail[1],2,savepsi[w],2)
+      end
+
+      if w < sites[1][end]
+        @inbounds for r = w:sites[1][y+1]
+          Lenv[w+1] = Lupdate(Lenv[w],dualpsi[w],savepsi[w])
+        end
+      end
+    end
+    base_pos[1] = base_sizes[1]
+    position_incrementer!(base_pos,base_sizes)
   end
   return omega
 end
