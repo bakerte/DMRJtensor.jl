@@ -426,7 +426,7 @@ See also: [`expect`](@ref) [`correlationmatrix`](@ref)
 """
 function correlation(psi::MPS, inputoperators...;
                       sites::intvecType=ntuple(i->1:length(psi),length(inputoperators)),
-                      trail::Tuple=()) #where S <: Union{Vector{AbstractMatrix{Float64}},TensType}
+                      trail::Union{Tuple,TensType}=()) #where S <: Union{Vector{AbstractMatrix{Float64}},TensType}
 
   return correlation(psi,psi,inputoperators...,sites=sites,trail=trail)
 end
