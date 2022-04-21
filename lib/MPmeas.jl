@@ -444,21 +444,22 @@ function correlation(dualpsi::MPS, psi::MPS, inputoperators...;
   move!(psi,1)
   move!(dualpsi,1)
 
-  if length(trail) != 0
+  istrail = length(trail) != 0
+  if istrail
     if typeof(trail) <: Tuple || ndims(trail) == 1
       subtrail = [trail[(w-1) % length(inputoperators) + 1] for w = 1:length(inputoperators)]
     elseif trail != ()
       subtrail = [trail for w = 1:length(inputoperators)]
     end
-  end
 
-  isId = [isapprox(norm(subtrail[r])^2,size(subtrail[r],1)) for r = 1:length(subtrail)]
-  if length(subtrail) > 0
-    for r = 1:length(isId)
-      index = 0
-      @inbounds while isId[r]
-        index += 1
-        isId[r] = searchindex(subtrail[r],index,index) == 1
+    isId = [isapprox(norm(subtrail[r])^2,size(subtrail[r],1)) for r = 1:length(subtrail)]
+    if length(subtrail) > 0
+      for r = 1:length(isId)
+        index = 0
+        @inbounds while isId[r]
+          index += 1
+          isId[r] = searchindex(subtrail[r],index,index) == 1
+        end
       end
     end
   end
@@ -496,8 +497,10 @@ function correlation(dualpsi::MPS, psi::MPS, inputoperators...;
       temp *= eltype(operators[w][a][1])(1)
     end
   end
-  @inbounds @simd for r = 1:length(subtrail)
-    temp *= eltype(subtrail[r])(1)
+  if istrail
+    @inbounds @simd for r = 1:length(subtrail)
+      temp *= eltype(subtrail[r])(1)
+    end
   end
   retType = typeof(temp)
 
@@ -535,7 +538,7 @@ function correlation(dualpsi::MPS, psi::MPS, inputoperators...;
         currsite = pos[g] + p-1
         savepsi[currsite] = contract([2,1,3],operators[g][p],2,savepsi[currsite],2)
       end
-      if length(isId) > 0 && !isId[g]
+      if istrail && length(isId) > 0 && !isId[g]
         @inbounds for w = 1:pos[g]-1
           savepsi[w] = contract([2,1,3],subtrail[g],2,savepsi[w],2)
         end
@@ -568,7 +571,7 @@ res = contract(thisLenv,thisRenv)
 pos[1] = w
 omega[pos...] = res
 
-      if length(isId) > 0 && !isId[1]
+      if istrail && length(isId) > 0 && !isId[1]
         savepsi[w] = contract([2,1,3],subtrail[1],2,savepsi[w],2)
       end
 
