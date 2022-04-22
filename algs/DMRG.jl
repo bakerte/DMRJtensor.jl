@@ -290,7 +290,7 @@ end
                   psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
 
   AA = contract(psi[iL],(3,),psi[iR],(1,))
-  newAA,outEnergy,alpha,beta = lanczos(AA,mpo[iL],maxiter=params.maxiter,updatefct=twosite_update,Lenv=Lenv[iL],Renv=Renv[iR])
+  newAA,outEnergy = lanczos(AA,mpo[iL],maxiter=params.maxiter,updatefct=twosite_update,Lenv=Lenv[iL],Renv=Renv[iR])
   params.energy = outEnergy[1]
 
   U,D,V,truncerr = svd!(newAA[1],[[1,2],[3,4]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
