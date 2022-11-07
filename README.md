@@ -12,7 +12,7 @@ pkg> add DMRJtensor
 
 Then, typing `using DMRJtensor` will give you access to all the functions in the library.
   
-Troubleshooting? Email: thomas.baker@usherbrooke.ca
+Troubleshooting? Email: bakerte@uvic.ca
 
 If you're just starting out, I recommend reading the introduction article at http://arxiv.org/abs/1911.11566 (English starting on page 19, accepted at the Canadian Journal of Physics) and beginning in the /examples folder.
 
