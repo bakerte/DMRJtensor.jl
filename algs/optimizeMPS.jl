@@ -46,6 +46,7 @@ mutable struct algvars{W <: Number,Q <: Qnum} <: TNparams
   halfsweep::Bool
 
   maxiter::Integer
+  mincr::Integer
   cvgE::Bool
   goal::W
   startnoise::Float64
@@ -99,6 +100,15 @@ mutable struct algvars{W <: Number,Q <: Qnum} <: TNparams
   partitions::Integer
 end
 export algvars
+#=
+function params(params::algvars{W,Q}) where {W <: Number, Q <: Qnum}
+
+  return algvars{W,Q}(params.load,params.method,params.parallel_method,params.nsites,params.minm,params.maxm,params.cutoff,params.sweeps,params.halfsweep,params.maxiter,params.mincr,params.cvgE,params.goal,params.startnoise,params.noise,params.noise_goal,params.noise_decay,params.noise_incr,params.exnum,params.cushion,params.shift,params.fixD,params.startoc,params.origj,params.maxshowD,params.storeD,params.saveEnergy,params.energy,params.lastenergy,params.entropy,params.lastentropy,params.truncerr,params.maxtrunc,params.biggestm,params.savebiggestm,params.SvNbond,params.allSvNbond,params.Lbound,params.Rbound,params.Lenv,params.Renv,params.psiLenv,params.psiRenv,params.sparematrix,params.saveQ,params.efficient,params.silent,params.qselect,params.partitions)
+end
+=#
+function algvars(params::algvars{W,Q}) where {W <: Number, Q <: Qnum}
+  return algvars{W,Q}(params.load,params.method,params.parallel_method,params.nsites,params.minm,params.maxm,params.cutoff,params.sweeps,params.halfsweep,params.maxiter,params.mincr,params.cvgE,params.goal,params.startnoise,params.noise,params.noise_goal,params.noise_decay,params.noise_incr,params.exnum,params.cushion,params.shift,params.fixD,params.startoc,params.origj,params.maxshowD,params.storeD,params.saveEnergy,params.energy,params.lastenergy,params.entropy,params.lastentropy,params.truncerr,params.maxtrunc,params.biggestm,params.savebiggestm,params.SvNbond,params.allSvNbond,params.Lbound,params.Rbound,params.Lenv,params.Renv,params.psiLenv,params.psiRenv,params.sparematrix,params.saveQ,params.efficient,params.silent,params.qselect,params.partitions)
+end
 
 import Base.println
 function println(params::TNparams)
@@ -170,10 +180,36 @@ function optinformation(params::TNparams)
 end
 
 function setEnv(dualpsi::MPS,psi::MPS,mpo::MPO,params::TNparams,
-                prevpsi::MPS...;measfct::Function=expect,mover::Function=move!) where {Z <: Union{Float64,Array{Float64,1}},B <: TensType}
+                prevpsi::MPS...;measfct::Function=expect,mover::Function=move!)
+
+#  println()
+#  println("setEnv:")
+#  println()
+
+#  println(params.Lbound)
+#  println(params.Rbound)
+
+#  checkflux(params.Lbound)
+#  checkflux(params.Rbound)
+
+#  println(params.Lenv == [0])
+#  println(params.Renv == [0])
 
   if params.Lenv == [0] && params.Renv == [0]
     params.Lenv,params.Renv = makeEnv(dualpsi,psi,mpo,Lbound=params.Lbound,Rbound=params.Rbound)
+    #=
+  else  
+
+    for a = 1:length(params.Renv)
+      println(a)
+      checkflux(params.Renv[a])
+    end
+
+    for a = 1:length(params.Lenv)
+      println(a)
+      checkflux(params.Lenv[a])
+    end
+    =#
   end
 
   SvN,lastSvN,maxtrunc,biggestm = [0.],[0.],[0.],[0]
@@ -291,7 +327,7 @@ function randLexpand(A::qarray,alpha::Float64,maxdim::Int64;bonddimfrac::Integer
   return A
 end
 
-function randRexpand(B::qarray,alpha::Float64,maxdim::Int64;bonddimfrac::Integer=5,mindim::Integer=10)::qarray where {W <: qarray,X <: qarray,Y <: qarray}
+function randRexpand(B::qarray,alpha::Float64,maxdim::Int64;bonddimfrac::Integer=5,mindim::Integer=10)::qarray
   #never expand B beyond the specified maxdim
   #does nothing if B is already at its' maximum size.
   mindim = min(mindim,size(B,1))
@@ -346,17 +382,18 @@ end
 export singlesite_update
 
 function algvars(Q::DataType) #where Qn <: Qnum
-  algvars{Float64,Q}(true, #load
+  algvars{Float64,Q}(true, #load (loads variables from optional arguments or not)
                       "", #method
-                      "", #dmrgmethod
-                      1,
-                      2,
-                      2,
-                      0.,
-                      0,
+                      "", #parallel_method
+                      1, #nsites
+                      2, #minm
+                      0, #maxm
+                      0., #cutoff
+                      0, #sweeps
                       false, #halfsweep
                       2, #maxiter
-                      true,
+                      2, #mincr
+                      true, #cvgE
                       0., #goal
                       1., #startnoise
                       1., #noise
@@ -381,7 +418,7 @@ function algvars(Q::DataType) #where Qn <: Qnum
                       0., #lastentropy
 
                       0., #truncerr
-                      0.,
+                      0., #maxtrunc #saves maximum truncation error
                       0, #biggestm
                       0, #savebiggestm
                       1, #SvNbond
@@ -399,12 +436,23 @@ function algvars(Q::DataType) #where Qn <: Qnum
 
                       false, #efficient
                       false, #silent
-                      Tuple{intType,Q}[],
-                      Threads.nthreads()) #qselect
+                      Tuple{intType,Q}[], #qselect
+                      Threads.nthreads() #partitions
+                      )
 end
 
 function algvars()
   return algvars(U1)
+end
+
+function algvars(G::W) where W <: Union{MPS,MPO}
+  if typeof(G[1]) <: densTensType
+    out = algvars()
+  else
+    out = algvars(typeof(G[1].flux))
+  end
+  out.SvNbond = cld(length(G),2)
+  return out
 end
 
 function Nstep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,
@@ -524,7 +572,7 @@ function Noptimize(dualpsi::MPS,psi::MPS,mpo::MPO,beta::Array{P,1},prevpsi::MPS.
                   storeD::Array{W,1}=[0.]) where {W <: Number,R <: Number,P <: Number}
   loadvars!(params,method,minm,maxm,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
             noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)
-  return optmps(dualpsi,psi,mpo,beta,prevpsi...,params=params,stepfct=Nstep,makeOps=NsiteOps,cvgfct=nullcvg)
+  return optmps(dualpsi,psi,mpo,beta,prevpsi...,params=params,stepfct=Nstep,#=makeOps=NsiteOps,=#cvgfct=nullcvg)
 end
 export Noptimize
 
@@ -535,7 +583,8 @@ export Noptimize
 function optmps(dualpsi::MPS,psi::MPS,mpo::MPO,beta::Array{P,1},prevpsi::MPS...;params::TNparams=algvars(),
                   displayfct::Function=optinformation,Envfct::Function=setEnv,
                   measfct::Function=expect,stepfct::Function=optstep,
-                  makeOps::Function=NsiteOps,cvgfct::Function=optcvg,
+#                  makeOps::Function=NsiteOps,
+                  cvgfct::Function=optcvg,
                   mover::Function=move!,boundarymover::Function=boundaryMove!,
                   builtEnvBool::Bool=true) where P <: Number
 
@@ -547,7 +596,7 @@ function optmps(dualpsi::MPS,psi::MPS,mpo::MPO,beta::Array{P,1},prevpsi::MPS...;
   params.Lenv,params.Renv,params.psiLenv,params.psiRenv,#=SvN,lastSvN,m,maxtrunc,biggestm,Ns,=#Nsteps,#=timer,=#j#=,SvNvec,startoc=# = out
 
   #make operators...or identity
-  ops = makeOps(mpo,params.nsites)
+#  ops = makeOps(mpo,params.nsites)
   
   range = max(2,params.nsites)-1
 
@@ -577,7 +626,7 @@ function optmps(dualpsi::MPS,psi::MPS,mpo::MPO,beta::Array{P,1},prevpsi::MPS...;
         end
 
         #D,truncerr = 
-        stepfct(n,j,i,iL,iR,dualpsi,psi,ops,params.Lenv,params.Renv,
+        stepfct(n,j,i,iL,iR,dualpsi,psi,mpo,params.Lenv,params.Renv,
                 params.psiLenv,params.psiRenv,beta,prevpsi...,params=params)
 
         if builtEnvBool
@@ -612,7 +661,7 @@ function optmps(dualpsi::MPS,psi::MPS,mpo::MPO,beta::Array{P,1},prevpsi::MPS...;
         timer += time()
       end
       if !params.efficient
-        breakbool = cvgfct(n,timer,dualpsi,psi,ops,
+        breakbool = cvgfct(n,timer,dualpsi,psi,mpo,
                             params.Lenv,params.Renv,
                             params.psiLenv,params.psiRenv,beta,
                             prevpsi...,params=params)
