@@ -87,8 +87,8 @@ Contruct this through `MPS`. struct to hold regMPS tensors and orthogonality cen
 
 See also: [`MPS`](@ref)
 """
-mutable struct matrixproductstate{W} <: regMPS where W <: Array{TensType,1}
-  A::W
+mutable struct matrixproductstate{W} <: regMPS where W <: TensType
+  A::Array{W,1}
   oc::Integer
 end
 
@@ -102,8 +102,8 @@ Contruct this through `MPO`. Struct to hold MPO tensors
 
 See also: [`MPO`](@ref)
 """
-struct matrixproductoperator{W} <: regMPO where W <: Array{TensType,1}
-  H::W
+struct matrixproductoperator{W} <: regMPO where W <: TensType
+  H::Array{W,1}
 end
 
 """
@@ -116,39 +116,8 @@ Construct this object through `Env`. Array that holds environment tensors
 
 See also: [`Env`](@ref)
 """
-struct environment{W} <: regEnv where W <: Array{TensType,1}
+struct environment{W} <: regEnv where W <: TensType
   V::Array{W,1}
-end
-
-"""
-  V = environment(T...)
-
-Inputs tensors `T` into environment `V`
-"""
-function environment(T::G...) where G <: TensType
-  return environment([T...])
-end
-export environment
-
-"""
-  V = environment(W,Ns)
-
-Creates a blank environment of type `W` with entries for `Ns` tensors
-"""
-function environment(T::W,Ns::Integer) where W <: TensType
-  return environment(Array{W,1}(undef,Ns))
-end
-
-"""
-  V = environment(P...)
-
-Inputs tensors `P` representing an `MPS` or an `MPO` into environment `V`
-
-See also: [`MPS`](@ref) [`MPO`](@ref)
-"""
-function environment(network::G) where G <: Union{MPS,MPO}
-  Ns = length(network)
-  return environment(network[1],Ns)
 end
 
 """
@@ -158,17 +127,22 @@ Constructs `psi` for MPS with tensors `A` (Array of tensors or MPS) with orthogo
 """
 function MPS(psi::Array{W,1};regtens::Bool=false,oc::Integer=1,type::DataType=eltype(psi[1])) where W <: TensType
   if eltype(psi[1]) != type && !regtens
-    MPSvec = [convertTens(type, copy(psi[i])) for i = 1:length(psi)]
+    MPSvec = [tens(convertTens(type, copy(psi[i]))) for i = 1:length(psi)]
+    out = matrixproductstate{tens{type}}(MPSvec,oc)
+  elseif !regtens
+    MPSvec = [tens(copy(psi[i])) for i = 1:length(psi)]
+    out = matrixproductstate{tens{type}}(MPSvec,oc)
   else
     MPSvec = psi
+    out = matrixproductstate{W}(MPSvec,oc)
   end
-  return matrixproductstate(MPSvec,oc) #MPS(psi,regtens=regtens,oc=oc,type=type)
+  return out
 end
 
 function MPS(psi::MPS;regtens::Bool=false,oc::Integer=psi.oc,type::DataType=eltype(psi[1]))
   return MPS(psi.A,regtens=regtens,oc=oc,type=type)
 end
-
+#=
 """
   psi = MPS(A[,regtens=false,oc=1,type=eltype(A[1])])
 
@@ -180,17 +154,16 @@ function MPS(B::Array{W,1};regtens::Bool=false,oc::Integer=1,type::DataType=elty
   else
     MPSvec = [convert(Array{type,ndims(B[i])},copy(B[i])) for i = 1:size(B,1)]
   end
-  return matrixproductstate{typeof(MPSvec)}(MPSvec,oc)
+  return matrixproductstate{eltype(MPSvec)}(MPSvec,oc)
 end
-
-
+=#
 
 """
   psi = MPS(T,A[,regtens=false,oc=1])
 
 Constructs `psi` for MPS of tensor type `T` with tensors `A` (Array of tensors or MPS) with orthogonality center `oc`. `regtens` avoids conversion to `denstens` type (defaulted to perform the conversion for efficiency)
 """
-function MPS(type::DataType,B::Union{MPS,Array{W,1}};regtens::Bool=false,oc::Integer=1) where W <: Union{Array,Integer}
+function MPS(type::DataType,B::Union{MPS,Array{W,1}};regtens::Bool=false,oc::Integer=1) where W <: Union{densTensType,Integer}
   return MPS(B,regtens=regtens,oc=oc,type=type)
 end
 
@@ -255,59 +228,6 @@ function MPS(type::DataType,physindvec::Array{W,1},Ns::Integer;regtens::Bool=fal
   return MPS(physindvec,Ns,regtens=regtens,oc=oc,type=type)
 end
 
-function /(psi::MPS,num::Number)
-  return div!(copy(psi),num)
-end
-
-function div!(psi::MPS,num::Number)
-  psi[psi.oc] = div!(psi[psi.oc],num)
-  return psi
-end
-
-function *(psi::MPS,num::Number)
-  return mult!(copy(psi),num)
-end
-
-function *(num::Number,psi::MPS)
-  return *(psi,num)
-end
-
-function mult!(psi::MPS,num::Number)
-  psi[psi.oc] = mult!(psi[psi.oc],num)
-  return psi
-end
-
-function mult!(num::Number,psi::MPS)
-  return mult!(psi,num)
-end
-
-function sub!(X::MPS,Y::MPS)
-  move!(X,Y.oc)
-  @inbounds for i = 1:length(X)
-    X[i] -= Y[i]
-  end
-  return X
-end
-
-function -(X::MPS,Y::MPS)
-  return sub!(copy(X),Y)
-end
-
-function add!(X::MPS,Y::MPS)
-  move!(X,Y.oc)
-  @inbounds for i = 1:length(X)
-    X[i] += Y[i]
-  end
-  return X
-end
-
-function +(X::MPS,Y::MPS)
-  return add!(copy(X),Y)
-end
-
-
-
-
 """
   psi = randMPS(T,physindsize,Ns[,oc=1,m=1])
 
@@ -371,12 +291,12 @@ function randMPS(physindvec::Array{W,1};oc::Integer=1,m::Integer=1,datatype::Dat
   return randMPS(datatype,physindvec,oc=oc,m=m)
 end
 
-function randMPS(physindvec::Array{W,1},Ns::Integer;oc::Integer=1,m::Integer=1,datatype::DataType=Float64) where W <: Integer
-  newphysindvec = [physindvec[(w-1) % length(physindvec)] for w = 1:Ns]
+function randMPS(physindvec::W,Ns::Integer;oc::Integer=1,m::Integer=1,datatype::DataType=Float64) where W <: Integer
+  newphysindvec = [physindvec[(w-1) % length(physindvec) + 1] for w = 1:Ns]
   return randMPS(datatype,newphysindvec,oc=oc,m=m)
 end
 
-function randMPS(psi::MPS;oc::Integer=psi.oc,m::Integer=maximum([size(psi[w],3) for w = 1:length(psi)]),datatype::DataType=eltype(psi),physind::Union{intType,Array{intType,1}} = [size(psi[w],2) for w = 1:length(psi)]) where W <: Integer
+function randMPS(psi::MPS;oc::Integer=psi.oc,m::Integer=maximum([size(psi[w],3) for w = 1:length(psi)]),datatype::DataType=eltype(psi),physind::Union{intType,Array{intType,1}} = [size(psi[w],2) for w = 1:length(psi)])
   if typeof(psi[1]) <: qarray
     Ns = length(psi)
     Qlabels = [[getQnum(2,w,psi[i]) for w = 1:size(psi[i],2)] for i = 1:Ns]
@@ -388,7 +308,7 @@ function randMPS(psi::MPS;oc::Integer=psi.oc,m::Integer=maximum([size(psi[w],3) 
   end
 end
 
-function randMPS(mpo::MPO;oc::Integer=1,m::Integer=1,datatype::DataType=eltype(mpo),physind::Union{intType,Array{intType,1}} = [size(mpo[w],2) for w = 1:length(mpo)]) where W <: Integer
+function randMPS(mpo::MPO;oc::Integer=1,m::Integer=1,datatype::DataType=eltype(mpo),physind::Union{intType,Array{intType,1}} = [size(mpo[w],2) for w = 1:length(mpo)])
   if typeof(mpo[1]) <: qarray
     Ns = length(mpo)
     Qlabels = [[getQnum(3,w,mpo[i]) for w = 1:size(mpo[i],3)] for i = 1:Ns]
@@ -407,13 +327,13 @@ export randMPS
 constructor for MPO with tensors `H` either a vector of tensors or the MPO. `regtens` outputs with the julia Array type
 """
 function MPO(H::Array{W,1};regtens::Bool=false) where W <: TensType
-  T = prod(a->eltype(H[a])(1),1:size(H,1))
+  T = typeof(prod(a->eltype(H[a])(1),1:size(H,1)))
   if !regtens && (typeof(H[1]) <: Array)
-    M = [tens(H[a]) for a = 1:length(H)]
+    M = [tens{T}(H[a]) for a = 1:length(H)]
   else
     M = H
   end
-  return MPO(typeof(T),M,regtens=regtens)
+  return MPO(T,M,regtens=regtens)
 end
 
 """
@@ -423,12 +343,7 @@ constructor for MPO with tensors `H` either a vector of tensors or the `MPO`; ca
 """
 function MPO(T::DataType,H::Array{W,1};regtens::Bool=false) where W <: TensType
   if W <: AbstractArray
-#    if regtens
-      newH = Array{Array{eltype(H[1]),4},1}(undef,size(H,1))
-      #=
-    else
-      newH = Array{tens{eltype(H[1])},1}(undef,size(H,1))
-    end=#
+    newH = Array{Array{eltype(H[1]),4},1}(undef,size(H,1))
   else
     newH = Array{W,1}(undef,size(H,1))
   end
@@ -442,15 +357,16 @@ function MPO(T::DataType,H::Array{W,1};regtens::Bool=false) where W <: TensType
     end
   end
 
-  if !regtens && (typeof(newH[1]) <: AbstractArray)
-    finalH = [tens(newH[a]) for a = 1:length(newH)]
+  if W <: densTensType && !regtens
+    finalH = Array{tens{T}}(undef,length(newH))
+    for a = 1:length(newH)
+      finalH[a] = tens{T}(newH[a])
+    end
   else
     finalH = newH
   end
-  if elnumtype(finalH...) != T
-    finalH = [convertTens(T,finalH[w]) for w = 1:length(finalH)]
-  end
-  return matrixproductoperator(finalH)
+  
+  return matrixproductoperator{eltype(finalH)}(finalH)
 end
 
 function MPO(T::DataType,mpo::MPO;regtens::Bool=false)
@@ -460,6 +376,143 @@ end
 function MPO(mpo::MPO;regtens::Bool=false)
   return MPO(mpo.H,regtens=regtens)
 end
+
+
+
+
+
+"""
+  V = environment(T...)
+
+Inputs tensors `T` into environment `V`
+"""
+function environment(T::G...) where G <: TensType
+  return environment{G}([T...])
+end
+export environment
+
+"""
+  V = environment(W,Ns)
+
+Creates a blank environment of type `W` with entries for `Ns` tensors
+"""
+function environment(T::W,Ns::Integer) where W <: TensType
+  return environment{W}(Array{W,1}(undef,Ns))
+end
+
+"""
+  V = environment(P...)
+
+Inputs tensors `P` representing an `MPS` or an `MPO` into environment `V`
+
+See also: [`MPS`](@ref) [`MPO`](@ref)
+"""
+function environment(network::G) where G <: Union{MPS,MPO}
+  Ns = length(network)
+  return environment(network[1],Ns)
+end
+
+
+"""
+  /(psi,c)
+
+makes copy of input MPS `psi` and divides orthogonality center by a number `c`. Some number types require conversaion of `psi`
+
+See also: [`convertTensor`](@ref) [`MPS`](@ref)
+"""
+function /(psi::MPS,num::Number)
+  return div!(copy(psi),num)
+end
+
+"""
+  div!(psi,c)
+
+takes input MPS `psi` and divides orthogonality center by a number `c`. Some number types require conversaion of `psi`
+
+See also: [`convertTensor`](@ref) [`MPS`](@ref)
+"""
+function div!(psi::MPS,num::Number)
+  psi[psi.oc] = div!(psi[psi.oc],num)
+  return psi
+end
+
+"""
+  *(psi,c)
+
+makes copy of input MPS `psi` and multiplies orthogonality center by a number `c`. Some number types require conversaion of `psi`
+
+See also: [`convertTensor`](@ref) [`MPS`](@ref)
+"""
+function *(psi::MPS,num::Number)
+  return mult!(copy(psi),num)
+end
+
+"""
+  *(c,psi)
+
+makes copy of input MPS `psi` and multiplies orthogonality center by a number `c`. Some number types require conversaion of `psi`
+
+See also: [`convertTensor`](@ref) [`MPS`](@ref)
+"""
+function *(num::Number,psi::MPS)
+  return *(psi,num)
+end
+
+"""
+  mult!(psi,c)
+
+takes input MPS `psi` and multiplies orthogonality center by a number `c`. Some number types require conversaion of `psi`
+
+See also: [`convertTensor`](@ref) [`MPS`](@ref)
+"""
+function mult!(psi::MPS,num::Number)
+  psi[psi.oc] = mult!(psi[psi.oc],num)
+  return psi
+end
+
+"""
+  mult!(c,psi)
+
+takes input MPS `psi` and multiplies orthogonality center by a number `c`. Some number types require conversaion of `psi`
+
+See also: [`convertTensor`](@ref) [`MPS`](@ref)
+"""
+function mult!(num::Number,psi::MPS)
+  return mult!(psi,num)
+end
+#=
+"""
+  sub!(psi,altpsi)
+
+Subtracts
+
+See also: [`convertTensor`](@ref) [`MPS`](@ref)
+"""
+function sub!(X::MPS,Y::MPS)
+  move!(X,Y.oc)
+  @inbounds for i = 1:length(X)
+    X[i] -= Y[i]
+  end
+  return X
+end
+
+function -(X::MPS,Y::MPS)
+  return sub!(copy(X),Y)
+end
+
+function add!(X::MPS,Y::MPS)
+  move!(X,Y.oc)
+  @inbounds for i = 1:length(X)
+    X[i] += Y[i]
+  end
+  return X
+end
+
+function +(X::MPS,Y::MPS)
+  return add!(copy(X),Y)
+end
+=#
+
 
 #  import .tensor.elnumtype
 """
@@ -491,7 +544,7 @@ end
 `size` prints out the size tuple `G` of the tensor field of a `Env`, `MPS`, or `MPO`; this is effectively the number of sites
 """
 @inline function size(H::MPO,i::Integer)
-  return size(H.H,i)
+  return size(H.H[i])
 end
 
 @inline function size(psi::MPS)
@@ -499,7 +552,7 @@ end
 end
 
 @inline function size(psi::MPS,i::Integer)
-  return size(psi.A,i)
+  return size(psi.A[i])
 end
 
 @inline function size(G::regEnv)
@@ -507,7 +560,7 @@ end
 end
 
 @inline function size(G::regEnv,i::Integer)
-  return size(G.V,i)
+  return size(G.V[i])
 end
 
 #import Base.length
@@ -634,6 +687,7 @@ end
 
 Copies an `MPS`, `MPO`, or `regEnv` to new output container of the same type; type stable (where deepcopy is type-unstable inherently)
 """
+#=
 function copy(mps::matrixproductstate{W}) where W <: TensType
   return matrixproductstate{W}([copy(mps.A[i]) for i = 1:length(mps)],copy(mps.oc))
 end
@@ -641,7 +695,7 @@ end
 function copy(mpo::matrixproductoperator{W}) where W <: TensType
   return matrixproductoperator{W}([copy(mpo.H[i]) for i = 1:length(mpo)])
 end
-
+=#
 function copy(mps::regMPS)
   return MPS([copy(mps.A[i]) for i = 1:length(mps)],oc=copy(mps.oc))
 end
@@ -651,8 +705,7 @@ function copy(mpo::regMPO)
 end
 
 function copy(G::regEnv)
-  T = eltype(G[1])
-  return envVec{T}([copy(G.V[i]) for i = 1:length(G)])
+  return environment([copy(G.V[i]) for i = 1:length(G)])
 end
 
 #import Base.conj!
@@ -681,521 +734,6 @@ function conj(A::regMPS)
   conj!.(B.A)
   return B
 end
-
-
-
-
-#       +---------------------------------------+
-#>------+  move! orthogonality center in MPS    +---------<
-#       +---------------------------------------+
-
-"""
-  D,truncerr = moveR(Lpsi,Rpsi[,cutoff=,m=,minm=,condition=])
-
-moves `psi`'s orthogonality center right one space, with a maximum bond dimenion `m`, cutoff `cutoff`, minimum bond dimension `minm`; toggle truncation of tensor during movement with `condition`; returns psi[iL],psi[iR],D from the SVD, and the truncation error
-
-See also: [`moveR!`](@ref)
-"""
-@inline function moveR(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
-                fast::Bool=false)
-  if (size(Lpsi,3) <= m) && !isapprox(cutoff,0.) && fast
-    Ltens,modV = qr!(Lpsi,[[1,2],[3]])
-
-    DV = (condition ? getindex!(modV,:,1:size(Rpsi,1)) : modV)
-    D = DV
-    truncerr = 0.
-  else
-    Ltens,D,V,truncerr,sumD = svd!(Lpsi,[[1,2],[3]],cutoff=cutoff,m=m,minm=minm,mag=mag)      
-    modV = (condition ? getindex!(V,:,1:size(Rpsi,1)) : V)
-    DV = rmul!(D,modV) #contract(D,(2,),modV,(1,))
-  end
-  Rtens = contract(DV,2,Rpsi,1)
-  return Ltens,Rtens,D,truncerr
-end
-export moveR
-
-"""
-  D,truncerr = moveR!(psi[,cutoff=,m=,minm=,condition=])
-
-acts in-place to move `psi`'s orthogonality center right one space, with a maximum bond dimenion `m`, cutoff `cutoff`, and minimum bond dimension `minm`; toggle truncation of tensor during movement with `condition`
-
-See also: [`moveR`](@ref)
-"""
-@inline function moveR!(psi::MPS;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,
-                  mag::Number=0.)
-  iL = psi.oc
-  psi[iL],psi[iL+1],D,truncerr = moveR(psi[iL],psi[iL+1],cutoff=cutoff,m=m,minm=minm,condition=condition,mag=mag)
-  psi.oc += 1
-  return D,truncerr
-end
-export moveR!
-
-"""
-  D,truncerr = moveL(Lpsi,Rpsi[,cutoff=,m=,minm=,condition=])
-
-moves `psi`'s orthogonality center left one space, with a maximum bond dimenion `m`, cutoff `cutoff`, minimum bond dimension `minm`; toggle truncation of tensor during movement with `condition`; returns psi[iL],psi[iR],D from the SVD, and the truncation error
-
-See also: [`moveL!`](@ref)
-"""
-@inline function moveL(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
-                fast::Bool=false)
-  if (size(Rpsi,1) <= m) && !isapprox(cutoff,0.) && fast
-    modU,Rtens = lq!(Rpsi,[[1],[2,3]])
-
-    UD = (condition ? getindex!(modU,1:size(Lpsi,3),:) : modU)
-    D = UD
-    truncerr = 0.
-  else
-    U,D,Rtens,truncerr,sumD = svd!(Rpsi,[[1],[2,3]],cutoff=cutoff,m=m,minm=minm,mag=mag)
-    modU = (condition ? getindex!(U,1:size(Lpsi,3),:) : U)
-    UD = lmul!(modU,D) #contract(modU,(2,),D,(1,))
-  end
-  Ltens = contract(Lpsi,3,UD,1)
-  return Ltens,Rtens,D,truncerr
-end
-export moveL
-
-"""
-    moveL!(psi[,cutoff=,m=,minm=,condition=])
-
-acts in-place to move `psi`'s orthogonality center left one space, with a maximum bond dimenion `m`, cutoff `cutoff`, and minimum bond dimension `minm`; toggle truncation of tensor during movement with `condition`
-
-See also: [`moveL`](@ref)
-"""
-@inline function moveL!(psi::MPS;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,
-                  mag::Number=0.)
-  iR = psi.oc
-  psi[iR-1],psi[iR],D,truncerr = moveL(psi[iR-1],psi[iR],cutoff=cutoff,m=m,minm=minm,condition=condition,mag=mag)
-  psi.oc -= 1
-  return D,truncerr
-end
-export moveL!
-
-"""
-    movecenter!(psi,newoc[,m=,cutoff=,minm=,Lfct=,Rfct=])
-
-movement function to move `psi` to a new site, `newoc` with `Lfct` and `Rfct`, with a maximum bond dimenion `m`, cutoff `cutoff`, and minimum bond dimension `minm`; toggle truncation of tensor during movement with `condition`
-
-See also: [`move!`](@ref) [`move`](@ref)
-"""
-@inline function movecenter!(psi::MPS,pos::Integer;cutoff::Float64=1E-14,m::Integer=0,minm::Integer=0,
-                      Lfct::Function=moveR,Rfct::Function=moveL)
-  if m == 0
-    m = maximum([maximum(size(psi[i])) for i = 1:size(psi,1)])
-  end
-  while psi.oc != pos
-    if psi.oc < pos
-      iL = psi.oc
-      iR = psi.oc+1
-      psi[iL],psi[iR],D,truncerr = Lfct(psi[iL],psi[iR],cutoff=cutoff,m=m,minm=minm,fast=true)
-      psi.oc = iR
-    else
-      iL = psi.oc-1
-      iR = psi.oc
-      psi[iL],psi[iR],D,truncerr = Rfct(psi[iL],psi[iR],cutoff=cutoff,m=m,minm=minm,fast=true)
-      psi.oc = iL
-    end
-  end
-  nothing
-end
-
-"""
-    move!(psi,newoc[,m=,cutoff=,minm=])
-
-in-place move orthgononality center of `psi` to a new site, `newoc`, with a maximum bond dimenion `m`, cutoff `cutoff`, and minimum bond dimension `minm`; toggle truncation of tensor during movement with `condition`
-
-See also: [`move`](@ref)
-"""
-@inline function move!(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=1E-14,minm::Integer=0)
-  movecenter!(mps,pos,cutoff=cutoff,m=m,minm=minm)
-  nothing
-end
-export move!
-
-"""
-    move(psi,newoc[,m=,cutoff=,minm=])
-
-same as `move!` but makes a copy of `psi`
-
-See also: [`move!`](@ref)
-"""
-@inline function move(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=1E-14,minm::Integer=0)
-  newmps = copy(mps)
-  movecenter!(newmps,pos,cutoff=cutoff,m=m,minm=minm)
-  return newmps
-end
-export move
-
-"""
-  newpsi,D,V = leftnormalize(psi)
-
-Creates a left-normalized MPS `newpsi` from `psi` and returns the external tensors `D` and `V`
-"""
-function leftnormalize(psi::MPS)
-  newpsi = move(psi,length(psi))
-  U,D,V = svd(psi[end],[[1,2],[3]])
-  newpsi[end] = U
-  newpsi.oc = 0
-  return newpsi,D,V
-end
-export leftnormalize
-
-"""
-  psi,D,V = leftnormalize!(psi)
-
-Creates a left-normalized MPS in-place from `psi` and returns the external tensors `D` and `V`
-"""
-function leftnormalize!(psi::MPS)
-  move!(psi,length(psi))
-  U,D,V = svd(psi[end],[[1,2],[3]])
-  psi[end] = U
-  psi.oc = 0
-  return psi,D,V
-end
-export leftnormalize!
-
-"""
-  U,D,newpsi = rightnormalize(psi)
-
-Creates a right-normalized MPS `newpsi` from `psi` and returns the external tensors `U` and `D`
-"""
-function rightnormalize(psi::MPS)
-  newpsi = move(psi,1)
-  U,D,V = svd(psi[1],[[1],[2,3]])
-  newpsi[1] = V
-  newpsi.oc = 0
-  return U,D,newpsi
-end
-export rightnormalize
-
-"""
-  U,D,psi = rightnormalize!(psi)
-
-Creates a right-normalized MPS in-place from `psi` and returns the external tensors `U` and `D`
-"""
-function rightnormalize!(psi::MPS)
-  psi = move!(psi,1)
-  U,D,V = svd(psi[1],[[1],[2,3]])
-  psi[1] = V
-  psi.oc = 0
-  return U,D,psi
-end
-export rightnormalize!
-
-"""
-    Lupdate(Lenv,dualpsi,psi,mpo)
-
-Updates left environment tensor `Lenv` with dual MPS `dualpsi`, MPS `psi`, and MPO `mpo`
-"""
-@inline function  Lupdate(Lenv::TensType,dualpsi::TensType,psi::TensType,mpo::TensType...)
-  nMPOs = length(mpo)
-  nLsize = nMPOs+2
-  tempLenv = contractc(Lenv,1,dualpsi,1)
-  for j = 1:nMPOs
-    tempLenv = contract(tempLenv,(1,nLsize),mpo[j],(1,3))
-  end
-  return contract(tempLenv,(1,nLsize),psi,(1,2))
-end
-export Lupdate
-
-"""
-    Rupdate(Renv,dualpsi,psi,mpo)
-
-Updates right environment tensor `Renv` with dual MPS `dualpsi`, MPS `psi`, and MPO `mpo`
-"""
-@inline function  Rupdate(Renv::TensType,dualpsi::TensType,psi::TensType,mpo::TensType...)
-  nMPOs = length(mpo)
-  nLsize = nMPOs+2
-  nRsize = nLsize+1
-  tempRenv = ccontract(dualpsi,3,Renv,nLsize)
-  for j = 1:nMPOs
-    tempRenv = contract(mpo[j],(3,4),tempRenv,(2,nRsize))
-  end
-  return contract(psi,(2,3),tempRenv,(2,nRsize))
-end
-export Rupdate
-
-"""
-    Lupdate!(i,Lenv,psi,dualpsi,mpo)
-
-Updates left environment's (`Lenv`) `i`+1 site from info on the site `i` based on dual MPS (`dualpsi`), MPS (`psi), and MPO (`mpo`)
-"""
-@inline function Lupdate!(i::Integer,Lenv::Env,dualpsi::MPS,psi::MPS,mpo::MPO...)
-  Lenv[i+1] = Lupdate(Lenv[i],dualpsi[i],psi[i],[mpo[a][i] for a = 1:length(mpo)]...)
-  nothing
-end
-
-"""
-    Lupdate!(i,Lenv,psi,mpo)
-
-Updates left environment's (`Lenv`) `i`+1 site from info on the site `i` based on MPS (`psi) and MPO (`mpo`)
-"""
-@inline function Lupdate!(i::Integer,Lenv::Env,psi::MPS,mpo::MPO...)
-  Lupdate!(i,Lenv,psi,psi,mpo...)
-end
-export Lupdate!
-
-"""
-    Rupdate!(i,Renv,dualpsi,psi,mpo)
-
-Updates right environment's (`Renv`) `i`-1 site from info on the site `i` based on dual MPS (`dualpsi`), MPS (`psi), and MPO (`mpo`)
-"""
-@inline function Rupdate!(i::Integer,Renv::Env,dualpsi::MPS,psi::MPS,mpo::MPO...)
-  Renv[i-1] = Rupdate(Renv[i],dualpsi[i],psi[i],[mpo[a][i] for a = 1:length(mpo)]...)
-  nothing
-end
-
-"""
-    Rupdate!(i,Renv,psi,mpo)
-
-Updates right environment's (`Renv`) `i`-1 site from info on the site `i` based on MPS (`psi) and MPO (`mpo`)
-"""
-@inline function Rupdate!(i::Integer,Renv::Env,psi::MPS,mpo::MPO...)
-  Rupdate!(i,Renv,psi,psi,mpo...)
-end
-export Rupdate!
-
-"""
-    boundaryMove!(psi,i,mpo,Lenv,Renv)
-
-Move orthogonality center of `psi` to site `i` and updates left and right environments `Lenv` and `Renv` using MPO `mpo`
-
-See also: [`move!`](@ref)
-"""
-@inline function boundaryMove!(psi::MPS,i::Integer,Lenv::Env,
-                        Renv::Env,mpo::MPO...;mover::Function=move!)
-  origoc = psi.oc
-  if origoc < i
-    mover(psi,i)
-    for w = origoc:i-1
-      Lupdate!(w,Lenv,psi,mpo...)
-    end
-  elseif origoc > i
-    mover(psi,i)
-    for w = origoc:-1:i+1
-      Rupdate!(w,Renv,psi,mpo...)
-    end
-  end
-  nothing
-end
-
-"""
-    boundaryMove!(dualpsi,psi,i,mpo,Lenv,Renv)
-
-Move orthogonality center of `psi` and `dualpsi` to site `i` and updates left and right environments `Lenv` and `Renv` using MPO `mpo`
-
-See also: [`move!`](@ref)
-"""
-@inline function boundaryMove!(dualpsi::MPS,psi::MPS,i::Integer,Lenv::Env,
-                        Renv::Env,mpo::MPO...;mover::Function=move!)
-  origoc = psi.oc
-  if origoc < i
-    mover(psi,i)
-    mover(dualpsi,i)
-    for w = origoc:i-1
-      Lenv[w+1] = Lupdate(Lenv[w],dualpsi[w],psi[w],[mpo[a][w] for a = 1:length(mpo)]...)
-    end
-  elseif origoc > i
-    mover(psi,i)
-    mover(dualpsi,i)
-    for w = origoc:-1:i+1
-      Renv[w-1] = Rupdate(Renv[w],dualpsi[w],psi[w],[mpo[a][w] for a = 1:length(mpo)]...)
-    end
-  end
-  nothing
-end
-export boundaryMove!
-
-"""
-    boundaryMove(dualpsi,psi,i,mpo,Lenv,Renv)
-
-Copies `psi` and moves orthogonality center of `psi` and `dualpsi` to site `i` and updates left and right environments `Lenv` and `Renv` using MPO `mpo`
-
-See also: [`move!`](@ref)
-"""
-@inline function boundaryMove(dualpsi::MPS,psi::MPS,i::Integer,mpo::MPO,Lenv::Env,Renv::Env)
-  newpsi = copy(psi)
-  newdualpsi = copy(dualpsi)
-  newLenv = copy(Lenv)
-  newRenv = copy(Renv)
-  boundaryMove!(newdualpsi,newpsi,i,mpo,newLenv,newRenv)
-  return newdualpsi,newpsi,newLenv,newRenv
-end
-
-"""
-    boundaryMove(psi,i,mpo,Lenv,Renv)
-
-Copies `psi` and moves orthogonality center of `psi` to site `i` and updates left and right environments `Lenv` and `Renv` using MPO `mpo`
-
-See also: [`move!`](@ref)
-"""
-@inline function boundaryMove(psi::MPS,i::Integer,mpo::MPO,Lenv::Env,Renv::Env)
-  newpsi = copy(psi)
-  newLenv = copy(Lenv)
-  newRenv = copy(Renv)
-  boundaryMove!(newpsi,newpsi,i,mpo,newLenv,newRenv)
-  return newpsi,newLenv,newRenv
-end
-export boundaryMove
-
-
-
-#       +---------------------------------------+
-#>------+    Construction of boundary tensors   +---------<
-#       +---------------------------------------+
-
-#
-#Current environment convention is
-#     LEFT              RIGHT
-#   +--<-- 1          3 ---<--+
-#   |                         |
-#   |                         |
-#   +-->-- 2          2 --->--+
-#   |                         |
-#   |                         |
-#   +-->-- 3          1 --->--+
-# any MPOs in between have the same arrow conventions as 2
-
-"""
-    makeBoundary(qind,newArrows[,retType=])
-
-makes a boundary tensor for an input from the quantum numbers `qind` and arrows `newArrows`; can also define type of resulting Qtensor `retType` (default `Float64`)
-
-#Note:
-+dense tensors are just ones(1,1,1,...)
-
-See also: [`makeEnds`](@ref)
-"""
-function makeBoundary(dualpsi::MPS,psi::MPS,mpovec::MPO...;left::Bool=true,rightind::Integer=3)
-  retType = elnumtype(dualpsi,psi,mpovec...)
-  nrank = 2 + length(mpovec)
-  boundary = ones(retType,ones(intType,nrank)...)
-  if typeof(psi[1]) <: qarray
-
-    Q = typeof(psi[1].flux)
-
-    qind = Array{Q,1}(undef,nrank)
-    Ns = length(psi)
-    site = left ? 1 : Ns
-    index = left ? 1 : rightind
-    qind[1] = -(getQnum(index,1,dualpsi[site]))
-    qind[end] = getQnum(index,1,psi[site])
-    for i = 1:length(mpovec)
-      index = left ? 1 : ndims(mpovec[i][Ns])
-      qind[i+1] = getQnum(index,1,mpovec[i][site])
-    end
-
-    thisQnumMat = Array{Array{Q,1},1}(undef,nrank)
-    for j = 1:nrank
-      qn = qind[j]
-      thisQnumMat[j] = Q[qn]
-    end
-    return Qtens(boundary,thisQnumMat)
-  else
-    if typeof(psi[1]) <: denstens
-      return tens(boundary)
-    else
-      return boundary
-    end
-  end
-end
-export makeBoundary
-
-
-
-
-
-function makeEdgeEnv(dualpsi::MPS,psi::MPS,mpovec::MPO...;boundary::TensType=typeof(psi[1])(),left::Bool=true)
-  expsize = 2+length(mpovec)
-  Lnorm = norm(boundary)
-  if ndims(boundary) != expsize || isapprox(Lnorm,0) || isnan(Lnorm) || isinf(Lnorm)
-    Lout = makeBoundary(dualpsi,psi,mpovec...,left=left)
-  else
-    Lout = copy(boundary)
-  end
-  return Lout
-end
-
-"""
-    makeEnds(dualpsi,psi[,mpovec,Lbound=,Rbound=])
-
-Generates first and last environments for a given system of variable MPOs
-
-# Arguments:
-+ `dualpsi::MPS`: dual MPS
-+ `psi::MPS`: MPS
-+ `mpovec::MPO`: MPOs
-+ `Lbound::TensType`: left boundary
-+ `Rbound::TensType`: right boundary
-"""
-function makeEnds(dualpsi::MPS,psi::MPS,mpovec::MPO...;Lbound::TensType=typeof(psi[1])(),Rbound::TensType=typeof(psi[end])())
-  return makeEdgeEnv(dualpsi,psi,mpovec...,boundary=Lbound),makeEdgeEnv(dualpsi,psi,mpovec...,boundary=Rbound,left=false)
-end
-
-"""
-    makeEnds(psi[,mpovec,Lbound=,Rbound=])
-
-Generates first and last environment tensors for a given system of variable MPOs.  Same as other implementation but `dualpsi`=`psi`
-
-# Arguments:
-+ `psi::MPS`: MPS
-+ `mpovec::MPO`: MPOs
-+ `Lbound::TensType`: left boundary
-+ `Rbound::TensType`: right boundary
-"""
-function makeEnds(psi::MPS,mpovec::MPO...;Lbound::TensType=typeof(psi[1])(),Rbound::TensType=typeof(psi[1])())
-  return makeEnds(psi,psi,mpovec...,Lbound=Lbound,Rbound=Rbound)
-end
-export makeEnds
-
-
-
-function genEnv(dualpsi::MPS,psi::MPS,mpo::MPO...;bound::TensType=typeof(psi[1])())
-
-end
-
-
-
-
-"""
-    makeEnv(dualpsi,psi,mpo[,Lbound=,Rbound=])
-
-Generates environment tensors for a MPS (`psi` and its dual `dualpsi`) with boundaries `Lbound` and `Rbound`
-"""
-function makeEnv(dualpsi::MPS,psi::MPS,mpo::MPO...;Lbound::TensType=typeof(psi[1])(),Rbound::TensType=typeof(psi[1])())
-  Ns = length(psi)
-  numtype = elnumtype(dualpsi,psi,mpo...)
-  C = psi[1]
-
-  if typeof(psi) <: largeMPS || typeof(mpo) <: largeMPO
-    Lenv,Renv = largeEnv(numtype,Ns)
-  else
-    Lenv = environment(psi)
-    Renv = environment(psi)
-  end
-  Lenv[1],Renv[Ns] = makeEnds(dualpsi,psi,mpo...;Lbound=Lbound,Rbound=Rbound)
-  for i = 1:psi.oc-1
-    Lupdate!(i,Lenv,dualpsi,psi,mpo...)
-  end
-
-  for i = Ns:-1:psi.oc+1
-    Rupdate!(i,Renv,dualpsi,psi,mpo...)
-  end
-  return Lenv,Renv
-end
-
-"""
-    makeEnv(psi,mpo[,Lbound=,Rbound=])
-
-Generates environment tensors for a MPS (`psi`) with boundaries `Lbound` and `Rbound`
-"""
-function makeEnv(psi::MPS,mpo::MPO;Lbound::TensType=[0],Rbound::TensType=[0])
-  return makeEnv(psi,psi,mpo,Lbound=Lbound,Rbound=Rbound)
-end
-export makeEnv
-
-
-
 
 
 #       +---------------------------------------+
@@ -1237,24 +775,23 @@ end
 isingmpo = makeMPO(H,size(Id,1),Ns)
 ```
 """
-function makeMPO(H::Array{X,1},physSize::Array{Y,1},Ns::Integer;
-                      lower::Bool=true,regtens::Bool=false) where {X <: Array, Y <: Integer}
+function makeMPO(H::Array{Array{X,2},1},physSize::Array{Y,1};
+                      lower::Bool=true,regtens::Bool=false) where {X <: Number, Y <: Integer}
+  Ns = length(H)
   retType = typeof(prod(a->eltype(H[a])(1),1:Ns))
   finalMPO = Array{Array{retType,4},1}(undef,Ns)
   for i = 1:Ns
     thisH = lower ? H[i] : transpose(H[i])
-    states = physSize[(i-1)%size(physSize,1) + 1]
+    states = physSize[(i-1) % size(physSize,1) + 1]
     a1size = div(size(thisH,1),states) #represented in LEFT link indices
     a2size = div(size(thisH,2),states) #represented in RIGHT link indices
-    P = eltype(thisH)
 
-    currsize = [a1size,states,states,a2size]
-    G = Array{P,4}(undef,currsize...)
+    G = Array{retType,4}(undef,a1size,states,states,a2size)
     
-    for l = 1:a1size
-      for j = 1:states
-        for k = 1:states
-          @inbounds @simd for m = 1:a2size
+    for m = 1:a2size
+      for k = 1:states
+        for j = 1:states
+          @inbounds @simd for l = 1:a1size
             G[l,j,k,m] = thisH[j + (l-1)*states, k + (m-1)*states]
           end
         end
@@ -1270,33 +807,33 @@ function makeMPO(H::Array{X,1},physSize::Array{Y,1},Ns::Integer;
     finalMPO[1] = finalMPO[1][1:1,:,:,:]
     finalMPO[end] = finalMPO[end][:,:,:,end:end]
   end
-  return MPO(finalMPO,regtens=regtens)
+  return MPO(retType,finalMPO,regtens=regtens)
 end
 
 function makeMPO(H::Array{X,2},physSize::Array{Y,1},Ns::Integer;
                       lower::Bool=true,regtens::Bool=false) where {X <: Number, Y <: Integer}
-  return makeMPO([H for i = 1:Ns],physSize,Ns)
+  return makeMPO([H for i = 1:Ns],physSize)
 end
 
 function makeMPO(H::Array{X,2},physSize::Y,Ns::Integer;
                       lower::Bool=true,regtens::Bool=false) where {X <: Number, Y <: Integer}
-  return makeMPO([H for i = 1:Ns],[physSize],Ns)
+  return makeMPO([H for i = 1:Ns],[physSize])
 end
 
 function makeMPO(H::Array{X,1},physSize::Y,Ns::Integer;
                       lower::Bool=true,regtens::Bool=false) where {X <: Array, Y <: Integer}
-  return makeMPO(H,[physSize],Ns,lower=lower,regtens=regtens)
+  return makeMPO(H,[physSize],lower=lower,regtens=regtens)
 end
 
 function makeMPO(H::Array{X,1},physSize::Y;
                       lower::Bool=true,regtens::Bool=false) where {X <: Array, Y <: Integer}
-  return makeMPO(H,[physSize],length(H),lower=lower,regtens=regtens)
+  return makeMPO(H,[physSize],lower=lower,regtens=regtens)
 end
 
 function makeMPO(H::Function,physSize::Array{X,1},Ns::Integer;
                       lower::Bool=true,regtens::Bool=false) where X <: Integer
   thisvec = [H(i) for i = 1:Ns]
-  return makeMPO(thisvec,physSize,Ns,lower=lower,regtens=regtens)
+  return makeMPO(thisvec,physSize,lower=lower,regtens=regtens)
 end
 
 function makeMPO(H::Function,physSize::Integer,Ns::Integer;
@@ -1402,54 +939,6 @@ function fullpsi(psi::MPS)
   return reshape!(fullpsi,prod(size(fullpsi)))
 end
 export fullpsi
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1564,7 +1053,7 @@ Assigns flux to the right link index on an MPS tensor
 + `QnumMat::Array{Array{Qnum,1},1}`: quantum number matrix for the physical index
 + `storeVal::Array{T,1}`: maximum value found in MPS tensor, determine quantum number
 """
-function assignflux!(i::Integer,mps::MPS,QnumMat::Array{Array{Q,1},1},storeVal::Array{Float64,1}) where {Q <: Qnum, W <: Number}
+function assignflux!(i::Integer,mps::MPS,QnumMat::Array{Array{Q,1},1},storeVal::Array{Float64,1}) where Q <: Qnum
   for a = 1:size(mps[i],1)
     for b = 1:size(mps[i],2)
       @inbounds for c = 1:size(mps[i],3)
@@ -1602,6 +1091,7 @@ function makeqMPS(mps::MPS,Qlabels::Array{Array{Q,1},1},arrows::Array{Bool,1}...
     end
     start_norm = expect(mps)
   end
+
   W = elnumtype(mps)
   QtensVec = Array{Qtens{W,Q},1}(undef, size(mps.A,1))
 
@@ -1635,7 +1125,7 @@ function makeqMPS(mps::MPS,Qlabels::Array{Array{Q,1},1},arrows::Array{Bool,1}...
       end
     end
   end
-  finalMPS = matrixproductstate{typeof(QtensVec)}(QtensVec,mps.oc)
+  finalMPS = matrixproductstate{Qtens{W,Q}}(QtensVec,mps.oc)
 
   thisnorm = expect(finalMPS)
 

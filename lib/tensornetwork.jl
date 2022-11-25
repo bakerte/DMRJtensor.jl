@@ -912,7 +912,7 @@ using ..MPutil
     names::Array{B,1}
   end
 
-  function sizeT(Qt::nameT{W,B})::TNobj where {T <: TNobj, W <: Union{qarray,AbstractArray,denstens}, B <: Union{Any,String}}
+  function sizeT(Qt::nameT{W,B})::TNobj where {W <: Union{qarray,AbstractArray,denstens}, B <: Union{Any,String}}
     return sizeT{Int64,B}(size(Qt),Qt.names)#,[true for i = 1:length(namez)])
   end
 

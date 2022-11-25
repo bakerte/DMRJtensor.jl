@@ -83,7 +83,7 @@ equivalent to `Union{intType,Array{intType,1},Array{intType,2}}`
 
 See also: [`intType`](@ref) [`convIn`](@ref)
 """
-const intvecType = Union{P,Array{P,1},Array{P,2},Tuple} where P <: Integer
+const intvecType = Union{P,Array{P,1},Array{P,2},NTuple{G,P}} where {P <: Integer, G}
 export intvecType
 
 """
@@ -154,25 +154,20 @@ Converts tensor `P` into a `denstens` and converts to type `W` for output tensor
 See also: [`denstens`](@ref)
 """
 function tens(G::DataType,P::AbstractArray{W,N}) where W <: Number where N
-  return tens(G,Array(rP))
+  rP = reshape(Array(P),prod(size(P)))
+  return tens{G}([size(P,w) for w = 1:N],rP)
 end
 
 function tens(G::DataType,P::Array{W,N}) where W <: Number where N
-  sizeP = [size(P,w) for w = 1:N] #size of P to a vector
+  sizeP = [size(P,w) for w = 1:ndims(P)] #size of P to a vector
   vecP = reshape(P,prod(sizeP))
-  if G != W #converts types if they do not match
+  if G != eltype(P) #converts types if they do not match
     rP = convert(Array{G,1},vecP)
   else
     rP = vecP
   end
   return tens{G}(sizeP,rP)
 end
-#=
-function tens{W}(newsize::Array{intType,1},P::Array{W,N}) where W <: Number where N
-  vecP = reshape(P,prod(newsize))
-  return tens{W}(newsize,vecP)
-end
-=#
 
 """
     G = tens(P)
@@ -242,6 +237,14 @@ function zeros(A::tens{W}) where W <: Number
   return tens{W}(zeros(W,size(A)))
 end
 
+function zeros(R::DataType,A::Union{AbstractArray{W,N},Array{W,N}}) where {W <: Number, N}
+  return zeros(R,size(A))
+end
+
+function zeros(R::DataType,A::tens{W}) where W <: Number
+  return tens{R}(zeros(R,size(A)))
+end
+
 import Base.zero
 """
   G = zero(A)
@@ -255,24 +258,32 @@ end
 
 
 
-
+#=
 function makeIdarray(W::DataType,ldim::Integer;addone::Bool=false,addRightDim::Bool=false,loadleft::Bool=true)
   return makeId(W,ldim,ldim;addone=addone,addRightDim=addRightDim)
 end
+=#
 
-function makeIdarray(W::DataType,ldim::Integer,rdim::Integer;addone::Bool=false,addRightDim::Bool=false,loadleft::Bool=true)
+"""
+  G = makeIdarray(W,ldim,rdim[;addone=false,addRightDim=false,loadleft=true])
+
+Helper function for `makeId` to generate a matrix (`G`) with dimensions `ldim`x`rdim` with data type `W`. Can also add an index of size 1 (`addone`) to either the left (`addRightDim=false`) or right (`addRightDim=true`).
+
+See: [`makeId`](@ref)
+"""
+function makeIdarray(W::DataType,ldim::Integer,rdim::Integer;addone::Bool=false,addRightDim::Bool=false)#,loadleft::Bool=true)
   oneval = W(1)
   if addone
     if addRightDim
       newsize = (ldim,rdim,1)
     else
-      newsize = (1,ldim,rdim,1)
+      newsize = (1,ldim,rdim)
     end
   else
     newsize = (ldim,rdim)
   end
   Id = zeros(W,prod(newsize))
-  stop = loadleft ? ldim : rdim
+  stop = min(ldim,rdim) #loadleft ? ldim : rdim
   @inbounds @simd for i = 1:stop
     Id[i + ldim*(i-1)] = oneval
   end
@@ -286,12 +297,12 @@ Generates an identity tensor (`denstens` of output type `W`, `G`) that contracts
 
 See also: [`denstens`](@ref)
 """
-function makeId(W::DataType,ldim::Integer;addone::Bool=false,addRightDim::Bool=false,loadleft::Bool=true)
-  return tens(makeIdarray(W,ldim,ldim;addone=addone,addRightDim=addRightDim))
+function makeId(W::DataType,ldim::Integer;addone::Bool=false,addRightDim::Bool=false)#,loadleft::Bool=true)
+  return tens(makeIdarray(W,ldim,ldim;addone=addone,addRightDim=addRightDim))#,loadleft=loadleft))
 end
 
 function makeId(W::DataType,ldim::Integer,rdim::Integer;addone::Bool=false,addRightDim::Bool=false,loadleft::Bool=true)
-  return tens(makeIdarray(W,ldim,rdim;addone=addone,addRightDim=addRightDim))
+  return tens(makeIdarray(W,ldim,rdim;addone=addone,addRightDim=addRightDim))#,loadleft=loadleft))
 end
 
 """
@@ -307,20 +318,25 @@ function makeId(A::tens{W},iA::Array{P,1}) where {W <: Number, P <: Union{Intege
   Id = makeId(W,size(A,iA[1][1]),addone=true,addRightDim=true)
   for g = 2:length(iA)
     addId = makeId(W,size(A,iA[g][1]),addone=true,addRightDim=false)
+    addId = reshape!(addId,size(addId)...,1)
     Id = contract(Id,ndims(Id),addId,1)
   end
-  newsize = length(iA) > 1 ? size(Id)[1:ndims(Id)-1] : size(Id)
+  newsize = ntuple(g->size(Id,g),2*length(iA))
   return reshape!(Id,newsize...)
 end
 
-function makeId(A::tens{W},iA::Union{Integer,Tuple}) where {W <: Number, P <: Integer}
-  return makeId(A,[iA])
+function makeId(A::tens{W},iA::Integer) where {W <: Number}
+  return makeId(A,[iA...])
 end
 
 function makeId(A::Array{W,N},iA::Array{P,1}) where {N, W <: Number,P <: Union{Integer,Tuple}}
   densA = tens(A)
   Id = makeId(densA,iA)
   return makedens(Id)
+end
+
+function makeId(A::Array{W,N},iA::Integer...) where {W <: Number,N}
+  return makeId(A,[iA...])
 end
 export makeId
 
@@ -412,7 +428,7 @@ function findnotcons(nA::Integer,iA::NTuple{N,intType}) where N
       notconvec[counter] = w
     end
   end
-  return notconvec #(notconvec...,) #ntuple(w->notconvec[w],length(notconvec))
+  return notconvec
 end
 export findnotcons
 
@@ -456,6 +472,55 @@ function checkType(A::tens{W},B::tens{G}) where {W <: Number, G <: Number}
 end
 export checkType
 
+
+"""
+  G = makepos(ninds)
+
+Generates a 1-indexed vector `G` of length `nind` (0-indexed if `zero=-1`) with first entry 0 and the rest 1.
+
+See also: [`position_incrementer!`](@ref)
+"""
+function makepos(ninds::intType)
+  pos = Array{intType,1}(undef,ninds)
+  return makepos!(pos)
+end
+export makepos
+
+"""
+  G = makepos!(pos)
+
+Generates a 1-indexed vector `G` of length `nind` (0-indexed if `zero=-1`) with first entry 0 and the rest 1.
+
+See also: [`position_incrementer!`](@ref)
+"""
+function makepos!(pos::Array{intType,1})
+  if length(pos) > 0
+    pos[1] = 0
+    @inbounds @simd for g = 2:length(pos)
+      pos[g] = 1
+    end
+  end
+  return pos
+end
+export makepos!
+
+"""
+  position_incrementer!(pos,sizes)
+
+Increments a vector (but no entry over `sizes`) by one step.  Will change contents of `pos`.
+"""
+@inline function position_incrementer!(pos::Array{G,1},sizes::Union{Array{G,1},Tuple{G,Vararg{G}}}) where G <: intType
+  w = 1
+  @inbounds pos[w] += 1
+  @inbounds while w < length(sizes) && pos[w] > sizes[w]
+    pos[w] = 1
+    w += 1
+    pos[w] += 1
+  end
+  nothing
+end
+export position_incrementer!
+
 """
     ind2pos!(currpos,k,x,index,S)
 
@@ -470,9 +535,9 @@ Converts `x[index]` to a position stored in `currpos` (parallelized) with tensor
 
 See also: [`pos2ind`](@ref) [`pos2ind!`](@ref)
 """
-@inline function ind2pos!(currpos::Array{Array{X,1},1},k::X,x::Array{X,1},index::X,S::Array{X,1}) where X <: Integer
+@inline function ind2pos!(currpos::Array{Array{X,1},1},k::X,x::Array{X,1},index::X,S::Union{NTuple{N,X},Array{X,1}}) where {X <: Integer, N}
   currpos[k][1] = x[index]-1
-  @inbounds @simd for j = 1:size(S,1)-1
+  @inbounds @simd for j = 1:length(S)-1
     val = currpos[k][j]
     currpos[k][j+1] = fld(val,S[j])
     currpos[k][j] = val % S[j] + 1
@@ -508,21 +573,6 @@ end
   @inbounds x += currpos[1]
   return x
 end
-#=
-@inline function pos2ind(currpos::Array{P,1},S::Array{P,1}) where {N, P <: Integer,G}
-  return pos2ind(currpos,S,length(S))
-end
-
-@inline function pos2ind(currpos::Array{P,1},S::Array{P,1},G::intType) where {N, P <: Integer}
-  x = 0
-  @inbounds @simd for i = G:-1:2
-    x += currpos[i]-1
-    x *= S[i-1]
-  end
-  @inbounds x += currpos[1]
-  return x
-end
-=#
 export pos2ind
 
 """
@@ -542,33 +592,20 @@ See also: [`pos2ind`](@ref)
   @inbounds x[j] = val
   nothing
 end
-#=
-"""
-  pos2ind!(currpos,S)
-
-Generates an index in element `j` of input storage array `x` from an input position `currpos` (tuple or vector) with tensor size `S` (tuple)
-
-See also: [`pos2ind`](@ref)
-"""
-@inline function pos2ind!(x::Array{X,1},j::Integer,currpos::Union{Array{X,1},NTuple{N,intType}},order::Array{intType,1},S::NTuple{N,intType}) where {N, X <: Integer}
-  @inbounds val = currpos[order[end]]
-  @inbounds @simd for i = length(S)-1:-1:1
-    val -= 1
-    val *= S[order[i]]
-    val += currpos[order[i]]
-  end
-  @inbounds x[j] = val
-  nothing
-end
-=#
 export pos2ind!
 
+"""
+  G = get_denseranges(x,y)
 
+Generates a vector `G` for a tensor of size `x` and selected dimensions `y` containing only `genColType` values. Function converts all to integers or vectors (no tuples for compatibility with Julia arrays)
+
+See: [`genColType`])(@ref) [`getindex!`](@ref)
+"""
 function get_denseranges(sizes::NTuple{G,intType},a::genColType...) where G
   unitranges = Array{genColType,1}(undef,length(a))
   @inbounds for i = 1:length(a)
     if typeof(a[i]) <: Colon
-      unitranges[i] = 1:sizes[i] #[w for w = 1:sizes[i]]
+      unitranges[i] = 1:sizes[i]
     elseif typeof(a[i]) <: Array{intType,1} || typeof(a[i]) <: Tuple{intType,Vararg{intType}}
       unitranges[i] = [a[i][w] for w = 1:length(a[i])]
     elseif typeof(a[i]) <: UnitRange{intType}
@@ -581,99 +618,31 @@ function get_denseranges(sizes::NTuple{G,intType},a::genColType...) where G
   end
   return unitranges
 end
-#=
-function get_denseranges(sizes::NTuple{G,intType},a::genColType...) where G
-  unitranges = Array{Array{intType,1},1}(undef,length(a))
-  @inbounds for i = 1:length(a)
-    if typeof(a[i]) <: Colon
-      unitranges[i] = [w for w = 1:sizes[i]]
-    elseif typeof(a[i]) <: Array{intType,1} || typeof(a[i]) <: Tuple{intType,Vararg{intType}}
-      unitranges[i] = [a[i][w] for w = 1:length(a[i])]
-    elseif typeof(a[i]) <: UnitRange{intType}
-      unitranges[i] = [w for w = a[i]]
-    elseif typeof(a[i]) <: StepRange{intType}
-      unitranges[i] = [w for w = a[i]]
-    elseif typeof(a[i]) <: Integer
-      unitranges[i] = [a[i]]
-    end
-  end
-  return unitranges
-end
-=#
-#=
+
+import Base.transpose
 """
-  G = get_ranges(C,a...)
+  transpose(c)
 
-Converts `a` of type `genColType` to Arrays for use in `getindex` as an output tuple `G` with as many elements as `a`
+Performs adjoint of a `TensType`; assumes rank-2 tensor and flips indices (no conjugation)
+
+See: [`TensType`](@ref) [`adjoint`](@ref)
 """
-function get_ranges(C::Tuple,a::genColType...)
-  ap = Array{genColType,1}(undef,length(a))
-  @inbounds for y = 1:length(ap)
-    if typeof(a[y]) <: Colon
-      ap[y] = 1:C[y]
-    elseif typeof(a[y]) <: Integer
-      ap[y] = a[y]:a[y]
-    elseif typeof(a[y]) <: AbstractArray
-      ap[y] = 1:length(a[y])
-    else
-      ap[y] = a[y]
-    end
-  end
-  return ap
-end
-=#
-"""
-  G = makepos!(pos)
-
-Generates a 1-indexed vector `G` of length `nind` (0-indexed if `zero=-1`) with first entry 0 and the rest 1.
-
-See also: [`position_incrementer!`](@ref)
-"""
-function makepos!(pos::Array{intType,1})
-  if length(pos) > 0
-    pos[1] = 0
-    @inbounds @simd for g = 2:length(pos)
-      pos[g] = 1
-    end
-  end
-  return pos
-end
-export makepos!
-
-"""
-  G = makepos(ninds)
-
-Generates a 1-indexed vector `G` of length `nind` (0-indexed if `zero=-1`) with first entry 0 and the rest 1.
-
-See also: [`position_incrementer!`](@ref)
-"""
-function makepos(ninds::intType)
-  pos = Array{intType,1}(undef,ninds)
-  return makepos!(pos)
-end
-export makepos
-
-"""
-  position_incrementer!(pos,sizes)
-
-Increments a vector (but no entry over `sizes`) by one step.  Will change contents of `pos`.
-"""
-@inline function position_incrementer!(pos::Array{G,1},sizes::Union{Array{G,1},Tuple{G,Vararg{G}}}) where G <: intType
-  w = 1
-  @inbounds pos[w] += 1
-  @inbounds while w < length(sizes) && pos[w] > sizes[w]
-    pos[w] = 1
-    w += 1
-    pos[w] += 1
-  end
-  nothing
-end
-export position_incrementer!
-
-import Base.adjoint
-function adjoint(M::TensType)
+function transpose(M::TensType)
   pM = ndims(M) == 1 ? reshape(M,size(M)...,1) : M
   pM = permutedims(pM,[2,1])
+  return pM
+end
+
+import Base.adjoint
+"""
+  adjoint(c)
+
+Performs adjoint of a `TensType`; assumes rank-2 tensor and flips indices (dagger operation)
+
+See: [`TensType`](@ref) [`transpose`](@ref)
+"""
+function adjoint(M::TensType)
+  pM = transpose(M)
   conj!(pM)
   return pM
 end
@@ -802,7 +771,18 @@ See also: [`lastindex`](@ref) [`denstens`](@ref)
 function lastindex(M::denstens, i::Integer)
   return M.size[i]
 end
+#=
+"""
+  G = lastindex(M)
 
+Same as julia's `Array` `lastindex` but for `denstens` with output `G` (last element)
+
+See also: [`lastindex`](@ref) [`denstens`](@ref)
+"""
+function lastindex(M::denstens)
+  return M.T[length(M.T)]
+end
+=#
 import Base.eltype
 """
   G = eltype(A)
@@ -843,10 +823,12 @@ function getindex(C::tens{W}, a::G...)where W <: Number where G <: Array{Bool,1}
   M = makeArray(C)
   return tens{W}(M[a...])
 end
-
+#=
 function getindex!(C::AbstractArray, a::genColType...)
-  return getindex(C, a...)
+  cols = get_denseranges(size(C),a...)
+  return getindex(C, cols...)
 end
+=#
 
 """
   G = getindex!(A,genColType...)
@@ -867,7 +849,8 @@ function getindex!(C::tens{W}, a::genColType...) where W <: Number
   if allintegers
     return searchindex(C,a...)
   else
-    dC = makeArray(C)[a...]
+    cols = get_denseranges(size(C),a...)
+    dC = makeArray(C)[cols...]
     return tens{W}(dC)
   end
 end
@@ -907,64 +890,20 @@ import Base.setindex!
 
 Puts `A` into the indices of `B` specified by `i` (functionality for tensor class)
 """
-function setindex!(B::tens{W},A::tens{W},a::genColType...) where W <: Number #where G <: Union{denstens,AbstractArray}
+function setindex!(B::tens{W},A::tens{W},a::genColType...) where W <: Number
   G = makeArray(B)
   G[a...] = A
   B.T = reshape(G,prod(size(G))...)
-
-
-  #=
-  Asize = size(A)
-  Bsize = size(B)
-
-  indexranges = get_denseranges(Bsize,a...)
-  indexsizes = ntuple(w->length(indexranges[w]),length(indexranges))
-  nterms = 1
-  @simd for w = 1:length(Asize)
-    nterms *= Asize[w]
-  end
-
-  indexpos = makepos(length(indexranges))
-  pos = makepos(length(Asize))
-
-  @inbounds for z = 1:nterms
-    position_incrementer!(indexpos,indexsizes)
-    transfer2vec!(pos,indexranges,indexpos)
-    x = pos2ind(pos,Bsize)
-    B.T[x] = A.T[z]
-  end
-  =#
   nothing
 end
 
-function setindex!(B::tens{W},A::Array{W,N},a::genColType...) where {W <: Number, N}#where G <: Union{denstens,AbstractArray}
+function setindex!(B::tens{W},A::Array{W,N},a::genColType...) where {W <: Number, N}
   G = makeArray(B)
   G[a...] = A
   B.T = reshape(G,prod(size(G))...)
-  #=
-  Asize = size(A)
-  Bsize = size(B)
-
-  indexranges = get_denseranges(Bsize,a...)
-  indexsizes = ntuple(w->length(indexranges[w]),length(indexranges))
-  nterms = 1
-  @simd for w = 1:length(Asize)
-    nterms *= Asize[w]
-  end
-
-  indexpos = makepos(length(indexranges))
-  pos = makepos(length(Asize))
-
-  @inbounds for z = 1:nterms
-    position_incrementer!(indexpos,indexsizes)
-    transfer2vec!(pos,indexranges,indexpos)
-    x = pos2ind(pos,Bsize)
-    B.T[x] = A[z]
-  end
-  =#
   nothing
 end
-
+#=
 @inline function transfer2vec!(pos::Array{intType,1},indexranges::Array{G,1},indexpos::Array{intType,1}) where G <: genColType
   @inbounds @simd for i = 1:length(indexranges)
     s = indexpos[i]
@@ -972,71 +911,32 @@ end
   end
   nothing
 end
-
+=#
 function setindex!(B::Array{W,N},A::tens{W},a::genColType...) where {W <: Number, N}
-
-#  println("in HERE")
-
   G = makeArray(A)
   B[a...] = G
-#=
-  @time Asize = size(A)
-  @time Bsize = size(B)
-
-  @time indexranges = get_denseranges(Bsize,a...)
-  @time indexsizes = ntuple(w->length(indexranges[w]),length(indexranges))
-  nterms = 1
-  @time @simd for w = 1:length(Asize)
-    nterms *= Asize[w]
-  end
-
-  @time indexpos = makepos(length(indexranges))
-  @time pos = makepos(length(Asize))
-
-  @time @inbounds for z = 1:nterms
-    @time position_incrementer!(indexpos,indexsizes)
-    @time transfer2vec!(pos,indexranges,indexpos)
-    @time x = pos2ind(pos,Bsize)
-#    subeq(B,x,A,z)
-    @time B[x] = A.T[z]
-    println()
-  end
-  println()
-  =#
   nothing
 end
-
+#=
 @inline function subeq(B::Array{W,N},x::intType,A::tens{W},z::intType) where {W <: Number, N}
   B[x] = A.T[z]
   nothing
 end
-
-function setindex!(B::tens{W},A::W,a::Integer...) where W <: Number
-  @inbounds index = a[end]-1
-  @inbounds @simd for q = length(a)-1:-1:1
-    index *= size(B,q)
-    index += a[q]-1
+=#
+function setindex!(B::tens{W},A::W,a::Integer,b::Integer...) where W <: Number
+  @inbounds index = a-1
+  @inbounds @simd for q = length(b):-1:1
+    index += b[q]-1
   end
   @inbounds B.T[index+1] = A
   nothing
 end
 
-
-#=
-function loadM!(output::tens{W},input::Array{W,N}) where {N, W <: Number}
-  @inbounds @simd for x = 1:length(input)
-    output.T[x] = input[x]
-  end
+@inline function setindex!(B::tens{W},A::W,a::Integer) where W <: Number
+  @inbounds B.T[a] = A
   nothing
 end
 
-function loadM!(output::Array{W,N},input::tens{W}) where {N, W <: Number}
-  @inbounds @simd for x = 1:length(input.T)
-    output[x] = input.T[x]
-  end
-  nothing
-end
-=#
 """
   loadM!(out,in)
 
@@ -1057,50 +957,23 @@ Performs a linear combination of the input tensors `M` with coefficients `alpha`
 The input function `fct` can be altered. For example,  A/2 + B/3 is tensorcombinaton(A,B,alpha=(2,3),fct=/).
 """
 function tensorcombination(M::tens{W}...;alpha::Tuple=ntuple(i->W(1),length(M)),fct::Function=*) where W <: Number
-  sizeM = Array{intType,1}(undef,ndims(M[1]))
-  @inbounds @simd for w = 1:length(sizeM)
-    sizeM[w] = size(M[1],w)
-  end
-  newTensor = tens{W}(sizeM,Array{W,1}(undef,length(M[1])))
+  input_tup = ntuple(g->M[g].T,length(M))
+  output_vector = tensorcombination(input_tup...,alpha=alpha,fct=fct)
+  return tens{W}(copy(M[1].size),output_vector)
+end
+
+function tensorcombination(M::Array{W,N}...;alpha::Tuple=ntuple(i->W(1),length(M)),fct::Function=*) where {W <: Number, N}
   nterms = min(length(M),length(alpha))
-  @inbounds @simd for i = 1:length(M[1])
-    newTensor.T[i] = fct(M[1].T[i],alpha[1])
-  end
-  @inbounds for k = 2:nterms
-    @inbounds @simd for i = 1:length(M[1])
-      newTensor.T[i] += fct(M[k].T[i],alpha[k])
+  newTensor = Array{W,N}(undef,size(M[1])...)
+  for i = 1:length(M[1])
+    out = W(0)
+    @inbounds @simd for k = 1:nterms
+      out += fct(M[k][i],alpha[k])
     end
+    newTensor[i] = out
   end
   return newTensor
 end
-
-function tensorcombination(M::Array{W,N}...;alpha::NTuple{G,W}=ntuple(i->W(1),length(M)),fct::Function=*) where {W <: Number, N, G}
-  #  if fct == *
-  #    return lineartensorcombination!(M...,alpha=alpha)
-  #  else
-      nterms = min(length(M),length(alpha))
-      newTensor = Array{W,N}(undef,size(M[1])...)
-      @inbounds @simd for i = 1:length(M[1])
-        newTensor[i] = fct(M[1][i],alpha[1])
-      end
-      @inbounds for k = 2:nterms
-        @inbounds @simd for i = 1:length(M[1])
-          newTensor[i] += fct(M[k][i],alpha[k])
-        end
-      end
-      return newTensor
-  #=
-      @inbounds for w = 1:length(outT)
-        x = W(0)
-        @inbounds @simd for k = 1:nterms
-          x = fct(M[k][w],alpha[k])
-        end
-        outT[w] = x
-      end
-      return outT
-      =#
-  #  end
-  end
 
 function tensorcombination(alpha::Tuple,M::P...;fct::Function=*) where P <: densTensType
   return tensorcombination(M...,alpha=alpha,fct=fct)
@@ -1114,67 +987,19 @@ Same as `tensorcombination` but alters the contents of the first input tensor in
 
 See also: [`tensorcombination`](@ref)
 """
-function tensorcombination!(M::tens{W}...;alpha::NTuple{N,W}=ntuple(i->W(1),length(M)),fct::Function=*) where {W <: Number, N}
-  #  if fct == *
-  #    return lineartensorcombination!(M...,alpha=alpha)
-  #  else
-    nterms = min(length(M),length(alpha))
-    @inbounds @simd for i = 1:length(M[1])
-      M[1].T[i] = fct(M[1].T[i],alpha[1])
+function (tensorcombination!(M::P...;alpha::Tuple=ntuple(i->W(1),length(M)),fct::Function=*) where {P <: Union{tens{W},Array{W,G},LinearAlgebra.Diagonal{W,Vector{W}}}}) where {W <: Number, G}
+  nterms = min(length(M),length(alpha))
+  @inbounds for i = 1:length(M[1])
+    out = W(0)
+    @inbounds @simd for k = 1:nterms
+      out += fct(M[k][i],alpha[k])
     end
-    @inbounds for k = 2:nterms
-      @inbounds @simd for i = 1:length(M[1])
-        M[1].T[i] += fct(M[k].T[i],alpha[k])
-      end
-    end
-  
-  
-  
-  #=
-      nterms = min(length(M),length(alpha))
-      @inbounds for i = 1:length(M[1])
-        x = W(0)
-        @inbounds @simd for k = 1:nterms
-          x += fct(M[k].T[w],alpha[k])
-        end
-        M[1].T[i] = x
-      end
-      =#
-      return M[1]
-  #  end
+    M[1][i] = out
   end
-  
-  function tensorcombination!(M::Array{W,N}...;alpha::NTuple{G,W}=ntuple(i->W(1),length(M)),fct::Function=*) where {W <: Number, N, G}
-  #  if fct == *
-  #    return lineartensorcombination!(M...,alpha=alpha)
-  #  else
-  
-    nterms = min(length(M),length(alpha))
-    @inbounds @simd for i = 1:length(M[1])
-      M[1][i] = fct(M[1][i],alpha[1])
-    end
-    @inbounds for k = 2:nterms
-      @inbounds @simd for i = 1:length(M[1])
-        M[1][i] += fct(M[k][i],alpha[k])
-      end
-    end
-  
-  #=
-      nterms = min(length(M),length(alpha))
-      @inbounds for w = 1:length(M[1])
-        x = W(0)
-        @inbounds @simd for k = 1:nterms
-          x += fct(M[k][w],alpha[k])
-        end
-        M[1][w] = x
-      end
-  
-      =#
-      return M[1]
-  #  end
-  end
+  return M[1]
+end
 
-function tensorcombination!(alpha::NTuple{N,W},M::P...;fct::Function=*) where {P <: TensType, W <: Number, N}
+function tensorcombination!(alpha::Tuple,M::P...;fct::Function=*) where {P <: TensType}
   return tensorcombination!(M...,alpha=alpha,fct=fct)
 end
 export tensorcombination!
@@ -1260,11 +1085,6 @@ export div!
 function norm!(M::TensType)
   return div!(M,norm(M))
 end
-#=
-function norm!(A::TensType,M::TensType...)
-  return (norm!(A),ntuple(i->norm!(M[i]),length(M))...)
-end
-=#
 export norm!
 
 import LinearAlgebra.+
@@ -1289,7 +1109,8 @@ Subtracts two tensors `A` and `B` (`A`-`B`) with output `G`
 See also: [`sub!`](@ref)
 """
 function -(A::TensType, B::TensType)
-  return tensorcombination((eltype(A)(1),eltype(B)(-1)),A,B)
+  mA,mB = checkType(A,B)
+  return tensorcombination((eltype(A)(1),eltype(B)(-1)),mA,mB)
 end
 
 import Base.*
@@ -1348,7 +1169,7 @@ See also: [`sqrt`](@ref)
 function sqrt(M::TensType)
   return tensorcombination(M,alpha=(0.5,),fct=^)
 end
-
+#=
 """
   G = inverse_element(x,zero)
 
@@ -1357,7 +1178,8 @@ Computes the inverse of the input element `x` up to some numerical zero value `z
 function inverse_element(x::Number,zeronum::Real)
   return abs(x) > zeronum ? 1/x : 0.
 end
-
+=#
+import Base.inv
 """
   G = invmat!(M[,zero=])
 
@@ -1368,20 +1190,17 @@ See also: [`invmat!`](@ref)
 function invmat!(M::tens{W};zeronum::Float64=1E-16) where W <: Number
   rM = reshape(M.T,M.size)
   return tens{W}(inv(rM))
-#  return tensorcombination!(M,alpha=(zeronum,),fct=inverse_element)
 end
 
 function invmat!(M::Array{W,2};zeronum::Float64=1E-16) where  W <: Number
-#  rM = reshape(M.T,M.size)
-  #=
-  @inbounds for a = 1:length(M)
-    M[a,a] = abs(M[a,a]) > zeronum ? 1/M[a,a] : 0.
-  end=#
+  return inv(M)
+end
+
+function invmat!(M::LinearAlgebra.Diagonal{W,Array{W,1}};zeronum::Float64=1E-16) where W <: Number
   return inv(M)
 end
 export invmat!
 
-import Base.inv
 """
   G = invmat(M[,zero=])
 
@@ -1390,18 +1209,15 @@ Creates inverse of a diagonal matrix with output `G`; if value is below `zero`, 
 See also: [`invmat!`](@ref)
 """
 function invmat(M::TensType;zeronum::Float64=1E-16) 
-  return invmat!(copy(M),zeronum=zeronum)#tensorcombination(M,alpha=(zeronum,),fct=inverse_element)
+  return invmat!(copy(M),zeronum=zeronum)
 end
-#=
-function invmat(M::AbstractArray;zeronum::Float64=1E-16)
-  outM = zeros(eltype(M),size(M))
-  for a = 1:length(M)
-    outM = abs(M[a,a]) > zeronum ? 1/M[a,a] : 0.
-  end
-  return invmat(copy(M))
-end=#
 export invmat
 
+"""
+  exp!(A,prefactor)
+
+exponentiate (exp(`prefactor`*`A`)) a matrix or `denstens` (also matrix)
+"""
 function exp!(A::Array{W,2},prefactor::Number) where W <: Number
   if !isapprox(prefactor,1)
     if W == typeof(prefactor)
@@ -1414,13 +1230,7 @@ function exp!(A::Array{W,2},prefactor::Number) where W <: Number
       A = A*prefactor
     end
   end
-  #=
-  maxA = maximum(A)
-  if isnan(exp(A)) || isapprox(maxA,-Inf)
-    expA = zeros(W,size(A)) + LinearAlgebra.I + A
-  else =#
-    expA = exp(A)
-#  end
+  expA = exp(A)
   return expA
 end
 
@@ -1436,6 +1246,11 @@ function exp!(A::tens{W},prefactor::Number) where W <: Number
   return A
 end
 
+"""
+  exp!(A)
+
+exponentiate (exp(`A`)) a matrix or `denstens` (also matrix)
+"""
 function exp!(A::Array{W,2}) where W <: Number
   return exp!(A,W(1))
 end
@@ -1461,6 +1276,10 @@ function exp(A::tens{W},prefactor::Number) where W <: Number
   return tens(newtype,exp(X,prefactor))
 end
 
+function exp(A::tens{W}) where W <: Number
+  return exp(A,W(1))
+end
+
 """
   G = exp(alpha,beta)
 
@@ -1477,7 +1296,6 @@ function exp(alpha::Array{W,1},beta::Array{Y,1},prefactor::Number) where {W <: N
       G[i,i+1] = beta[i]
       G[i+1,i] = conj(beta[i])
     end
-#    G = LinearAlgebra.Hermitian(C)
   else  
     G = LinearAlgebra.SymTridiagonal(alpha,beta)
   end
@@ -1500,10 +1318,6 @@ function exp(G::LinearAlgebra.SymTridiagonal{W, Vector{W}},prefactor::Number) wh
     D = [exp(D[i]*prefactor) for i = 1:length(D)]
   end
   return U*LinearAlgebra.Diagonal(D)*U'
-end
-
-function exp(A::tens{W}) where W <: Number
-  return exp(A,W(1))
 end
 
 function exp(alpha::Array{W,1},beta::Array{Y,1}) where {W <: Number, Y <: Number}
@@ -1531,7 +1345,7 @@ function reshape!(M::tens{W}, S::NTuple{N,intType};merge::Bool=false) where {N, 
     newsize[w] = S[w]
   end
   M.size = newsize
-  return M #tens{W}(newsize,M.T)
+  return M
 end
 
 function reshape!(M::tens{W}, S::intType...;merge::Bool=false) where W <: Number
@@ -1597,6 +1411,10 @@ function reshape(M::Array{W,N}, S::Array{intType,1};merge::Bool=false) where {W 
   return reshape(copy(M),S...)
 end
 
+function reshape(M::tens{W}, S::NTuple{N,intType};merge::Bool=false) where {N,W <: Number}
+  return reshape!(copy(M),S)
+end
+
 """
   G = reshape(M,a[,merge=])
 
@@ -1612,10 +1430,9 @@ julia> reshape!(A,[[1,2],[3]]); #same as above
 
 See also: [`reshape!`](@ref)
 """
-function reshape(M::tens{W}, S::Array{Array{P,1},1};merge::Bool=false) where {W <: Number, P <: intType}
+function reshape(M::tens{W}, S::Union{Array{Array{P,1},1},Tuple};merge::Bool=false) where {W <: Number, P <: intType}
   return reshape!(copy(M),S)
 end
-
 
 """
   G = unreshape!(M,S)
@@ -1624,7 +1441,7 @@ Same as `reshape!` but used for ease of reading code and also has new context wi
 
 See also: [`reshape!`](@ref)
 """
-function unreshape!(M::AbstractArray, S::intType...;merge::Bool=false) where W <: Number
+function unreshape!(M::AbstractArray, S::intType...;merge::Bool=false)
   return reshape(M,S...)
 end
 
@@ -1640,7 +1457,7 @@ Same as `reshape` but used for ease of reading code and also has new context wit
 
 See also: [`reshape`](@ref)
 """
-function unreshape(M::AbstractArray, S::intType...;merge::Bool=false) where W <: Number
+function unreshape(M::AbstractArray, S::intType...;merge::Bool=false)
   return reshape(M,S...)
 end
 
@@ -1666,11 +1483,11 @@ function permutedims!(M::tens{W}, vec::NTuple{N,intType}) where {N, W <: Number}
   return permutedims(M,vec)
 end
 
-function permutedims!(M::AbstractArray, vec::NTuple{N,intType}) where {N, W <: Number}
+function permutedims!(M::AbstractArray{W,P}, vec::NTuple{N,intType}) where {N, P, W <: Number}
   return permutedims(M,vec)
 end
 
-function permutedims!(M::AbstractArray, vec::Array{intType,1}) where {N, W <: Number}
+function permutedims!(M::AbstractArray{W,P}, vec::Array{intType,1}) where {P, W <: Number}
   return permutedims(M,vec)
 end
 
@@ -1693,11 +1510,11 @@ function permutedims(A::Array{W,G},iA::NTuple{G,intType}) where {W <: Number, G}
     Asizes = ntuple(w->size(A,w),G)
     newsizes = ntuple(w->Asizes[iA[w]],G)
 
-    P = Array{W,G}(undef,newsizes...)
+    out = Array{W,G}(undef,newsizes...)
 
-    permutedims!(P,A,iA,Asizes,newsizes)
+    permutedims!(out,A,iA,Asizes,newsizes)
   end
-  return P
+  return out
 end
 
 function permutedims!(P::Array{W,R},A::Union{Array{W,R},tens{W}},iA::NTuple{G,intType},Asizes::NTuple{G,intType},newsizes::NTuple{G,intType}) where {W <: Number, G, R}
@@ -1753,7 +1570,7 @@ function permutedims!(P::Array{W,R},A::Union{Array{W,R},tens{W}},iA::NTuple{G,in
     end
 
     if notfirst
-      @inbounds for x = 0:Asizes[1]-1
+      @inbounds @simd for x = 0:Asizes[1]-1
         z = x + backZ
         z -= 1
         z *= factor
@@ -1762,7 +1579,7 @@ function permutedims!(P::Array{W,R},A::Union{Array{W,R},tens{W}},iA::NTuple{G,in
         P[z] = A[i+x]
       end
     else
-      @inbounds for x = 0:Asizes[1]-1
+      @inbounds @simd for x = 0:Asizes[1]-1
         z = x + backZ
         P[z] = A[i+x]
       end
@@ -1887,9 +1704,6 @@ function Bloop!(C::Union{Array{W,nA},Array{W,1}},B::Union{tens{W},Array{W,nA}},f
   Bpos = makepos(nA)
 
   d1 = 1
-#  @inbounds while d1 < nA && Bsize[d1] == 1
-#    d1 += 1
-#  end
   dimB = size(B,d1)
 
   Bysize = 1
@@ -1923,56 +1737,6 @@ function Bloop!(C::Union{Array{W,nA},Array{W,1}},B::Union{tens{W},Array{W,nA}},f
   end
   nothing
 end
-#=
-
-function joinindex!(bareinds::intvecType,A::Union{tens{W},Array{W,N}},B::Union{tens{W},Array{W,N}}) where {W <: Number, N}
-
-  inds = convIn(bareinds)
-  
-  nA = ndims(A)
-  nB = nA
-  finalsize = Array{intType,1}(undef,nA) #[size(A,i) for i = 1:nA]
-  axesA = Array{UnitRange{intType},1}(undef,nA)
-  axesout = Array{UnitRange{intType},1}(undef,nA)
-  @inbounds @simd for i = 1:nA
-    finalsize[i] = size(A,i)
-    axesA[i] = 1:finalsize[i]
-  end
-  @inbounds @simd for i = 1:length(inds)
-    a = inds[i]
-    finalsize[a] += size(B,a)
-  end
-#  tupsize = ntuple(w->finalsize[w],nA)
-#  if length(inds) > 1
-    newTensor = zeros(W,finalsize...) #tupsize)
-#  else
-#    newTensor = Array{W,nA}(undef,tupsize)
-#  end
-
-  notinds = findnotcons(nA,inds)
-  @inbounds @simd for i = 1:length(notinds)
-    a = notinds[i]
-    axesout[a] = 1:finalsize[a]
-  end
-  @inbounds @simd for i = 1:length(inds)
-    a = inds[i]
-    start = size(A,a)+1
-    stop = finalsize[a]
-    axesout[a] = start:stop
-  end
-
-  #better way to load tensors?
-  #=@time=# @inbounds newTensor[axesA...] = A
-  #=@time=# @inbounds newTensor[axesout...] = B
-
-  if typeof(A) <: denstens || typeof(B) <: denstens
-    newTensor = tens{W}(newTensor)
-  end
-
-  return newTensor
-end
-=#
-
 
 
 
@@ -2064,4 +1828,13 @@ function println(A::denstens;show::Integer = 4)
   nothing
 end
 
-#end
+
+
+"""
+  undefMat(outtype,x,y)
+
+Generates a matrix of size `(x,y)` with element type `outtype`.
+"""
+@inline function undefMat(outtype::DataType,x::Integer,y::Integer)
+  return Array{outtype,2}(undef,x,y)
+end

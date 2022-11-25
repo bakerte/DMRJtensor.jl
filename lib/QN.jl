@@ -76,10 +76,6 @@ using ..tensor
   export parity
 
 
-  @inline function inv(a::Qnum)
-    return -a
-  end
-  export inv
 #=
   Base.@pure function -(A::Qnum)
     return inv(A)
@@ -178,6 +174,12 @@ using ..tensor
   end
   =#
 #  export inv!
+
+
+@inline function inv(a::U1)
+  return -a
+end
+export inv
 
   """
       Zn{N}(q)
@@ -310,6 +312,16 @@ using ..tensor
   # 	TT = (wrap{t} for t in T)
   # 	Content::tuple{TT...}
   # end
+
+@inline function inv(a::Zn{N}) where N
+  c = N-a.val
+  if c < 0
+    c += N
+  elseif c >= N
+    c -= N
+  end
+  return Zn{N}(c)
+end
 
   """
       @makeQNs("name",types...)

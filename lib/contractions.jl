@@ -43,12 +43,22 @@ Return `alpha*A*B` or the other three variants according to [`tA`](@ref stdlib-b
 libmult(tA, tB, alpha, A, B)
 
 """
+    libmult(tA, tB, alpha, A, B, beta, C)
+Return `alpha*A*B+beta*C` or the other three variants according to [`tA`](@ref stdlib-blas-trans) and `tB`.
+"""
+libmult(tA, tB, alpha, A, B,beta,C)
+
+"""
     libmult(tA, tB, A, B)
 Return `A*B` or the other three variants according to [`tA`](@ref stdlib-blas-trans) and `tB`.
 """
 libmult(tA, tB, A, B)
 
+"""
+  permq(A,iA)
 
+Answers the question of whether to permute the tensor `A` with contracted indices `iA`
+"""
 function permq(A::densTensType,iA::Union{Array{intType,1},NTuple{K,intType}}) where K
   nopermL = true
   w = 0
@@ -69,6 +79,11 @@ function permq(A::densTensType,iA::Union{Array{intType,1},NTuple{K,intType}}) wh
   return nopermL,nopermR
 end
 
+"""
+  willperm(conjA,WA,AnopermL,AnopermR)
+
+Determines LAPACK flag based on output of `permq` and whether to conjugate `conjA` and what type `WA`
+"""
 function willperm(conjA::Bool,WA::DataType,AnopermL::Bool,AnopermR::Bool)
   if AnopermL
     transA = conjA && WA <: Complex ? 'C' : 'T'
@@ -80,6 +95,11 @@ function willperm(conjA::Bool,WA::DataType,AnopermL::Bool,AnopermR::Bool)
   return Aperm,transA
 end
 
+"""
+  prepareT(A,Lvec,Rvec,conjvar)
+
+Converts input tensor `A` to its matrix equivalent with left indices contained in `Lvec` and right indices contained in `Rvec` and whether to conjugate (`conjvar`)
+"""
 function prepareT(A::densTensType,Lvec::Union{Array{intType,1},NTuple{K,intType}},Rvec::Union{Array{intType,1},NTuple{P,intType}},conjvar::Bool) where {K,P}
   newdimsA = Array{intType,1}(undef,ndims(A))
   counter = 0
@@ -98,6 +118,11 @@ function prepareT(A::densTensType,Lvec::Union{Array{intType,1},NTuple{K,intType}
   return pA
 end
 
+"""
+  getsizes(A,iA,AAsizes,counter)
+
+Finds sizes of the matrix equivalents for tensor `A`, contracted indices `iA`, sizes of the new tensor `AAsizes`, and a `counter` which increments between the two tensors being contracted over
+"""
 function getsizes(A::TensType,iA::intvecType,AAsizes::Array{intType,1},counter::intType)
   Lsize = innersizeL = 1
   @inbounds for w = 1:ndims(A)
@@ -112,7 +137,12 @@ function getsizes(A::TensType,iA::intvecType,AAsizes::Array{intType,1},counter::
   return Lsize,innersizeL
 end
 
-function maincontractor(conjA::Bool,conjB::Bool,A::TensType,iA::intvecType,B::TensType,iB::intvecType,Z::TensType...;alpha::Number=1,beta::Number=1)
+"""
+  maincontractor(conjA,conjB,A,iA,B,iB,Z...;alpha=1,beta=1)
+
+Contraction function (`alpha`*`A`*`B`+`beta`*`Z`) and can conjugate A (`conjA`) or B (`conjB`)
+"""
+function maincontractor(conjA::Bool,conjB::Bool,A::densTensType,iA::intvecType,B::densTensType,iB::intvecType,Z::TensType...;alpha::Number=1,beta::Number=1)
   AnopermL,AnopermR = permq(A,iA)
   BnopermL,BnopermR = permq(B,iB)
 
@@ -124,11 +154,6 @@ function maincontractor(conjA::Bool,conjB::Bool,A::TensType,iA::intvecType,B::Te
   AAsizes = Array{intType,1}(undef,Aremain+Bremain)
   Lsize,innersizeL = getsizes(A,iA,AAsizes,0)
   Rsize,innersizeR = getsizes(B,iB,AAsizes,Aremain)
-#=
-  m,n,ka,kb = Lsize,Rsize,innersizeL,innersizeR
-  if ka != kb #|| m != size(C,1) || n != size(C,2)
-    throw(DimensionMismatch("A has size ($m,$ka), B has size ($kb,$n), C has size ($m,$n)"))
-  end=#
 
   if Aperm && Bperm
     mulA = conjA && eltype(A) <: Complex && !AnopermL ? conj(A) : A
@@ -149,7 +174,7 @@ function maincontractor(conjA::Bool,conjB::Bool,A::TensType,iA::intvecType,B::Te
   end
 
   if length(Z) > 0
-    outType = typeof(eltype(A)(1)*eltype(B)(1)*eltype(Z)(1)*typeof(alpha)(1)*typeof(beta)(1))
+    outType = typeof(eltype(A)(1)*eltype(B)(1)*eltype(Z[1])(1)*typeof(alpha)(1)*typeof(beta)(1))
     type_alpha = convert(outType,alpha)
     type_beta = convert(outType,beta)
     out = libmult(transA,transB,type_alpha,mulA,mulB,type_beta,Z[1],Lsize,innersizeL,innersizeR,Rsize)
@@ -175,11 +200,13 @@ end
 
 
 """
-takes `identity` or `adjoint` (or equivalently `conj`) for the `Afct` and `Bfct`
+  dot(A,B;Lfct=adjoint,Rfct=identity)
+
+takes `identity` or `adjoint` (or equivalently `conj`) for the `Lfct` and `Rfct`
 
 See also: [`identity`](@ref) [`adjoint`](@ref) [`conj`](@ref)
 """
-function dot(inA::densTensType,inB::densTensType;Afct::Function=adjoint,Bfct::Function=identity,transA::Bool=true)
+function dot(inA::densTensType,inB::densTensType;Lfct::Function=adjoint,Rfct::Function=identity,transA::Bool=true)
   A = typeof(inA) <: denstens ? inA.T : inA
   B = typeof(inB) <: denstens ? inB.T : inB
 
@@ -187,25 +214,25 @@ function dot(inA::densTensType,inB::densTensType;Afct::Function=adjoint,Bfct::Fu
   val = newtypeAB(0)
   dim1 = length(A) #size(inA,transA ? 1 : 2)
   @inbounds @simd for j = 1:dim1
-    val += Afct(A[j]) * Bfct(B[j])
+    val += Lfct(A[j]) * Rfct(B[j])
   end
   return val
 end
 
-function dot(C::Qtens{W,Q},D::Qtens{R,Q};Afct::Function=adjoint,Bfct::Function=identity) where {W <: Number, R <: Number, Q <: Qnum}
+function dot(C::Qtens{W,Q},D::Qtens{R,Q};Lfct::Function=adjoint,Rfct::Function=identity) where {W <: Number, R <: Number, Q <: Qnum}
   newtype = typeof(W(1)*R(1))
 
   A = changeblock(C,intType[],intType[i for i = 1:length(C.QnumMat)])
   B = changeblock(D,intType[i for i = 1:length(D.QnumMat)],intType[])
-  conjA = Afct != identity
-  conjB = Bfct != identity
+  conjA = Lfct != identity
+  conjB = Rfct != identity
   commonblocks = matchblocks((conjA,conjB),A,B,ind=(2,1))
 
   val = newtype(0)
   @inbounds for q = 1:length(commonblocks)
     Aqind = commonblocks[q][1]
     Bqind = commonblocks[q][2]
-    val += dot(A.T[Aqind],B.T[Bqind],Afct=Afct,Bfct=Bfct)
+    val += dot(A.T[Aqind],B.T[Bqind],Lfct=Lfct,Rfct=Rfct)
   end
   return val
 end
@@ -218,7 +245,7 @@ The function will admit any dimension or input element type in terms of the arra
 If more operators `H` should be contracted between `A` and `B`, then it is advised here to contract them first before using this function
 
 """
-function dot(inA::densTensType,inH::densTensType,inB::densTensType;Afct::Function=adjoint,Bfct::Function=identity,transA::Bool=true)
+function dot(inA::densTensType,inH::densTensType,inB::densTensType;Lfct::Function=adjoint,Rfct::Function=identity,transA::Bool=true)
 
   A = typeof(inA) <: denstens ? inA.T : inA
   H = typeof(inH) <: denstens ? inH.T : inH
@@ -234,22 +261,16 @@ function dot(inA::densTensType,inH::densTensType,inB::densTensType;Afct::Functio
     ival = newtypeAH(0)
     savedim = dim1*(j-1)
     @inbounds @simd for i = 1:dim1
-      ival += Afct(A[i]) * H[i + savedim]
+      ival += Lfct(A[i]) * H[i + savedim]
     end
-    val += ival * Bfct(B[j])
+    val += ival * Rfct(B[j])
   end
   return val
 end
 
 #not sure how to assign matrix blocks...or how to get information from that to A and B vectors
 #must be set up correctly with changeblock
-function dot(A::Qtens{W,Q},H::Qtens{Y,Q},B::Qtens{R,Q};Afct::Function=adjoint,Bfct::Function=identity) where {W <: Number, Y <: Number, R <: Number, Q <: Qnum}
-#  conjA = Afct != identity
-#  conjB = Bfct != identity
-#  ival = maincontractor(C,G,)
-#  A = changeblock(C,intType[],intType[i for i = 1:length(C.QnumMat)])
-#  B = changeblock(D,intType[i for i = 1:length(D.QnumMat)],intType[])
-#  H = changeblock(G,G.currblock[1],G.currblock[2])
+function dot(A::Qtens{W,Q},H::Qtens{Y,Q},B::Qtens{R,Q};Lfct::Function=adjoint,Rfct::Function=identity) where {W <: Number, Y <: Number, R <: Number, Q <: Qnum}
   Acommonblocks = matchblocks((conjA,false),A,H,ind=(2,1))
   Bcommonblocks = matchblocks((conjA,conjB),A,B,ind=(2,1))
   newtype = typeof(W(1)*R(1))
@@ -262,7 +283,7 @@ function dot(A::Qtens{W,Q},H::Qtens{Y,Q},B::Qtens{R,Q};Afct::Function=adjoint,Bf
       error("unequal sizes in dot for quantum number tensors for A block: $Aqind, H block: $Hqind, and B block: $Bqind")
     end
     if Aqind != 0 && Hqind != 0 && Bqind != 0
-      val += dot(A.T[Aqind],H.T[Hqind],B.T[Bqind],Afct=Afct,Bfct=Bfct)
+      val += dot(A.T[Aqind],H.T[Hqind],B.T[Bqind],Lfct=Lfct,Rfct=Rfct)
     end
   end
   return val
@@ -271,7 +292,7 @@ export dot
 
 
 function *(X::TensType,Y::TensType)
-  return contract(X,2,Y,1)
+  return contract(X,ndims(X),Y,1)
 end
 
 function *(X::LinearAlgebra.Diagonal{R, Vector{R}},Y::tens{W}) where {R <: Number, W <: Number}
@@ -410,7 +431,7 @@ function rmul!(X::LinearAlgebra.Diagonal{R, Vector{R}},Y::tens{W}) where {R <: N
   end
   return Y
 end
-function rmul!(Y::TensType,X::R) where {R <: Number, W <: Number}
+function rmul!(Y::TensType,X::R) where {R <: Number}
   return tensorcombination!((X,),Y)
 end
 function rmul!(X::R,Y::tens{W}) where {R <: Number, W <: Number}
@@ -424,11 +445,16 @@ function contract(A::LinearAlgebra.Diagonal{W,Vector{W}},B::densTensType;alpha::
 end
 
 function contract!(A::LinearAlgebra.Diagonal{W,Vector{W}},B::densTensType;alpha::Number=eltype(A)(1)) where W <: Number
-  out = dot(mA,mB,Afct=identity,Bfct=identity)
+  out = dot(A,B,Lfct=identity,Rfct=identity)
   return isapprox(alpha,1) ? out : rmul!(alpha,out)
 end
 
-function contract(A::LinearAlgebra.Diagonal{W, Vector{W}},iA::intvecType,B::TensType,iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1)) where W <: Number
+function contract(A::Union{TensType,LinearAlgebra.Diagonal{W, Vector{W}}},iA::intvecType,B::Union{TensType,LinearAlgebra.Diagonal{W, Vector{W}}},iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1)) where W <: Number
+  return diagcontract(A,convIn(iA),B,convIn(iB),Z...,alpha=alpha,beta=beta)
+end
+
+function diagcontract(A::LinearAlgebra.Diagonal{W, Vector{W}},iA::intvecType,B::TensType,iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1)) where W <: Number
+
   Lperm = true
   w = 0
   while Lperm && w < length(iB)
@@ -449,7 +475,7 @@ function contract(A::LinearAlgebra.Diagonal{W, Vector{W}},iA::intvecType,B::Tens
     C = B*A
   else
     notvecB = findnotcons(ndims(B),iB)
-    mB = prepareT(B,iB,notvecB,false)#,conjB)
+    mB = prepareT(B,iB,notvecB,false)
     C = A*mB
   end
   if length(Z) == 0
@@ -464,7 +490,7 @@ function contract(A::LinearAlgebra.Diagonal{W, Vector{W}},iA::intvecType,B::Tens
   return out
 end
 
-function contract(A::TensType,iA::intvecType,B::LinearAlgebra.Diagonal{W, Vector{W}},iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1)) where W <: Number
+function diagcontract(A::TensType,iA::intvecType,B::LinearAlgebra.Diagonal{W, Vector{W}},iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1)) where W <: Number
   Lperm = true
   w = 0
   while Lperm && w < length(iA)
@@ -485,7 +511,7 @@ function contract(A::TensType,iA::intvecType,B::LinearAlgebra.Diagonal{W, Vector
     C = A*B
   else
     notvecA = findnotcons(ndims(A),iA)
-    mA = prepareT(A,notvecA,iA,false)#,conjB)
+    mA = prepareT(A,notvecA,iA,false)
     C = mA*B
   end
   if length(Z) == 0
@@ -509,7 +535,7 @@ See also: [`ccontract`](@ref) [`contractc`](@ref) [`ccontractc`](@ref)
 """
 function contract(A::TensType,B::TensType;alpha::Number=eltype(A)(1))
   mA,mB = checkType(A,B)
-  out = dot(mA,mB,Afct=identity,Bfct=identity)
+  out = dot(mA,mB,Lfct=identity,Rfct=identity)
   return isapprox(alpha,1) ? out : rmul!(alpha,out)
 end
 
@@ -522,7 +548,7 @@ See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 """
 function ccontract(A::TensType,B::TensType;alpha::Number=eltype(A)(1))
   mA,mB = checkType(A,B)
-  out = dot(mA,mB,Afct=adjoint,Bfct=identity)
+  out = dot(mA,mB,Lfct=adjoint,Rfct=identity)
   return isapprox(alpha,1) ? out : rmul!(alpha,out)
 end
 
@@ -535,7 +561,7 @@ See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 """
 function contractc(A::TensType,B::TensType;alpha::Number=eltype(A)(1))
   mA,mB = checkType(A,B)
-  out = dot(mA,mB,Afct=identity,Bfct=adjoint)
+  out = dot(mA,mB,Lfct=identity,Rfct=adjoint)
   return isapprox(alpha,1) ? out : rmul!(alpha,out)
 end
 
@@ -548,7 +574,7 @@ See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 """
 function ccontractc(A::TensType,B::TensType;alpha::Number=eltype(A)(1))
   mA,mB = checkType(A,B)
-  out = dot(mA,mB,Afct=adjoint,Bfct=adjoint)
+  out = dot(mA,mB,Lfct=adjoint,Rfct=adjoint)
   return isapprox(alpha,1) ? out : rmul!(alpha,out)
 end
 
@@ -560,7 +586,7 @@ Self-contraction of input tensor `A` to a scalar value of `A`.`A`
 See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 """
 function contract(A::TensType;alpha::Number=eltype(A)(1))
-  out = dot(A,A,Afct=identity,Bfct=identity)
+  out = dot(A,A,Lfct=identity,Rfct=identity)
   return isapprox(alpha,1) ? out : rmul!(alpha,out)
 end
 
@@ -572,7 +598,7 @@ Self-contraction of input tensor `A` to a scalar value of `A`.`A` with one of th
 See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 """
 function ccontract(A::TensType;alpha::Number=eltype(A)(1))
-  out = dot(A,A,Afct=adjoint,Bfct=identity)
+  out = dot(A,A,Lfct=adjoint,Rfct=identity)
   return isapprox(alpha,1) ? out : rmul!(alpha,out)
 end
 
@@ -584,7 +610,7 @@ Self-contraction of input tensor `A` to a scalar value of `A`.`A` with one of th
 See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 """
 function contractc(A::TensType;alpha::Number=eltype(A)(1))
-  out = dot(A,A,Afct=identity,Bfct=adjoint)
+  out = dot(A,A,Lfct=identity,Rfct=adjoint)
   return isapprox(alpha,1) ? out : rmul!(alpha,out)
 end
 
@@ -596,7 +622,7 @@ Self-contraction of input tensor `A` to a scalar value of `A`.`A` with both inpu
 See also: ['ccontract'](@ref) ['contractc'](@ref) ['contract'](@ref)
 """
 function ccontractc(A::TensType;alpha::Number=eltype(A)(1))
-  out = dot(A,A,Afct=adjoint,Bfct=adjoint)
+  out = dot(A,A,Lfct=adjoint,Rfct=adjoint)
   return isapprox(alpha,1) ? out : rmul!(alpha,out)
 end
 
@@ -622,6 +648,32 @@ function contract(A::TensType,iA::intvecType,B::TensType,iB::intvecType,Z::TensT
 end
 
 """
+  contract(A,iA,B[,Z,alpha=,beta=])
+
+same as `contract(A,iA,B,iB)` but `iB` is over all indices.
+
+See also: [`ccontract`](@ref) [`contractc`](@ref) [`ccontractc`](@ref)
+"""
+function contract(A::TensType,iA::intvecType,B::TensType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
+  mA,mB = checkType(A,B)
+  iB = ntuple(w->w,ndims(B))
+  return maincontractor(false,false,mA,convIn(iA),mB,iB,Z...,alpha=alpha,beta=beta)
+end
+
+"""
+  contract(A,B,iB[,Z,alpha=,beta=])
+
+same as `contract(A,iA,B,iB)` but `iB` is over all indices.
+
+See also: [`ccontract`](@ref) [`contractc`](@ref) [`ccontractc`](@ref)
+"""
+function contract(A::TensType,B::TensType,iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
+  mA,mB = checkType(A,B)
+  iA = ntuple(w->w,ndims(A))
+  return maincontractor(false,false,mA,iA,mB,convIn(iB),Z...,alpha=alpha,beta=beta)
+end
+
+"""
     ccontract(A,iA,B,iB[,Z,alpha=,beta=])
 
 Similar to contract but 'A' is conjugated
@@ -634,6 +686,32 @@ function ccontract(A::TensType,iA::intvecType,B::TensType,iB::intvecType,Z::Tens
 end
 
 """
+  ccontract(A,B,iB[,Z,alpha=,beta=])
+
+same as `contract(A,iA,B,iB)` but `iB` is over all indices.
+
+See also: [`ccontract`](@ref) [`contractc`](@ref) [`ccontractc`](@ref)
+"""
+function ccontract(A::TensType,iA::intvecType,B::TensType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
+  mA,mB = checkType(A,B)
+  iB = ntuple(w->w,ndims(B))
+  return maincontractor(true,false,mA,convIn(iA),mB,iB,Z...,alpha=alpha,beta=beta)
+end
+
+"""
+  ccontract(A,iA,B[,Z,alpha=,beta=])
+
+same as `contract(A,iA,B,iB)` but `iB` is over all indices.
+
+See also: [`ccontract`](@ref) [`contractc`](@ref) [`ccontractc`](@ref)
+"""
+function ccontract(A::TensType,B::TensType,iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
+  mA,mB = checkType(A,B)
+  iA = ntuple(w->w,ndims(A))
+  return maincontractor(true,false,mA,iA,mB,convIn(iB),Z...,alpha=alpha,beta=beta)
+end
+
+"""
     contractc(A,iA,B,iB[,Z,alpha=,beta=])
 
 Similar to contract but 'B' is conjugated
@@ -643,6 +721,32 @@ See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 function contractc(A::TensType,iA::intvecType,B::TensType,iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
   mA,mB = checkType(A,B)
   return maincontractor(false,true,mA,convIn(iA),mB,convIn(iB),Z...,alpha=alpha,beta=beta)
+end
+
+"""
+  contractc(A,iA,B[,Z,alpha=,beta=])
+
+same as `contract(A,iA,B,iB)` but `iB` is over all indices.
+
+See also: [`ccontract`](@ref) [`contractc`](@ref) [`ccontractc`](@ref)
+"""
+function contractc(A::TensType,iA::intvecType,B::TensType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
+  mA,mB = checkType(A,B)
+  iB = ntuple(w->w,ndims(B))
+  return maincontractor(false,true,mA,convIn(iA),mB,iB,Z...,alpha=alpha,beta=beta)
+end
+
+"""
+  contractc(A,B,iB[,Z,alpha=,beta=])
+
+same as `contract(A,iA,B,iB)` but `iA` is over all indices.
+
+See also: [`ccontract`](@ref) [`contractc`](@ref) [`ccontractc`](@ref)
+"""
+function contractc(A::TensType,B::TensType,iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
+  mA,mB = checkType(A,B)
+  iA = ntuple(w->w,ndims(A))
+  return maincontractor(false,true,mA,iA,mB,convIn(iB),Z...,alpha=alpha,beta=beta)
 end
 
 """
@@ -659,13 +763,61 @@ end
 export contract,ccontract,contractc,ccontractc
 
 """
+  ccontractc(A,iA,B[,Z,alpha=,beta=])
+
+same as `contract(A,iA,B,iB)` but `iB` is over all indices.
+
+See also: [`ccontract`](@ref) [`contractc`](@ref) [`ccontractc`](@ref)
+"""
+function ccontractc(A::TensType,iA::intvecType,B::TensType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
+  mA,mB = checkType(A,B)
+  iB = ntuple(w->w,ndims(B))
+  return maincontractor(true,true,mA,convIn(iA),mB,iB,Z...,alpha=alpha,beta=beta)
+end
+
+"""
+  ccontractc(A,B,iB[,Z,alpha=,beta=])
+
+same as `contract(A,iA,B,iB)` but `iB` is over all indices.
+
+See also: [`ccontract`](@ref) [`contractc`](@ref) [`ccontractc`](@ref)
+"""
+function ccontractc(A::TensType,B::TensType,iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
+  mA,mB = checkType(A,B)
+  iA = ntuple(w->w,ndims(A))
+  return maincontractor(true,true,mA,iA,mB,convIn(iB),Z...,alpha=alpha,beta=beta)
+end
+
+"""
     contract(order,A,iA,B,iB[,Z,alpha=,beta=])
 
 Permutes result of [`contract`](@ref) to `order`
 """
 function contract(order::intvecType,A::TensType,iA::intvecType,B::TensType,iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
   mA,mB = checkType(A,B)
-  newT = contract(mA,iA,mB,iB,Z...,alpha=alpha,beta=beta)
+  newT = contract(mA,convIn(iA),mB,convIn(iB),Z...,alpha=alpha,beta=beta)
+  return permutedims!(newT,convIn(order))
+end
+
+"""
+    contract(order,A,iA,B,iB[,Z,alpha=,beta=])
+
+Permutes result of [`contract`](@ref) to `order`
+"""
+function contract(order::intvecType,A::TensType,iA::intvecType,B::TensType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
+  mA,mB = checkType(A,B)
+  newT = contract(mA,iA,mB,Z...,alpha=alpha,beta=beta)
+  return permutedims!(newT,convIn(order))
+end
+
+"""
+    contract(order,A,iA,B,iB[,Z,alpha=,beta=])
+
+Permutes result of [`contract`](@ref) to `order`
+"""
+function contract(order::intvecType,A::TensType,B::TensType,iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
+  mA,mB = checkType(A,B)
+  newT = contract(mA,mB,iB,Z...,alpha=alpha,beta=beta)
   return permutedims!(newT,convIn(order))
 end
 
@@ -676,7 +828,29 @@ Permutes result of [`ccontract`](@ref) to `order`
 """
 function ccontract(order::intvecType,A::TensType,iA::intvecType,B::TensType,iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
   mA,mB = checkType(A,B)
-  newT = ccontract(mA,iA,mB,iB,Z...,alpha=alpha,beta=beta)
+  newT = ccontract(mA,convIn(iA),mB,convIn(iB),Z...,alpha=alpha,beta=beta)
+  return permutedims!(newT,convIn(order))
+end
+
+"""
+    ccontract(order,A,iA,B,iB[,Z,alpha=,beta=])
+
+Permutes result of [`contract`](@ref) to `order`
+"""
+function ccontract(order::intvecType,A::TensType,iA::intvecType,B::TensType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
+  mA,mB = checkType(A,B)
+  newT = contract(mA,convIn(iA),mB,Z...,alpha=alpha,beta=beta)
+  return permutedims!(newT,convIn(order))
+end
+
+"""
+    ccontract(order,A,iA,B,iB[,Z,alpha=,beta=])
+
+Permutes result of [`contract`](@ref) to `order`
+"""
+function ccontract(order::intvecType,A::TensType,B::TensType,iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
+  mA,mB = checkType(A,B)
+  newT = contract(mA,mB,convIn(iB),Z...,alpha=alpha,beta=beta)
   return permutedims!(newT,convIn(order))
 end
 
@@ -687,7 +861,29 @@ Permutes result of [`contractc`](@ref) to `order`
 """
 function contractc(order::intvecType,A::TensType,iA::intvecType,B::TensType,iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
   mA,mB = checkType(A,B)
-  newT = contractc(mA,iA,mB,iB,Z...,alpha=alpha,beta=beta)
+  newT = contractc(mA,convIn(iA),mB,convIn(iB),Z...,alpha=alpha,beta=beta)
+  return permutedims!(newT,convIn(order))
+end
+
+"""
+    contractc(order,A,iA,B,iB[,Z,alpha=,beta=])
+
+Permutes result of [`contract`](@ref) to `order`
+"""
+function contractc(order::intvecType,A::TensType,iA::intvecType,B::TensType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
+  mA,mB = checkType(A,B)
+  newT = contract(mA,iA,mB,Z...,alpha=alpha,beta=beta)
+  return permutedims!(newT,convIn(order))
+end
+
+"""
+    contractc(order,A,iA,B,iB[,Z,alpha=,beta=])
+
+Permutes result of [`contract`](@ref) to `order`
+"""
+function contractc(order::intvecType,A::TensType,B::TensType,iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
+  mA,mB = checkType(A,B)
+  newT = contract(mA,mB,iB,Z...,alpha=alpha,beta=beta)
   return permutedims!(newT,convIn(order))
 end
 
@@ -703,7 +899,29 @@ function ccontractc(order::intvecType,A::TensType,iA::intvecType,B::TensType,iB:
 end
 
 """
-    trace(A,iA)
+    ccontractc(order,A,iA,B,iB[,Z,alpha=,beta=])
+
+Permutes result of [`contract`](@ref) to `order`
+"""
+function ccontractc(order::intvecType,A::TensType,iA::intvecType,B::TensType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
+  mA,mB = checkType(A,B)
+  newT = ccontractc(mA,convIn(iA),mB,Z...,alpha=alpha,beta=beta)
+  return permutedims!(newT,convIn(order))
+end
+
+"""
+    ccontractc(order,A,iA,B,iB[,Z,alpha=,beta=])
+
+Permutes result of [`contract`](@ref) to `order`
+"""
+function ccontractc(order::intvecType,A::TensType,B::TensType,iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
+  mA,mB = checkType(A,B)
+  newT = ccontractc(mA,mB,convIn(iB),Z...,alpha=alpha,beta=beta)
+  return permutedims!(newT,convIn(order))
+end
+
+"""
+    trace!(A,iA)
 
 Computes trace of `A` over indices `iA` by first making an identity tensor among those indices; `iA` is a vector of numbers (ex: [1,3]) or a vector of 2-element vectors ([[1,2],[3,4],[5,6]])
 
@@ -723,11 +941,15 @@ julia> trace(A,[[1,3],[2,4]])
 """
 function trace!(A::TensType,iA::Array{NTuple{2,P},1}) where P <: Integer
   Id = makeId(A,iA)
-  conL = ntuple(w->iA[w][1],length(iA))
-  conR = ntuple(w->iA[w][2],length(iA))
-  conA = (conL...,conR...)
-  permutedims!(A,conA)
-  return contract(A,Id)
+  conA = (iA[1]...,)
+  for w = 2:length(iA)
+    conA = (conA...,iA[w]...)
+  end
+
+  conId = ntuple(w->w,2*length(iA))
+
+#  permutedims!(A,conA)
+  return contract(A,conA,Id,conId)
 end
 
 function trace!(A::TensType,iA::Array{Array{P,1},1}) where P <: Integer
@@ -738,13 +960,37 @@ function trace!(A::TensType,iA::Array{P,1}...) where P <: Integer
   return trace!(A,[convIn(iA[w]) for w = 1:length(iA)])
 end
 
+"""
+    trace!(A)
+
+Find trace of a matrix `A`
+"""
 function trace!(A::TensType)
   return sum(w->searchindex(A,w,w),1:size(A,1))
 end
 export trace!
 
+"""
+    trace(A,iA)
+
+Computes trace of `A` (copying `A`) over indices `iA` by first making an identity tensor among those indices; `iA` is a vector of numbers (ex: [1,3]) or a vector of 2-element vectors ([[1,2],[3,4],[5,6]])
+
+# Example:
+
+```julia
+julia> A = [1 0;0 -1];
+julia> trace(A,[1,2])
+0-dimensional Array{Float64,0}:
+0.0
+
+julia> A = ones(10,20,10,20);
+julia> trace(A,[[1,3],[2,4]])
+0-dimensional Array{Float64,0}:
+200.0
+```
+"""
 function trace(A::TensType,iA::R...) where R <: Union{Array{P,1},Array{Array{P,1},1},Array{NTuple{2,P},1}} where P <: Integer
-  return trace!(A,iA...)
+  return trace!(copy(A),iA...)
 end
 export trace
 
@@ -1043,7 +1289,10 @@ end
 function checkcontract(A::TensType,iA::intvecType,B::TensType,iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1))
   mA,mB = checkType(A,B)
 
-  if size(mA)[iA] == size(mB)[iB]
+  iA = convIn(iA)
+  iB = convIn(iB)
+
+  if size(mA)[[iA...]] == size(mB)[[iB...]]
     println("contracting over indices with equal sizes")
   else
     error("some indices in A or B are not equal size; A->",size(mA)[iA],", B->",size(mB)[iB])
@@ -1060,7 +1309,9 @@ function checkcontract(A::TensType,iA::intvecType,B::TensType,iB::intvecType,Z::
       if length(AQNs) == length(BQNs)
         for w = 1:length(AQNs)
           if AQNs[w] != inv(BQNs[w])
-            error("unmatching quantum numbers on indices on index ",iA[a]," of A and index ",iB[a]," of B: value ",w)
+            error("non-matching quantum numbers on indices on index ",iA[a]," of A and index ",iB[a]," of B: values ")
+            println(A.QnumSum[iA[a]])
+            println(B.QnumSum[iB[a]])
           end
         end
       else
@@ -1073,3 +1324,4 @@ function checkcontract(A::TensType,iA::intvecType,B::TensType,iB::intvecType,Z::
 end
 export checkcontract
 #end
+ 

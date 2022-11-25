@@ -49,6 +49,10 @@ for elty in (:Float32,:Float64,:ComplexF32,:ComplexF64)
       return libeigen!(A.T,size(A,1),job=job,uplo=uplo)
     end
 
+    function libeigen!(A::tens{$elty},n::Integer;job::Char='V',uplo::Char='U') #syev!
+      return libeigen!(A.T,n,job=job,uplo=uplo)
+    end
+
     function libeigen(A::AbstractMatrix{$elty};job::Char='V',uplo::Char='U') #syev!
       return libeigen!(copy(A),size(A,1),job=job,uplo=uplo)
     end
@@ -57,25 +61,31 @@ for elty in (:Float32,:Float64,:ComplexF32,:ComplexF64)
       return libeigen!(copy(A.T),size(A,1),job=job,uplo=uplo)
     end
 
+    function libeigen(A::tens{$elty},n::Integer;job::Char='V',uplo::Char='U') #syev!
+      return libeigen!(copy(A.T),n,job=job,uplo=uplo)
+    end
+
     #generalized
     function libeigen!(A::AbstractMatrix{$elty}, n::Integer, B::AbstractMatrix{$elty};jobvl::AbstractChar='V', jobvr::AbstractChar='V',fct::Function=ggev!)
       return fct(A,n,B,jobvl=jobvl,jobvr=jobvr)
     end
 
 
-    function libsvd!(A::Union{AbstractMatrix{$elty},Vector{$elty}},m::Integer,n::Integer;job::Char='O',fct::Function=gesdd!)
+    const inplaceChar = 'O'
+
+    function libsvd!(A::AbstractArray{$elty,N},m::Integer,n::Integer;job::Char=inplaceChar,fct::Function=gesdd!) where N #gesvd!)#
       return fct(A,m,n,job=job)
     end
 
-    function libsvd!(A::AbstractMatrix{$elty};job::Char='O')
+    function libsvd!(A::AbstractMatrix{$elty};job::Char=inplaceChar)
         return libsvd!(A,size(A,1),size(A,2),job=job)
     end
 
-    function libsvd!(A::tens{$elty};job::Char='O')
+    function libsvd!(A::tens{$elty};job::Char=inplaceChar)
         return libsvd!(A.T,size(A,1),size(A,2),job=job)
     end
 
-    function libsvd(A::Union{AbstractMatrix{$elty},Vector{$elty}},m::Integer,n::Integer;job::Char='S') #LinearAlgebra.LAPACK.gesdd!
+    function libsvd(A::Array{$elty,N},m::Integer,n::Integer;job::Char='S') where N #LinearAlgebra.LAPACK.gesdd!
         return libsvd!(copy(A),m,n,job=job)
     end
 
@@ -132,19 +142,33 @@ for (gemm, elty) in
             ldc, 1, 1)
         C
     end
+
     function libmult(transA::AbstractChar, transB::AbstractChar, alpha::($elty), A::AbstractArray{$elty,N},B::AbstractArray{$elty,M},m::Integer,ka::Integer,kb::Integer,n::Integer) where {N,M}
         C = Array{($elty),2}(undef,m,n)
         libmult!(transA, transB, alpha, A, B, zero($elty), C,m,ka,kb,n)
         return C
     end
+
     function libmult(transA::AbstractChar, transB::AbstractChar, A::Union{AbstractArray{$elty,N},tens{$elty}},B::Union{AbstractArray{$elty,M},tens{$elty}},m::Integer,ka::Integer,kb::Integer,n::Integer) where {N,M}
         libmult(transA, transB, one($elty), A, B,m,ka,kb,n)
     end
 
-    function libmult(transA::AbstractChar, transB::AbstractChar, alpha::($elty), A::tens{$elty},B::tens{$elty},m::Integer,ka::Integer,kb::Integer,n::Integer) where {N,M}
+    function libmult(transA::AbstractChar, transB::AbstractChar, alpha::($elty), A::tens{$elty},B::tens{$elty},m::Integer,ka::Integer,kb::Integer,n::Integer)
       C = Array{($elty),1}(undef,m*n)
       libmult!(transA, transB, alpha, A.T, B.T, zero($elty), C,m,ka,kb,n)
       return C
+    end
+    
+    function libmult(transA::AbstractChar, transB::AbstractChar, alpha::($elty), A::AbstractArray{$elty,N},B::AbstractArray{$elty,M},beta::($elty),C::AbstractArray{$elty,G},m::Integer,ka::Integer,kb::Integer,n::Integer) where {N,M,G}
+        newC = copy(C)
+        libmult!(transA, transB, alpha, A, B, beta, newC,m,ka,kb,n)
+        return newC
+    end
+    
+    function libmult(transA::AbstractChar, transB::AbstractChar, alpha::($elty), A::tens{$elty},B::tens{$elty},beta::($elty),C::tens{$elty},m::Integer,ka::Integer,kb::Integer,n::Integer)
+        newC = copy(C.T)
+        libmult!(transA, transB, alpha, A.T, B.T, beta, newC,m,ka,kb,n)
+        return newC
     end
   end
 end
@@ -187,6 +211,7 @@ for (mmname, smname, elty) in
                       alpha::$elty, A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
             trmm!(side, uplo, transa, diag, alpha, A, copy(B))
         end
+        #=
         #       SUBROUTINE DTRSM(SIDE,UPLO,TRANSA,DIAG,M,N,ALPHA,A,LDA,B,LDB)
         # *     .. Scalar Arguments ..
         #       DOUBLE PRECISION ALPHA
@@ -218,6 +243,7 @@ for (mmname, smname, elty) in
         function trsm(side::AbstractChar, uplo::AbstractChar, transa::AbstractChar, diag::AbstractChar, alpha::$elty, A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
             trsm!(side, uplo, transa, diag, alpha, A, copy(B))
         end
+        =#
     end
 end
 
@@ -402,10 +428,10 @@ for (syev, syevr, sygvd, elty, relty) in
       #       INTEGER            INFO, LDA, LWORK, N
       # *     .. Array Arguments ..
       #       DOUBLE PRECISION   A( LDA, * ), W( * ), WORK( * )
-      function syev!(A::Union{AbstractMatrix{$elty},Vector{$elty}},n::Integer;job::Char='V',uplo::Char='U') #syev!
+      function syev!(A::AbstractArray{$elty,N},n::Integer;job::Char='V',uplo::Char='U') where N
 #          chkstride1(A)
 #          n = checksquare(A)
-          W     = Array{$elty,1}(undef, n)
+          W     = Array{$relty,1}(undef, n)
           work  = Vector{$elty}(undef, 1)
           lwork = BlasInt(-1)
           cmplx = eltype(A) <: Complex
@@ -432,7 +458,8 @@ for (syev, syevr, sygvd, elty, relty) in
                   resize!(work, lwork)
               end
           end
-          job == 'V' ? (W, A) : W
+          return W,A
+#          job == 'V' ? (W, A) : W
       end
 
       #       SUBROUTINE DSYEVR( JOBZ, RANGE, UPLO, N, A, LDA, VL, VU, IL, IU,
@@ -890,42 +917,44 @@ for (gesvd, gesdd, ggsvd, elty, relty) in
       #      INTEGER            IWORK( * )
       #      DOUBLE PRECISION   A( LDA, * ), S( * ), U( LDU, * ),
       #                        VT( LDVT, * ), WORK( * )
-      function gesdd!(A::Union{AbstractMatrix{$elty},Vector{$elty}},m::Integer,n::Integer;job::Char='O')
+      function gesdd!(A::AbstractArray{$elty,N},m::Integer,n::Integer;job::Char='O') where N
           minmn  = min(m, n)
           
-          if typeof(A) <: AbstractMatrix
+          if N == 2
             if job == 'A'
-              U  = similar(A, $elty, (m, m))
-              VT = similar(A, $elty, (n, n))
+              U  = Array{$elty,2}(undef, m, m)
+              VT = Array{$elty,2}(undef, n, n)
             elseif job == 'S'
-              U  = similar(A, $elty, (m, minmn))
-              VT = similar(A, $elty, (minmn, n))
+              U  = Array{$elty,2}(undef, m, minmn)
+              VT = Array{$elty,2}(undef, minmn, n)
             elseif job == 'O'
-              U  = similar(A, $elty, (m, m >= n ? 0 : m))
-              VT = similar(A, $elty, (n, m >= n ? n : 0))
+              test = m >= n
+              U  = Array{$elty,2}(undef, m, test ? 0 : m)
+              VT = Array{$elty,2}(undef, minmn, test ? n : 0)
             else #if job == 'N'
-              U  = similar(A, $elty, (m, 0))
-              VT = similar(A, $elty, (n, 0))
+              U  = Array{$elty,2}(undef, m, 0)
+              VT = Array{$elty,2}(undef, n, 0)
             end
           else
             if job == 'A'
-              U  = similar(A, $elty, m*m)
-              VT = similar(A, $elty, n*n)
+              U  = Array{$elty,1}(undef, m*m)
+              VT = Array{$elty,1}(undef, n*n)
             elseif job == 'S'
-              U  = similar(A, $elty, m*minmn)
-              VT = similar(A, $elty, minmn*n)
+              U  = Array{$elty,1}(undef, m*minmn)
+              VT = Array{$elty,1}(undef, minmn*n)
             elseif job == 'O'
-              U  = similar(A, $elty, m*(m >= n ? 0 : m))
-              VT = similar(A, $elty, n*(m >= n ? n : 0))
+              test = m >= n
+              U  = Array{$elty,1}(undef, m*(test ? 0 : m))
+              VT = Array{$elty,1}(undef, minmn*(test ? n : 0))
             else #if job == 'N'
-              U  = similar(A, $elty, 0)
-              VT = similar(A, $elty, 0)
+              U  = Array{$elty,1}(undef, 0)
+              VT = Array{$elty,1}(undef, 0)
             end
           end
 
           work   = Vector{$elty}(undef, 1)
           lwork  = BlasInt(-1)
-          S      = similar(A, $relty, minmn)
+          S      = Array{$relty,1}(undef, minmn)
           cmplx  = eltype(A)<:Complex
           if cmplx
               rwork = Vector{$relty}(undef, #=job == 'N' ? 7*minmn : =# minmn*max(5*minmn+7, 2*max(m,n)+2*minmn+1))
@@ -935,7 +964,7 @@ for (gesvd, gesdd, ggsvd, elty, relty) in
 
           onestride = max(1,m)
           twostride = max(1,m)
-          threestride = max(1,minmn)
+          threestride = max(1,minmn) #job == 'O' && m >= n ? 1 : max(1,minmn)
 
           for i = 1:2  # first call returns lwork as work[1]
               if cmplx
@@ -967,12 +996,16 @@ for (gesvd, gesdd, ggsvd, elty, relty) in
           end
           if job == 'O'
             if m >= n
-              return (A, S, VT)
+              one,two,three = A, S, VT
+#              return (A, S, VT)
             else
-              return (U, S, A)
+              one,two,three = U, S, A
+#              return (U, S, A)
             end
+          else
+            one,two,three = U, S, VT
           end
-          return (U, S, VT)
+          return one,two,three
       end
 
       #       SUBROUTINE ZGGSVD( JOBU, JOBV, JOBQ, M, N, P, K, L, A, LDA, B,
@@ -1081,21 +1114,149 @@ for (gesvd, gesdd, ggsvd, elty, relty) in
     # *     .. Array Arguments ..
     #       DOUBLE PRECISION   A( LDA, * ), S( * ), U( LDU, * ),
     #      $                   VT( LDVT, * ), WORK( * )
-    function gesvd!(jobu::AbstractChar, jobvt::AbstractChar, A::AbstractMatrix{$elty})
+    function gesvd!(A::AbstractArray{$elty,N},m::Integer,n::Integer;minmn::Integer=min(m,n),job::Char='S',jobu::Char = minmn != m && job == 'O' ? 'O' : 'S',jobvt::Char= job == 'O' && jobu == 'S' ? 'O' : 'S') where N
 #      require_one_based_indexing(A)
 #      chkstride1(A)
-      m, n   = size(A)
-      minmn  = min(m, n)
+#      m, n   = size(A)
+
+#require_one_based_indexing(A)
+#chkstride1(A)
+#m, n   = size(A)
+#minmn  = min(m, n)
+S      = Array{$relty,1}(undef, minmn)
+
+if N == 2
+  if job == 'A'
+    U  = Array{$elty,2}(undef,m, m)
+    VT = Array{$elty,2}(undef,n, n)
+  elseif job == 'S'
+    U  = Array{$elty,2}(undef,m, minmn)
+    VT = Array{$elty,2}(undef,minmn, n)
+  elseif job == 'O'
+    U  = Array{$elty,2}(undef,m, jobu == 'O' ? 0 : m)
+    VT = Array{$elty,2}(undef,minmn, jobvt == 'S' ? n : 0)
+  else #if job == 'N'
+    U  = Array{$elty,2}(undef,m, 0)
+    VT = Array{$elty,2}(undef,n, 0)
+  end
+else
+  if job == 'A'
+    U  = Array{$elty,1}(undef,m*m)
+    VT = Array{$elty,1}(undef,n*n)
+  elseif job == 'S'
+    U  = Array{$elty,1}(undef,m*minmn)
+    VT = Array{$elty,1}(undef,minmn*n)
+  elseif job == 'O'
+    U  = Array{$elty,1}(undef,m*(jobu == 'O' ? 0 : m))
+    VT = Array{$elty,1}(undef,minmn*(jobvt == 'S' ? n : 0))
+  else #if job == 'N'
+    U  = Array{$elty,1}(undef,0)
+    VT = Array{$elty,1}(undef,0)
+  end
+end
+
+work   = Vector{$elty}(undef, 1)
+cmplx  = eltype(A) <: Complex
+if cmplx
+    rwork = Vector{$relty}(undef, 5minmn)
+end
+lwork  = BlasInt(-1)
+info   = Ref{BlasInt}()
+
+onestride = max(1,m) #max(1,stride(A,2))
+twostride = max(1,m) #max(1,stride(U,2))
+threestride =  #=job == 'O' && m >= n ? 1 : =#max(1,minmn) #max(1,minmn) #max(1,stride(VT,2))
+
+for i in 1:2  # first call returns lwork as work[1]
+    if cmplx
+        ccall((@blasfunc($gesvd), libblastrampoline), Cvoid,
+              (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
+               Ptr{$elty}, Ref{BlasInt}, Ptr{$relty}, Ptr{$elty},
+               Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
+               Ref{BlasInt}, Ptr{$relty}, Ptr{BlasInt}, Clong, Clong),
+              jobu, jobvt, m, n, A, onestride, S, U, twostride, VT, threestride,
+              work, lwork, rwork, info, 1, 1)
+    else
+        ccall((@blasfunc($gesvd), libblastrampoline), Cvoid,
+              (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
+               Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ptr{$elty},
+               Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
+               Ref{BlasInt}, Ptr{BlasInt}, Clong, Clong),
+              jobu, jobvt, m, n, A, onestride, S, U, twostride, VT, threestride,
+              work, lwork, info, 1, 1)
+    end
+#    chklapackerror(info[])
+    if i == 1
+        lwork = BlasInt(real(work[1]))
+        resize!(work, lwork)
+    end
+end
+if jobu == 'O'
+   one,two,three = A, S, VT
+elseif jobvt == 'O'
+    one,two,three = U, S, A
+else
+    one,two,three = U, S, VT
+
+end
+
+return one,two,three
+
+
+#=
       S      = similar(A, $relty, minmn)
-      U      = similar(A, $elty, jobu  == 'A' ? (m, m) : (jobu  == 'S' ? (m, minmn) : (m, 0)))
-      VT     = similar(A, $elty, jobvt == 'A' ? (n, n) : (jobvt == 'S' ? (minmn, n) : (n, 0)))
+
+      if typeof(A) <: AbstractMatrix
+        if job == 'A'
+          U  = similar(A, $elty, (m, m))
+          VT = similar(A, $elty, (n, n))
+        elseif job == 'S'
+          U  = similar(A, $elty, (m, minmn))
+          VT = similar(A, $elty, (minmn, n))
+        elseif job == 'O'
+          U  = similar(A, $elty, (m, jobu == 'O' ? 0 : m))
+          VT = similar(A, $elty, (n, jobvt == 'O' ? n : 0))
+        else #if job == 'N'
+          U  = similar(A, $elty, (m, 0))
+          VT = similar(A, $elty, (n, 0))
+        end
+      else
+        if job == 'A'
+          U  = similar(A, $elty, m*m)
+          VT = similar(A, $elty, n*n)
+        elseif job == 'S'
+          U  = similar(A, $elty, m*minmn)
+          VT = similar(A, $elty, minmn*n)
+        elseif job == 'O'
+          U  = similar(A, $elty, m*(jobu == 'S' ? 0 : m))
+          VT = similar(A, $elty, n*(jobvt == 'S' ? n : 0))
+        else #if job == 'N'
+          U  = similar(A, $elty, 0)
+          VT = similar(A, $elty, 0)
+        end
+      end
+
+      #=
+      if typeof(A) <: AbstractMatrix
+        U      = similar(A, $elty, jobu  == 'A' ? (m, m) : (jobu  == 'S' || jobu == 'O' ? (m, minmn) : (m, 0)))
+        VT     = similar(A, $elty, jobvt == 'A' ? (n, n) : (jobvt == 'S' || jobvt == 'O' ? (minmn, n) : (n, 0)))
+      else
+        U      = similar(A, $elty, jobu  == 'A' ? m*m : (jobu  == 'S' || jobu == 'O' ? m*minmn : 0))
+        VT     = similar(A, $elty, jobvt == 'A' ? n*n : (jobvt == 'S' || jobvt == 'O' ? minmn*n : 0))
+      end
+      =#
       work   = Vector{$elty}(undef, 1)
       cmplx  = eltype(A) <: Complex
       if cmplx
-          rwork = Vector{$relty}(undef, 5minmn)
+          rwork = Vector{$relty}(undef, 5*minmn)
       end
       lwork  = BlasInt(-1)
       info   = Ref{BlasInt}()
+
+      onestride = max(1,m) #max(1,stride(A,2))
+      twostride = max(1,m) #max(1,stride(U,2))
+      threestride = max(1,minmn) #max(1,stride(VT,2))
+
       for i in 1:2  # first call returns lwork as work[1]
           if cmplx
               ccall((@blasfunc($gesvd), libblastrampoline), Cvoid,
@@ -1103,7 +1264,7 @@ for (gesvd, gesdd, ggsvd, elty, relty) in
                       Ptr{$elty}, Ref{BlasInt}, Ptr{$relty}, Ptr{$elty},
                       Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
                       Ref{BlasInt}, Ptr{$relty}, Ptr{BlasInt}, Clong, Clong),
-                    jobu, jobvt, m, n, A, max(1,stride(A,2)), S, U, max(1,stride(U,2)), VT, max(1,stride(VT,2)),
+                    jobu, jobvt, m, n, A, onestride, S, U, twostride, VT, threestride,
                     work, lwork, rwork, info, 1, 1)
           else
               ccall((@blasfunc($gesvd), libblastrampoline), Cvoid,
@@ -1111,10 +1272,10 @@ for (gesvd, gesdd, ggsvd, elty, relty) in
                       Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ptr{$elty},
                       Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
                       Ref{BlasInt}, Ptr{BlasInt}, Clong, Clong),
-                    jobu, jobvt, m, n, A, max(1,stride(A,2)), S, U, max(1,stride(U,2)), VT, max(1,stride(VT,2)),
+                    jobu, jobvt, m, n, A, onestride, S, U, twostride, VT, threestride,
                     work, lwork, info, 1, 1)
           end
-          chklapackerror(info[])
+#          chklapackerror(info[])
           if i == 1
               lwork = BlasInt(real(work[1]))
               resize!(work, lwork)
@@ -1127,6 +1288,7 @@ for (gesvd, gesdd, ggsvd, elty, relty) in
       else
           return (U, S, VT)
       end
+      =#
     end
 
 
@@ -1395,10 +1557,10 @@ for (gebrd,gelqf, geqrf, elty, relty) in
   end
 end
 
-libQRmake! = orgqr!
-libLQmake! = orglq!
-libRQmake! = orgrq!
-libQLmake! = orgql!
+const libQRmake! = orgqr!
+const libLQmake! = orglq!
+const libRQmake! = orgrq!
+const libQLmake! = orgql!
 
 function libUpperHessenberg!(A::Array{W,P};a::Integer=size(A,1),b::Integer=size(A,2),tau::Array{W,1}=Array{W,1}(undef,min(a,b)),m::Integer=length(tau)) where {W <: Number, P}
   return libUpperHessenberg!(A,a,b,tau=tau,m=m)
@@ -1497,7 +1659,7 @@ function liblq(A::Array{W,2},a::Integer,b::Integer;m::Integer=min(a,b)) where W 
 end
 
 function liblq(A::tens{W},a::Integer,b::Integer;m::Integer=min(a,b)) where W <: Number
-  L,Q = liblq!(copy(A.T),a=a,b=b,m=m)
+  L,Q = liblq!(copy(A.T),a,b,m=m)
   return tens{W}([a,m],L),tens{W}([m,b],Q)
 end
 
