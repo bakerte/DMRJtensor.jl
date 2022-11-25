@@ -102,8 +102,8 @@ include(libpath*"Krylov.jl")
 #MPO/MPS
 include(libpath*"MPtask.jl")
 include(libpath*"MPmeas.jl")
-include(libpath*"largeMP.jl")
-include(libpath*"autoMPO.jl")
+include(libpath*"MPlarge.jl")
+include(libpath*"MPOauto.jl")
 
 #basic models (Hubbard, Heisenberg, t-J)
 include(libpath*"models.jl")
