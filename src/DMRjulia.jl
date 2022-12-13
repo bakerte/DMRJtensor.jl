@@ -20,7 +20,6 @@ Code: https://github.com/bakerte/DMRjulia.jl
 Documentation: T.E. Baker, S. Desrosiers, M. Tremblay, M.P. Thompson "Méthodes de calcul avec réseaux de tenseurs en physique" Canadian Journal of Physics 99, 4 (2021)\n
                  [ibid. "Basic tensor network computations in physics" https://arxiv.org/abs/1911.11566 p. 19]\n
           and  T.E. Baker, M.P. Thompson "Build your own tensor network library: DMRjulia I. Basic library for the density matrix renormalization group" arxiv: 2109.03120\n
-          and  T.E. Baker, A. Foley "" arxiv: 2106.XXXX (computations with quantum numbers)\n
 Funding for this program is graciously provided by:
    + Institut quantique (Université de Sherbrooke)
    + Département de physique, Université de Sherbrooke
@@ -56,7 +55,6 @@ println("Introduction: T.E. Baker, S. Desrosiers, M. Tremblay, M.P. Thompson \"M
 println("                 [ibid. \"Basic tensor network computations in physics\" arxiv: 1911.11566 p. 19]")
 println("Documentation: T.E. Baker, et. al.\"DMRjulia: Tensor recipes for entanglement renormalization computations\" arxiv: 2111.14530")
 println("          and  T.E. Baker, M.P. Thompson \"Build your own tensor network library: DMRjulia I. Basic library for the density matrix renormalization group\" arxiv: 2109.03120")
-println("          and  T.E. Baker, A. Foley \"\" arxiv: 2106.XXXX (computations with quantum numbers)")
 println("Funding for this program is graciously provided by:")
 println("   + Institut quantique (Université de Sherbrooke)")
 println("   + Département de physique, Université de Sherbrooke")
