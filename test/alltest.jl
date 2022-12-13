@@ -1,5 +1,5 @@
 
-include("../DMRjulia.jl")
+include("../src/DMRjulia.jl")
 
 function testfct(test::Bool,message::String)
 #  try test
