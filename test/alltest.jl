@@ -1,5 +1,7 @@
 
-include("../src/DMRjulia.jl")
+path = "../src/"
+include(path*"DMRjulia.jl")
+using .DMRJtensor
 
 function testfct(test::Bool,message::String)
 #  try test
