@@ -3,7 +3,7 @@ DMRjulia is a general purpose tensor network library in the Julia programming la
 
 Hello! Welcome to the site of DMRjulia, a tensor network library for physics computations written in Julia. Right now, ground state calculations on the MPS are available (v0.9.2+) for both quantum numbers (mostly documented) and dense tensors (fully documented).
 
-DMRjulia is now official registered in Julia's package library! Simply type the following into the Julia terminal.
+DMRjulia is official registered in Julia's package library, making installation simple. Just type the following into the Julia terminal.
 
 ```
 julia> ]
@@ -16,7 +16,12 @@ Troubleshooting? Email: bakerte@uvic.ca
 
 If you're just starting out, I recommend reading the introduction article at http://arxiv.org/abs/1911.11566 (English starting on page 19, accepted at the Canadian Journal of Physics) and beginning in the /examples folder.
 
-If you want to view documentation in the code, open the Julia terminal, type `?` and type the name of the function.  There is a lot of good information that can help you there.
+If you want to view documentation in the code, open the Julia terminal, type `?` and type the name of the function. For example,
+```
+julia> ?
+help?> DMRJtensor
+```
+There is a lot of good information that can help you there.
 
 ## Papers and documentation:
 
