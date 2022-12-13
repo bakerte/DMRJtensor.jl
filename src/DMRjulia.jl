@@ -95,9 +95,6 @@ include(libpath*"contractions.jl")
 #Decomposition methods
 include(libpath*"decompositions.jl")
 
-#Lanczos methods
-include(libpath*"Krylov.jl")
-
 #MPO/MPS
 include(libpath*"MPtask.jl")
 include(libpath*"MPmeas.jl")
@@ -115,6 +112,9 @@ algpath = "../algs/"
 
 include(algpath*"optimizeMPS.jl")
 include(algpath*"DMRG.jl")
+
+#Lanczos methods
+include(algpath*"Krylov.jl")
 
 end
 
