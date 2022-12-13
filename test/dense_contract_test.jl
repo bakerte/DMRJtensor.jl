@@ -1,18 +1,4 @@
-path = "../"
-include(join([path,"DMRjulia.jl"]))
 
-function testfct(test::Bool,message::String)
-#  try test
-  if test
-    println("PASS "*message)
-  else
-    println("FAIL "*message)
-  end
-#  catch
-#    error(message)
-#  end
-  return test
-end
 
 println("#            +-------------------+")
 println("#>-----------|  contractions.jl  |-----------<")
@@ -162,30 +148,30 @@ fulltest &= testfct(testval,"*(A,diagonal) [Array || tens, commutes]")
 println()
 
 C = contract(copy(A),3,B,1)
-tC = lmul!(copy(tens(A)),B)
+tC = rmul!(copy(tens(A)),B)
 
 testval = isapprox(reshape(C,prod(size(C))),tC.T)
-fulltest &= testfct(testval,"lmul!(A,diagonal)")
+fulltest &= testfct(testval,"rmul!(A,diagonal)")
 
 C = 3. * copy(A)
-tC = lmul!(3.,copy(tens(A)))
+tC = rmul!(3.,copy(tens(A)))
 
 testval = isapprox(reshape(C,prod(size(C))),tC.T)
-fulltest &= testfct(testval,"lmul!(tens,number)")
+fulltest &= testfct(testval,"rmul!(tens,number)")
 
 println()
 
 D = contract(B,2,copy(A),1)
-tD = rmul!(B,copy(tens(A)))
+tD = lmul!(B,copy(tens(A)))
 
 testval = isapprox(reshape(D,prod(size(D))),tD.T)
-fulltest &= testfct(testval,"rmul!(diagonal,tens)")
+fulltest &= testfct(testval,"lmul!(diagonal,tens)")
 
 D = copy(A) * 3.
-tD = rmul!(copy(tens(A)),3.)
+tD = lmul!(copy(tens(A)),3.)
 
 testval = isapprox(reshape(D,prod(size(D))),tD.T)
-fulltest &= testfct(testval,"rmul!(number,tens)")
+fulltest &= testfct(testval,"lmul!(number,tens)")
 
 
 println()
@@ -340,5 +326,3 @@ checkB = contract(A,[1,3,5,6],tC,[1,2,3,4])
 
 testval = size(B) == (20,30) && isapprox(tB.T,checkB.T)
 fulltest &= testfct(testval,"trace!(tens,[indices])")
-
-println("All tests passed? ",testval)

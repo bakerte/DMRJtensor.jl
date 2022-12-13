@@ -1,18 +1,4 @@
-path = "../"
-include(join([path,"DMRjulia.jl"]))
 
-function testfct(test::Bool,message::String)
-#  try test
-  if test
-    println("PASS "*message)
-  else
-    println("FAIL "*message)
-  end
-#  catch
-#    error(message)
-#  end
-  return test
-end
 
 ndim = max(round(Int64,rand()*10),2)
 Asize = ntuple(w->max(2,round(Int64,rand()*10)),ndim)
@@ -697,5 +683,3 @@ fulltest &= testfct(testval,"joinindex(tens,integer)")
 C = joinindex(tA,tB,[1,2])
 testval = isapprox(sum(tA)+sum(tB),sum(C)) && size(C) == (40,40,10)
 fulltest &= testfct(testval,"joinindex(tens,Array)")
-
-println("All tests passed? ",testval)

@@ -1,6 +1,3 @@
-path = "../"
-include(join([path,"DMRjulia.jl"]))
-
 
 using BenchmarkTools
 

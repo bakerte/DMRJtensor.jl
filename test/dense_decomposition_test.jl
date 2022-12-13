@@ -1,18 +1,4 @@
-path = "../"
-include(join([path,"DMRjulia.jl"]))
 
-function testfct(test::Bool,message::String)
-#  try test
-  if test
-    println("PASS "*message)
-  else
-    println("FAIL "*message)
-  end
-#  catch
-#    error(message)
-#  end
-  return test
-end
 
 println("#            +---------------------+")
 println("#>-----------|  decompositions.jl  |-----------<")
