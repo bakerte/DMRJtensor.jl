@@ -111,7 +111,7 @@ function findnewm(D::Array{Float64,1},m::Integer,minm::Integer,mag::Float64,cuto
   if cutoff > 0.
     modcutoff = sumD*cutoff
     @inbounds truncadd = abs(D[p])^power
-    @inbounds while p > 0 && ((truncerr + truncadd < modcutoff) || (nozeros && abs(D[p]) < effZero))
+    @inbounds while p > 0 && ((truncerr + truncadd < modcutoff) || (nozeros && D[p] < effZero))
       truncerr += truncadd
       p -= 1
       truncadd = abs(D[p])^power

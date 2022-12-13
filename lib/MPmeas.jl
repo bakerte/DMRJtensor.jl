@@ -15,6 +15,30 @@
 #       +---------------------------------------+
 
 """
+  D,truncerr = moveR!(Lpsi,Rpsi[,cutoff=,m=,minm=,condition=])
+
+moves `psi`'s orthogonality center right one space, with a maximum bond dimenion `m`, cutoff `cutoff`, minimum bond dimension `minm`; toggle truncation of tensor during movement with `condition`; returns psi[iL],psi[iR],D from the SVD, and the truncation error Modifies `Lpsi`
+
+See also: [`moveR!`](@ref)
+"""
+@inline function moveR!(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
+                fast::Bool=false,qrfct::Function=qr!,svdfct::Function=svd!)
+  if (min(size(Lpsi,1)*size(Lpsi,2),size(Lpsi,3)) <= m || m == 0) && !isapprox(cutoff,0.) && fast
+    Ltens,modV = qrfct(Lpsi,[[1,2],[3]])
+
+    DV = (condition ? getindex!(modV,:,1:size(Rpsi,1)) : modV)
+    D = DV
+    truncerr = 0.
+  else
+    Ltens,D,V,truncerr,sumD = svdfct(Lpsi,[[1,2],[3]],cutoff=cutoff,m=m,minm=minm,mag=mag)      
+    modV = (condition ? getindex!(V,:,1:size(Rpsi,1)) : V)
+    DV = lmul!(D,modV)
+  end
+  Rtens = contract(DV,2,Rpsi,1)
+  return Ltens,Rtens,D,truncerr
+end
+
+"""
   D,truncerr = moveR(Lpsi,Rpsi[,cutoff=,m=,minm=,condition=])
 
 moves `psi`'s orthogonality center right one space, with a maximum bond dimenion `m`, cutoff `cutoff`, minimum bond dimension `minm`; toggle truncation of tensor during movement with `condition`; returns psi[iL],psi[iR],D from the SVD, and the truncation error
@@ -22,20 +46,8 @@ moves `psi`'s orthogonality center right one space, with a maximum bond dimenion
 See also: [`moveR!`](@ref)
 """
 @inline function moveR(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
-                fast::Bool=false)
-  if (size(Lpsi,3) <= m) && !isapprox(cutoff,0.) && fast
-    Ltens,modV = qr!(Lpsi,[[1,2],[3]])
-
-    DV = (condition ? getindex!(modV,:,1:size(Rpsi,1)) : modV)
-    D = DV
-    truncerr = 0.
-  else
-    Ltens,D,V,truncerr,sumD = svd!(Lpsi,[[1,2],[3]],cutoff=cutoff,m=m,minm=minm,mag=mag)      
-    modV = (condition ? getindex!(V,:,1:size(Rpsi,1)) : V)
-    DV = rmul!(D,modV) #contract(D,(2,),modV,(1,))
-  end
-  Rtens = contract(DV,2,Rpsi,1)
-  return Ltens,Rtens,D,truncerr
+                fast::Bool=false,qrfct::Function=qr!,svdfct::Function=svd!)
+  return moveR!(Lpsi,Rpsi,cutoff=cutoff,m=m,minm=minm,condition=condition,mag=mag,qrfct=qr,svdfct=svd)
 end
 export moveR
 
@@ -49,7 +61,7 @@ See also: [`moveR`](@ref)
 @inline function moveR!(psi::MPS;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,
                   mag::Number=0.)
   iL = psi.oc
-  psi[iL],psi[iL+1],D,truncerr = moveR(psi[iL],psi[iL+1],cutoff=cutoff,m=m,minm=minm,condition=condition,mag=mag)
+  psi[iL],psi[iL+1],D,truncerr = moveR!(psi[iL],psi[iL+1],cutoff=cutoff,m=m,minm=minm,condition=condition,mag=mag)
   psi.oc += 1
   return D,truncerr
 end
@@ -58,25 +70,37 @@ export moveR!
 """
   D,truncerr = moveL(Lpsi,Rpsi[,cutoff=,m=,minm=,condition=])
 
-moves `psi`'s orthogonality center left one space, with a maximum bond dimenion `m`, cutoff `cutoff`, minimum bond dimension `minm`; toggle truncation of tensor during movement with `condition`; returns psi[iL],psi[iR],D from the SVD, and the truncation error
+moves `psi`'s orthogonality center left one space, with a maximum bond dimenion `m`, cutoff `cutoff`, minimum bond dimension `minm`; toggle truncation of tensor during movement with `condition`; returns psi[iL],psi[iR],D from the SVD, and the truncation error. Modifies `Rpsi`
 
 See also: [`moveL!`](@ref)
 """
-@inline function moveL(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
-                fast::Bool=false)
-  if (size(Rpsi,1) <= m) && !isapprox(cutoff,0.) && fast
-    modU,Rtens = lq!(Rpsi,[[1],[2,3]])
+@inline function moveL!(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
+                fast::Bool=false,lqfct::Function=lq!,svdfct::Function=svd!)
+  if (min(size(Rpsi,1),size(Rpsi,2)*size(Rpsi,3)) <= m || m == 0) && !isapprox(cutoff,0.) && fast
+    modU,Rtens = lqfct(Rpsi,[[1],[2,3]])
 
     UD = (condition ? getindex!(modU,1:size(Lpsi,3),:) : modU)
     D = UD
     truncerr = 0.
   else
-    U,D,Rtens,truncerr,sumD = svd!(Rpsi,[[1],[2,3]],cutoff=cutoff,m=m,minm=minm,mag=mag)
+    U,D,Rtens,truncerr,sumD = svdfct(Rpsi,[[1],[2,3]],cutoff=cutoff,m=m,minm=minm,mag=mag)
     modU = (condition ? getindex!(U,1:size(Lpsi,3),:) : U)
-    UD = lmul!(modU,D) #contract(modU,(2,),D,(1,))
+    UD = rmul!(modU,D) #contract(modU,(2,),D,(1,))
   end
   Ltens = contract(Lpsi,3,UD,1)
   return Ltens,Rtens,D,truncerr
+end
+
+"""
+  D,truncerr = moveL(Lpsi,Rpsi[,cutoff=,m=,minm=,condition=])
+
+moves `psi`'s orthogonality center left one space, with a maximum bond dimenion `m`, cutoff `cutoff`, minimum bond dimension `minm`; toggle truncation of tensor during movement with `condition`; returns psi[iL],psi[iR],D from the SVD, and the truncation error. Does not modify `Lpsi` and `Rpsi`
+
+See also: [`moveL!`](@ref)
+"""
+@inline function moveL(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
+  fast::Bool=false,lqfct::Function=lq,svdfct::Function=svd)
+  return moveL!(Lpsi,Rpsi,cutoff=cutoff,m=m,minm=minm,condition=condition,mag=mag,lqfct=lq,svdfct=svd)
 end
 export moveL
 
@@ -159,7 +183,7 @@ function leftnormalize(psi::MPS)
   newpsi = move(psi,length(psi))
   U,D,V = svd(psi[end],[[1,2],[3]])
   newpsi[end] = U
-  newpsi.oc = 0
+  newpsi.oc = length(psi)+1
   return newpsi,D,V
 end
 export leftnormalize
@@ -173,7 +197,7 @@ function leftnormalize!(psi::MPS)
   move!(psi,length(psi))
   U,D,V = svd(psi[end],[[1,2],[3]])
   psi[end] = U
-  psi.oc = 0
+  psi.oc = length(psi)+1
   return psi,D,V
 end
 export leftnormalize!
@@ -198,13 +222,174 @@ export rightnormalize
 Creates a right-normalized MPS in-place from `psi` and returns the external tensors `U` and `D`
 """
 function rightnormalize!(psi::MPS)
-  psi = move!(psi,1)
+  move!(psi,1)
   U,D,V = svd(psi[1],[[1],[2,3]])
   psi[1] = V
   psi.oc = 0
   return U,D,psi
 end
 export rightnormalize!
+
+#       +---------------------------------------+
+#>------+    Construction of boundary tensors   +---------<
+#       +---------------------------------------+
+
+#
+#Current environment convention is
+#     LEFT              RIGHT
+#   +--<-- 1          3 ---<--+
+#   |                         |
+#   |                         |
+#   +-->-- 2          2 --->--+
+#   |                         |
+#   |                         |
+#   +-->-- 3          1 --->--+
+# any MPOs in between have the same arrow conventions as 2
+
+"""
+    makeBoundary(qind,newArrows[,retType=])
+
+makes a boundary tensor for an input from the quantum numbers `qind` and arrows `newArrows`; can also define type of resulting Qtensor `retType` (default `Float64`)
+
+#Note:
++dense tensors are just ones(1,1,1,...)
+
+See also: [`makeEnds`](@ref)
+"""
+function makeBoundary(dualpsi::MPS,psi::MPS,mpovec::MPO...;left::Bool=true,rightind::Integer=3)
+  retType = elnumtype(dualpsi,psi,mpovec...)
+  nrank = 2 + length(mpovec)
+  boundary = ones(retType,ones(intType,nrank)...)
+  if typeof(psi[1]) <: qarray
+
+    Q = typeof(psi[1].flux)
+
+    qind = Array{Q,1}(undef,nrank)
+    Ns = length(psi)
+    site = left ? 1 : Ns
+    index = left ? 1 : rightind
+    qind[1] = -(getQnum(index,1,dualpsi[site]))
+    qind[end] = getQnum(index,1,psi[site])
+    for i = 1:length(mpovec)
+      index = left ? 1 : ndims(mpovec[i][Ns])
+      qind[i+1] = getQnum(index,1,mpovec[i][site])
+    end
+
+    thisQnumMat = Array{Array{Q,1},1}(undef,nrank)
+    for j = 1:nrank
+      qn = qind[j]
+      thisQnumMat[j] = Q[qn]
+    end
+    return Qtens(boundary,thisQnumMat)
+  else
+    if typeof(psi[1]) <: denstens
+      return tens(boundary)
+    else
+      return boundary
+    end
+  end
+end
+export makeBoundary
+
+function defaultBoundary(A::TensType)
+  if typeof(A) <: qarray
+    out = Qtens{eltype(A),typeof(A.flux)}()
+  else
+    out = tens{eltype(A)}()
+  end
+  return out
+end
+
+
+function makeEdgeEnv(dualpsi::MPS,psi::MPS,mpovec::MPO...;boundary::TensType=defaultBoundary(psi[1]),left::Bool=true)
+  expsize = 2+length(mpovec)
+  Lnorm = norm(boundary)
+  if ndims(boundary) != expsize || isapprox(Lnorm,0) || isnan(Lnorm) || isinf(Lnorm)
+    Lout = makeBoundary(dualpsi,psi,mpovec...,left=left)
+  else
+    Lout = copy(boundary)
+  end
+  return Lout
+end
+
+"""
+    makeEnds(dualpsi,psi[,mpovec,Lbound=,Rbound=])
+
+Generates first and last environments for a given system of variable MPOs
+
+# Arguments:
++ `dualpsi::MPS`: dual MPS
++ `psi::MPS`: MPS
++ `mpovec::MPO`: MPOs
++ `Lbound::TensType`: left boundary
++ `Rbound::TensType`: right boundary
+"""
+function makeEnds(dualpsi::MPS,psi::MPS,mpovec::MPO...;Lbound::TensType=defaultBoundary(psi[1]),Rbound::TensType=typeof(psi[end])())
+  return makeEdgeEnv(dualpsi,psi,mpovec...,boundary=Lbound),makeEdgeEnv(dualpsi,psi,mpovec...,boundary=Rbound,left=false)
+end
+
+"""
+    makeEnds(psi[,mpovec,Lbound=,Rbound=])
+
+Generates first and last environment tensors for a given system of variable MPOs.  Same as other implementation but `dualpsi`=`psi`
+
+# Arguments:
++ `psi::MPS`: MPS
++ `mpovec::MPO`: MPOs
++ `Lbound::TensType`: left boundary
++ `Rbound::TensType`: right boundary
+"""
+function makeEnds(psi::MPS,mpovec::MPO...;Lbound::TensType=defaultBoundary(psi[1]),Rbound::TensType=defaultBoundary(psi[1]))
+  return makeEnds(psi,psi,mpovec...,Lbound=Lbound,Rbound=Rbound)
+end
+export makeEnds
+
+
+#=
+function genEnv(dualpsi::MPS,psi::MPS,mpo::MPO...;bound::TensType=defaultBoundary(psi[1]))
+
+end
+=#
+
+
+
+"""
+    makeEnv(dualpsi,psi,mpo[,Lbound=,Rbound=])
+
+Generates environment tensors for a MPS (`psi` and its dual `dualpsi`) with boundaries `Lbound` and `Rbound`
+"""
+function makeEnv(dualpsi::MPS,psi::MPS,mpo::MPO...;Lbound::TensType=defaultBoundary(psi[1]),Rbound::TensType=defaultBoundary(psi[1]))
+  Ns = length(psi)
+  numtype = elnumtype(dualpsi,psi,mpo...)
+  C = psi[1]
+
+  if typeof(psi) <: largeMPS || typeof(mpo) <: largeMPO
+    Lenv,Renv = largeEnv(numtype,Ns)
+  else
+    Lenv = environment(psi)
+    Renv = environment(psi)
+  end
+  Lenv[1],Renv[Ns] = makeEnds(dualpsi,psi,mpo...;Lbound=Lbound,Rbound=Rbound)
+  for i = 1:psi.oc-1
+    Lupdate!(i,Lenv,dualpsi,psi,mpo...)
+  end
+
+  for i = Ns:-1:psi.oc+1
+    Rupdate!(i,Renv,dualpsi,psi,mpo...)
+  end
+  return Lenv,Renv
+end
+
+"""
+    makeEnv(psi,mpo[,Lbound=,Rbound=])
+
+Generates environment tensors for a MPS (`psi`) with boundaries `Lbound` and `Rbound`
+"""
+function makeEnv(psi::MPS,mpo::MPO;Lbound::TensType=[0],Rbound::TensType=[0])
+  return makeEnv(psi,psi,mpo,Lbound=Lbound,Rbound=Rbound)
+end
+export makeEnv
+
 
 """
     Lupdate(Lenv,dualpsi,psi,mpo)
@@ -286,8 +471,7 @@ Move orthogonality center of `psi` to site `i` and updates left and right enviro
 
 See also: [`move!`](@ref)
 """
-@inline function boundaryMove!(psi::MPS,i::Integer,Lenv::Env,
-                        Renv::Env,mpo::MPO...;mover::Function=move!)
+@inline function boundaryMove!(psi::MPS,i::Integer,Lenv::Env,Renv::Env,mpo::MPO...;mover::Function=move!)
   origoc = psi.oc
   if origoc < i
     mover(psi,i)
@@ -310,8 +494,7 @@ Move orthogonality center of `psi` and `dualpsi` to site `i` and updates left an
 
 See also: [`move!`](@ref)
 """
-@inline function boundaryMove!(dualpsi::MPS,psi::MPS,i::Integer,Lenv::Env,
-                        Renv::Env,mpo::MPO...;mover::Function=move!)
+@inline function boundaryMove!(dualpsi::MPS,psi::MPS,i::Integer,Lenv::Env,Renv::Env,mpo::MPO...;mover::Function=move!)
   origoc = psi.oc
   if origoc < i
     mover(psi,i)
@@ -337,12 +520,12 @@ Copies `psi` and moves orthogonality center of `psi` and `dualpsi` to site `i` a
 
 See also: [`move!`](@ref)
 """
-@inline function boundaryMove(dualpsi::MPS,psi::MPS,i::Integer,mpo::MPO,Lenv::Env,Renv::Env)
+@inline function boundaryMove(dualpsi::MPS,psi::MPS,i::Integer,Lenv::Env,Renv::Env,mpo::MPO...)
   newpsi = copy(psi)
   newdualpsi = copy(dualpsi)
   newLenv = copy(Lenv)
   newRenv = copy(Renv)
-  boundaryMove!(newdualpsi,newpsi,i,mpo,newLenv,newRenv)
+  boundaryMove!(newdualpsi,newpsi,i,newLenv,newRenv,mpo...)
   return newdualpsi,newpsi,newLenv,newRenv
 end
 
@@ -353,174 +536,18 @@ Copies `psi` and moves orthogonality center of `psi` to site `i` and updates lef
 
 See also: [`move!`](@ref)
 """
-@inline function boundaryMove(psi::MPS,i::Integer,mpo::MPO,Lenv::Env,Renv::Env)
+@inline function boundaryMove(psi::MPS,i::Integer,Lenv::Env,Renv::Env,mpo::MPO...)
   newpsi = copy(psi)
   newLenv = copy(Lenv)
   newRenv = copy(Renv)
-  boundaryMove!(newpsi,newpsi,i,mpo,newLenv,newRenv)
+  boundaryMove!(newpsi,newpsi,i,newLenv,newRenv,mpo...)
   return newpsi,newLenv,newRenv
 end
 export boundaryMove
 
-
-
-#       +---------------------------------------+
-#>------+    Construction of boundary tensors   +---------<
-#       +---------------------------------------+
-
-#
-#Current environment convention is
-#     LEFT              RIGHT
-#   +--<-- 1          3 ---<--+
-#   |                         |
-#   |                         |
-#   +-->-- 2          2 --->--+
-#   |                         |
-#   |                         |
-#   +-->-- 3          1 --->--+
-# any MPOs in between have the same arrow conventions as 2
-
-"""
-    makeBoundary(qind,newArrows[,retType=])
-
-makes a boundary tensor for an input from the quantum numbers `qind` and arrows `newArrows`; can also define type of resulting Qtensor `retType` (default `Float64`)
-
-#Note:
-+dense tensors are just ones(1,1,1,...)
-
-See also: [`makeEnds`](@ref)
-"""
-function makeBoundary(dualpsi::MPS,psi::MPS,mpovec::MPO...;left::Bool=true,rightind::Integer=3)
-  retType = elnumtype(dualpsi,psi,mpovec...)
-  nrank = 2 + length(mpovec)
-  boundary = ones(retType,ones(intType,nrank)...)
-  if typeof(psi[1]) <: qarray
-
-    Q = typeof(psi[1].flux)
-
-    qind = Array{Q,1}(undef,nrank)
-    Ns = length(psi)
-    site = left ? 1 : Ns
-    index = left ? 1 : rightind
-    qind[1] = -(getQnum(index,1,dualpsi[site]))
-    qind[end] = getQnum(index,1,psi[site])
-    for i = 1:length(mpovec)
-      index = left ? 1 : ndims(mpovec[i][Ns])
-      qind[i+1] = getQnum(index,1,mpovec[i][site])
-    end
-
-    thisQnumMat = Array{Array{Q,1},1}(undef,nrank)
-    for j = 1:nrank
-      qn = qind[j]
-      thisQnumMat[j] = Q[qn]
-    end
-    return Qtens(boundary,thisQnumMat)
-  else
-    if typeof(psi[1]) <: denstens
-      return tens(boundary)
-    else
-      return boundary
-    end
-  end
-end
-export makeBoundary
-
-
-
-function makeEdgeEnv(dualpsi::MPS,psi::MPS,mpovec::MPO...;boundary::TensType=typeof(psi[1]) <: qarray ? Qtens{eltype(psi[1]),typeof(psi[1].flux)}() : tens{eltype(psi[1])}(),left::Bool=true)
-  expsize = 2+length(mpovec)
-  Lnorm = norm(boundary)
-  if ndims(boundary) != expsize || isapprox(Lnorm,0) || isnan(Lnorm) || isinf(Lnorm)
-    Lout = makeBoundary(dualpsi,psi,mpovec...,left=left)
-  else
-    Lout = copy(boundary)
-  end
-  return Lout
-end
-
-"""
-    makeEnds(dualpsi,psi[,mpovec,Lbound=,Rbound=])
-
-Generates first and last environments for a given system of variable MPOs
-
-# Arguments:
-+ `dualpsi::MPS`: dual MPS
-+ `psi::MPS`: MPS
-+ `mpovec::MPO`: MPOs
-+ `Lbound::TensType`: left boundary
-+ `Rbound::TensType`: right boundary
-"""
-function makeEnds(dualpsi::MPS,psi::MPS,mpovec::MPO...;Lbound::TensType=typeof(psi[1]) <: qarray ? Qtens{eltype(psi[1]),typeof(psi[1].flux)}() : tens{eltype(psi[1])}(),Rbound::TensType=typeof(psi[end])())
-  return makeEdgeEnv(dualpsi,psi,mpovec...,boundary=Lbound),makeEdgeEnv(dualpsi,psi,mpovec...,boundary=Rbound,left=false)
-end
-
-"""
-    makeEnds(psi[,mpovec,Lbound=,Rbound=])
-
-Generates first and last environment tensors for a given system of variable MPOs.  Same as other implementation but `dualpsi`=`psi`
-
-# Arguments:
-+ `psi::MPS`: MPS
-+ `mpovec::MPO`: MPOs
-+ `Lbound::TensType`: left boundary
-+ `Rbound::TensType`: right boundary
-"""
-function makeEnds(psi::MPS,mpovec::MPO...;Lbound::TensType=typeof(psi[1]) <: qarray ? Qtens{eltype(psi[1]),typeof(psi[1].flux)}() : tens{eltype(psi[1])}(),Rbound::TensType=typeof(psi[1]) <: qarray ? Qtens{eltype(psi[1]),typeof(psi[1].flux)}() : tens{eltype(psi[1])}())
-  return makeEnds(psi,psi,mpovec...,Lbound=Lbound,Rbound=Rbound)
-end
-export makeEnds
-
-
-
-function genEnv(dualpsi::MPS,psi::MPS,mpo::MPO...;bound::TensType=typeof(psi[1]) <: qarray ? Qtens{eltype(psi[1]),typeof(psi[1].flux)}() : tens{eltype(psi[1])}())
-
-end
-
-
-
-
-"""
-    makeEnv(dualpsi,psi,mpo[,Lbound=,Rbound=])
-
-Generates environment tensors for a MPS (`psi` and its dual `dualpsi`) with boundaries `Lbound` and `Rbound`
-"""
-function makeEnv(dualpsi::MPS,psi::MPS,mpo::MPO...;Lbound::TensType=typeof(psi[1]) <: qarray ? Qtens{eltype(psi[1]),typeof(psi[1].flux)}() : tens{eltype(psi[1])}(),Rbound::TensType=typeof(psi[1]) <: qarray ? Qtens{eltype(psi[1]),typeof(psi[1].flux)}() : tens{eltype(psi[1])}())
-  Ns = length(psi)
-  numtype = elnumtype(dualpsi,psi,mpo...)
-  C = psi[1]
-
-  if typeof(psi) <: largeMPS || typeof(mpo) <: largeMPO
-    Lenv,Renv = largeEnv(numtype,Ns)
-  else
-    Lenv = environment(psi)
-    Renv = environment(psi)
-  end
-  Lenv[1],Renv[Ns] = makeEnds(dualpsi,psi,mpo...;Lbound=Lbound,Rbound=Rbound)
-  for i = 1:psi.oc-1
-    Lupdate!(i,Lenv,dualpsi,psi,mpo...)
-  end
-
-  for i = Ns:-1:psi.oc+1
-    Rupdate!(i,Renv,dualpsi,psi,mpo...)
-  end
-  return Lenv,Renv
-end
-
-"""
-    makeEnv(psi,mpo[,Lbound=,Rbound=])
-
-Generates environment tensors for a MPS (`psi`) with boundaries `Lbound` and `Rbound`
-"""
-function makeEnv(psi::MPS,mpo::MPO;Lbound::TensType=[0],Rbound::TensType=[0])
-  return makeEnv(psi,psi,mpo,Lbound=Lbound,Rbound=Rbound)
-end
-export makeEnv
-
 #       +---------------------------------------+
 #>------+       measurement operations          +---------<
 #       +---------------------------------------+
-
-
 
 """
   psi = applyOps!(psi,sites,Op[,trail=ones(1,1)])
@@ -529,12 +556,12 @@ Applies operator `Op` (any `TensType`) in-place to the MPS `psi` at sites `sites
 """
 function applyOps!(psi::MPS,sites::Array{W,1},Op::TensType;trail::TensType=ones(1,1)) where W <: Integer
   def_trail = ones(1,1)
-  #=@inbounds=# for i = 1:length(sites)
+  @inbounds for i = 1:length(sites)
     site = sites[i]
     p = site
     psi[p] = contract([2,1,3],Op,2,psi[p],2)
     if trail != def_trail
-      #=@inbounds=# for j = 1:p-1
+      @inbounds for j = 1:p-1
         psi[j] = contract([2,1,3],trail,2,psi[j],2)
       end
     end
@@ -592,8 +619,8 @@ Applies MPOs (`H`) to an MPS (`psi`) and truncates to maximum bond dimension `m`
 """
 function applyMPO(psi::MPS,H::MPO...;m::Integer=0,cutoff::Float64=0.)
   newpsi = psi
-  for a = 1:length(H)
-    newpsi = applyMPO(newpsi,H[i],m=m,cutoff=cutoff)
+  for w = 1:length(H)
+    newpsi = applyMPO(newpsi,H[w],m=m,cutoff=cutoff)
   end
   return newpsi
 end
@@ -606,7 +633,7 @@ evaluate <`dualpsi`|`H`|`psi`> for any number of MPOs `H`; can specifcy left and
 
 See also: [`overlap`](@ref)
 """
-function expect(dualpsi::MPS,psi::MPS,H::MPO...;Lbound::TensType=typeof(psi[1]) <: qarray ? Qtens{eltype(psi[1]),typeof(psi[1].flux)}() : tens{eltype(psi[1])}(),Rbound::TensType=Lbound,order::intvecType=intType[])
+function expect(dualpsi::MPS,psi::MPS,H::MPO...;Lbound::TensType=defaultBoundary(psi[1]),Rbound::TensType=Lbound,order::intvecType=intType[])
   Ns = length(psi)
   nMPOs = size(H,1)
   nLsize = nMPOs+2
@@ -638,7 +665,7 @@ evaluate <`psi`|`H`|`psi`> for any number of MPOs `H`; can specifcy left and rig
 
 See also: [`overlap`](@ref)
 """
-function expect(psi::MPS,H::MPO...;Lbound::TensType=typeof(psi[1]) <: qarray ? Qtens{eltype(psi[1]),typeof(psi[1].flux)}() : tens{eltype(psi[1])}(),Rbound::TensType=Lbound,order::intvecType=intType[])
+function expect(psi::MPS,H::MPO...;Lbound::TensType=defaultBoundary(psi[1]),Rbound::TensType=Lbound,order::intvecType=intType[])
   return expect(psi,psi,H...,Lbound=Lbound,Rbound=Rbound,order=order)
 end
 export expect
@@ -653,7 +680,7 @@ Compute the correlation funciton (example, <`dualpsi`|`Cc`_i . `Ca`_j|`psi`>) on
 + Use `mpoterm` and `applyMPO` for higher order correlation functions or write a new function
 """
 function correlationmatrix(dualpsi::MPS, psi::MPS, Cc::TensType, Ca::TensType; trail=intType[])
-  rho = Array{eltype(psi[1]),2}(undef,size(psi,1),size(psi,1))
+  rho = Array{eltype(psi[1]),2}(undef,length(psi),length(psi))
   if trail != []
     FCc = contract(Cc,2,trail,1)
   else
@@ -661,7 +688,7 @@ function correlationmatrix(dualpsi::MPS, psi::MPS, Cc::TensType, Ca::TensType; t
   end
   diffTensors = !(psi == dualpsi)
   onsite = contract(Cc,2,Ca,1)
-  for i = 1:size(psi,1)
+  for i = 1:length(psi)
     move!(psi,i)
     if diffTensors
       move!(dualpsi,i)
@@ -669,18 +696,18 @@ function correlationmatrix(dualpsi::MPS, psi::MPS, Cc::TensType, Ca::TensType; t
     TopTerm = contract([2,1,3],onsite,2,psi[i],2)
     rho[i,i] = contractc(TopTerm,dualpsi[i])
   end
-  for i = 1:size(psi,1)-1
+  for i = 1:length(psi)-1
     move!(psi,i)
     if diffTensors
       move!(dualpsi,i)
     end
     TopTerm = contract(FCc,2,psi[i],2)
     Lenv = contractc(TopTerm,(2,1),dualpsi[i],(1,2))
-    for j = i+1:size(psi,1)
+    for j = i+1:length(psi)
       Renv = contract(Ca,2,psi[j],2)
       Renv = contractc(Renv,(1,3),dualpsi[j],(2,3))
       DMElement = contract(Lenv,Renv)
-      if j < size(psi,1)
+      if j < length(psi)
         if trail != []
           Lenv = contract(Lenv,1,psi[j],1)
           Lenv = contract(Lenv,2,trail,2)
@@ -743,103 +770,95 @@ export correlationmatrix
 
 
 
-function localizeOp(psi::MPS,Oparray::Array{G,1},sites::Array{R,1};centerpsi::TensType=psi[psi.oc],order::Array{intType,1}=[1,2,3],trail::Tuple=()) where {G <: TensType, R <: Integer}
+function localizeOp(psi::MPS,Op::Array{G,1},insites::Array{R,1};#=centerpsi::TensType=psi[psi.oc],=#trail::Tuple=()) where {G <: TensType, R <: Integer}
 
   #trail operations....
   isId = [isapprox(norm(trail[r])^2,size(trail[r],1)) for r = 1:length(trail)]
   if length(trail) > 0
     for r = 1:length(isId)
       index = 0
-      #=@inbounds=# while isId[r]
+      @inbounds while isId[r] && index < size(trail[r],1)
         index += 1
-        isId[r] = searchindex(trail[r],index,index) == 1
+        isId[r] &= searchindex(trail[r],index,index) == 1
       end
     end
+  end
+
+
+  if issorted(insites)
+    Oparray = Op
+    sites = insites
+  else
+    order = sortperm(insites)
+    Oparray = Op[order]
+    sites = insites[order]
   end
 
 
   #needs to incorporate trail operators between operators.
 
-#  Lenv = makeBoundary(psi,psi)
   minsite = minimum(sites)
+  Lstart = minsite < psi.oc ? minsite : psi.oc
+  Lenv = LinearAlgebra.Diagonal(ones(eltype(psi[Lstart]),size(psi[Lstart],1)))
+  currOp = [0]
+  for w = minsite:psi.oc-1
+    thispsi = psi[w]
+    if w in sites
+      p = findall(r->r==w,sites)
+      for k = 1:length(p)
+        thispsi = contract([2,1,3],Oparray[p[k]],2,thispsi,2)
+        currOp[1] += 1
+      end
+    end
+    for g = currOp[1]+1:length(trail)
+      thispsi = contract([2,1,3],trail[g],2,thispsi,2)
+    end
+    Lenv = Lupdate(Lenv,psi[w],thispsi)
+  end
+
+
   maxsite = maximum(sites)
-  if minsite < psi.oc
-    if length(isId) > 0 && sum(isId) != 0
-      Lenv = makeBoundary(psi,psi)
-      for w = minsite+1:psi.oc-1
-        if w in sites
-          p = findfirst(r->w==sites[r],1:length(sites))
-          temp = contract([2,1,3],Oparray[p],2,psi[w],2)
-        end
-        temp = contract([2,1,3],trail[1],2,temp,2)
-        Lenv = Lupdate(Lenv,psi[w],temp)
+  Rstart = maxsite > psi.oc ? maxsite : psi.oc
+  Renv = LinearAlgebra.Diagonal(ones(eltype(psi[Rstart]),size(psi[Rstart],3)))
+  currOp = [length(sites)+1]
+  for w = maxsite:-1:psi.oc+1
+    thispsi = psi[w]
+    if w in sites
+      p = findall(r->r==w,sites)
+      for k = 1:length(p)
+        thispsi = contract([2,1,3],Oparray[p[k]],2,thispsi,2)
+        currOp[1] -= 1
       end
-    else
-      p = findfirst(r->minsite==sites[r],1:length(sites))
-      psiOp = contract(Oparray[p],2,psi[minsite],2)
-      Lenv = ccontract(psiOp,(2,1),psi[minsite],(1,2))
     end
-    for w = minsite+1:psi.oc-1
-      if w in sites
-        p = findfirst(r->w==sites[r],1:length(sites))
-        temp = contract([2,1,3],Oparray[p],2,psi[w],2)
-      else
-        temp = psi[w]
-      end
-      Lenv = Lupdate(Lenv,psi[w],temp)
+    for g = currOp[1]+1:length(trail)
+      thispsi = contract([2,1,3],trail[g],2,thispsi,2)
     end
-  else
-    Lenv = ccontract(psi[psi.oc-1],(1,2),psi[psi.oc-1],(1,2))
+    Renv = Rupdate(Renv,psi[w],thispsi)
   end
 
   if psi.oc in sites
     p = findfirst(r->psi.oc==sites[r],1:length(sites))
-#    cpsi = contract([2,1,3],Oparray[p],2,centerpsi,2)
     outOp = Oparray[p]
   else
     outOp = makeId(eltype(psi[1]),size(psi[psi.oc],2))
-#    cpsi = centerpsi
   end
-
-#  Renv = makeBoundary(psi,psi,left=false)
-  if maxsite > psi.oc
-    p = findfirst(r->maxsite==sites[r],1:length(sites))
-    psiOp = contract(Oparray[p],2,psi[maxsite],2)
-    Renv = contractc(psiOp,(1,3),psi[maxsite],(2,3))
-    for w = maxsite-1:-1:psi.oc+1
-      if w in sites
-        p = findfirst(r->w==sites[r],1:length(sites))
-        temp = contract([2,1,3],Oparray[p],2,psi[w],2)
-      else
-        temp = psi[w]
-      end
-      Renv = Rupdate(Renv,psi[w],temp)
-    end
-  else
-    Renv = contractc(psi[psi.oc+1],(2,3),psi[psi.oc+1],(2,3))
-  end
-#  Lpsi = contract(Lenv,2,outOp,1)
-  return Lenv,outOp,Renv #contract(order,Lpsi,3,Renv,1)
+  return Lenv,outOp,Renv
 end
 
-function localizeOp(psi::MPS,mpo::MPO...;centerpsi::TensType=psi[psi.oc],Hpsi::Function=singlesite_update)
+function localizeOp(psi::MPS,mpo::MPO...;Hpsi::Function=singlesite_update)
   Lenv,Renv = makeEnv(psi,mpo...)
   nMPOs = length(mpo)
   nLsize = nMPOs+2
-#  bundleMPS = ndims(centerpsi) == 4
-  Hpsi = contract(Renv,1,centerpsi,3)
-  LHpsi = contract(Lenv,2,mpo[1][psi.oc],1)
-  for w = 2:nMPOs
-    LHpsi = contract(LHpsi,(2,nMPOs+1+w),mpo[w][psi.oc],(1,2))
+
+  Lpsi = contract(Lenv[psi.oc],ndims(Lenv[psi.oc]),psi[psi.oc],1)
+  for w = 1:nMPOs
+    Lpsi = contract(Lpsi,(2+nMPOs-w,ndims(Lpsi)-w),mpo[w][psi.oc],(1,2))
   end
 
-  tup_Renv = ntuple(i->i,nMPOs)
-  tup_Renv = (nMPOs+2,nMPOs+3,tup_Renv...)
+  Ltup = (ntuple(w->w+1,ndims(Lpsi)-3)...,ndims(Lpsi))
+  Rtup = ntuple(w->w,ndims(Renv[psi.oc])-1)
 
-  tup_Lenv = ntuple(i->3+i,nMPOs)
-  tup_Lenv = (1,3,tup_Lenv...)
-
-  return contract(LHpsi,tup_Lenv,HRenv,tup_Renv)
+  return contract(Lpsi,Ltup,Renv[psi.oc],Rtup)
 end
 export localizeOp
 
@@ -871,16 +890,16 @@ export localizeOp
 """
   operator_in_order!(pos,sizes)
 
-Increments elements of input vector `pos` with sizes of a tensor `sizes` such that `pos` all elements are ordered least to greatest.  For use in `correlation` function.
+Increments elements of input vector `pos` by one step (last element first) with sizes of a tensor `sizes` such that `pos`.  For use in `correlation` function.
 """
 @inline function operator_in_order!(pos::Array{G,1},sizes::intvecType) where G <: Integer
   w = length(pos)
   pos[w] += 1
-  while w > 1 && pos[w] > sizes[w]
+  @inbounds while w > 1 && pos[w] > sizes[w]
     w -= 1
-    #=@inbounds=# pos[w] += 1
-    @simd for x = w:length(pos)-1
-      #=@inbounds=# pos[x+1] = pos[x]
+    pos[w] += 1
+    @inbounds @simd for x = w:length(pos)-1
+      pos[x+1] = pos[x]
     end
   end
   nothing
@@ -931,7 +950,7 @@ Computes the general correlation on the input MPS `psi` with operators defined i
 See also: [`expect`](@ref) [`correlationmatrix`](@ref)
 """
 function correlation(psi::MPS, inputoperators...;
-                      sites::intvecType=ntuple(i->1:length(psi),length(inputoperators)),
+                      sites::Tuple=ntuple(i->1:length(psi),length(inputoperators)),
                       trail::Union{Tuple,TensType}=()) #where S <: Union{Vector{AbstractMatrix{Float64}},TensType}
 
   return correlation(psi,psi,inputoperators...,sites=sites,trail=trail)
@@ -944,7 +963,7 @@ Computes the general correlation on the input MPS `psi` with operators defined i
 See also: [`expect`](@ref) [`correlationmatrix`](@ref)
 """
 function correlation(dualpsi::MPS, psi::MPS, inputoperators...;
-                      sites::intvecType=ntuple(i->1:length(psi),length(inputoperators)),
+                      sites::Tuple=ntuple(i->1:length(psi),length(inputoperators)),
                       trail::Union{Tuple,TensType}=()#=,periodic::Bool=false,infinite::Bool=false=#) #where S <: Union{Vector{AbstractMatrix{Float64}},TensType}
 
   move!(psi,1)
@@ -1003,15 +1022,15 @@ function correlation(dualpsi::MPS, psi::MPS, inputoperators...;
   retType = typeof(temp)
 
   base_sizes = Array{intType,1}(undef,length(sites))
-  if periodic
+#=  if periodic
     @inbounds @simd for i = 1:length(sites)
       base_sizes[i] = sites[i]
     end
-  else
+  else=#
     @inbounds @simd for i = 1:length(sites)
       base_sizes[i] = length(sites[i]) - (ndims(inputoperators[i]) == 1 ? length(inputoperators[i])-1 : 0)
     end
-  end
+#  end
 
 
   pos = Array{intType,1}(undef,numops)
@@ -1056,18 +1075,14 @@ function correlation(dualpsi::MPS, psi::MPS, inputoperators...;
     @inbounds for y = 1:base_sizes[1] #w in sites[1]
       w = sites[1][y]
 
-      wrapcond = periodic && w + lengthops[1]-1 > length(Lenv)
+      wrapcond = #=periodic &&=# w + lengthops[1]-1 > length(Lenv)
       thisLenv = wrapcond ? Lenv[1] : Lenv[w]
 
       @inbounds for p = 1:lengthops[1]
         currsite = (w + p-1) - 1 % length(savepsi) + 1
 
         newpsi = contract([2,1,3],operators[1][p],2,savepsi[currsite],2)
-#        if periodic && currsite < w
-#
-#        else
-          thisLenv = Lupdate(thisLenv,dualpsi[currsite],newpsi)
-#        end
+        thisLenv = Lupdate(thisLenv,dualpsi[currsite],newpsi)
       end
       if wrapcond
         for r = w+lengthops[1]:length(savepsi)
@@ -1099,9 +1114,9 @@ function correlation(dualpsi::MPS, psi::MPS, inputoperators...;
 end
 export correlation
 
-#       +--------------------------------+
-#>------+    Methods for excitations     +---------<
-#       +--------------------------------+
+#       +--------------------------------------+
+#>------|    (bad) Methods for excitations     |---------<
+#       +--------------------------------------+
 
 """
     penalty!(mpo,lambda,psi[,compress=])
@@ -1175,3 +1190,4 @@ end
 function transfermatrix(psi::MPS,i::Integer,j::Integer;startsite::Integer=i,transfermat::TensType=ccontract([1,3,2,4],psi[startsite],2,psi[startsite],2))
   return transfermatrix(psi,psi,i,j,transfermat=transfermat)
 end
+export transfermatrix

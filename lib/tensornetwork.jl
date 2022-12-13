@@ -26,7 +26,7 @@ using ..MPutil
   export TNnetwork
 
   """
-      nameT{W,B}
+      nametens{W,B}
 
   named tensor with tensor of type `W` and type of names `B`
 
@@ -34,33 +34,30 @@ using ..MPutil
   + `N::W`: Tensor stored
   + `names::Array{B,1}`: names of all indices
   """
-#  + `arrows::Array{Bool,1}`: fluxes on all indices
-  mutable struct nameT{W,B} <: TNobj where {W <: Union{qarray,AbstractArray,denstens}, B <: Union{Any,String}}
+  mutable struct nametens{W,B} <: TNobj where {W <: TensType, B <: Union{Any,String}}
     N::W
     names::Array{B,1}
-#    arrows::Array{Bool,1} #for conjugation...acts like an arrows but also applies to non-quantum number tensors
   end
-#=
-  """
-      nameT(Qt,namez,arrowss)
 
-  constructor for named tensor from a tensor `Qt`, vector of index names `namez`, and vector of fluxes `arrowss`
   """
-  function nameT(Qt::T,namez::Array{B,1},arrows::Array{Bool,1})::TNobj where {T <: TensType, B <: Union{Any,String}}
-    return nameT{T,B}(Qt,namez,arrows)
-  end
-  export nameT
-=#
-  """
-      nameT(Qt,namez)
+      nametens(Qt,namez)
 
   constructor for named tensor from a tensor `Qt` and vector of index names `namez`
   """
-  function nameT(Qt::T,namez::Array{B,1};regTens::Bool=false)::TNobj where {T <: TensType, B <: Union{Any,String}}
+  function nametens(Qt::TensType,namez::Array{B,1};regTens::Bool=false)::TNobj where B <: Union{Any,String}
     newQt = !regTens && typeof(Qt) <: AbstractArray ? tens(Qt) : Qt
-    return nameT{typeof(newQt),B}(newQt,namez)#,[true for i = 1:length(namez)])
+    return nametens{typeof(newQt),B}(newQt,namez)
   end
-  export nameT
+
+  """
+      nametens(Qt,string)
+
+  constructor for named tensor from a tensor `Qt` and vector of index names `string` where an integer is added onto `string` to make the full name of the index
+  """
+  function nametens(Qt::T,namez::String;regTens::Bool=false)::TNobj where T <: TensType
+    return nametens(Qt,[namez*"$i" for i = 1:basedims(Qt)])
+  end
+  export nametens
 
   """
       network{N,W}
@@ -88,7 +85,7 @@ using ..MPutil
 
   converts named tensor to a network with a single tensor element
   """
-  function network(Qts::nameT{W,S}...) where W  <: TNobj where S <: Union{Any,String}
+  function network(Qts::nametens{W,S}...) where W  <: TNobj where S <: Union{Any,String}
     return network{W,S}([Qts[i] for i = 1:length(Qts)])
   end
   export network
@@ -96,6 +93,10 @@ using ..MPutil
   import ..Base.getindex
   function getindex(Qts::TNnetwork,i::Integer)
     return Qts.net[i]
+  end
+
+  function getindex(Qts::TNobj,i::Integer)
+    return Qts.N[i]
   end
 
   import ..Base.setindex!
@@ -113,7 +114,7 @@ using ..MPutil
     vecB = Int64[]
     for a = 1:size(A.names,1)
       for b = 1:size(B.names,1)
-        if A.names[a] == B.names[b] #&& (A.arrows[a] != B.arrows[b] || !arrows)
+        if A.names[a] == B.names[b]
           push!(vecA,a)
           push!(vecB,b)
         end
@@ -128,65 +129,23 @@ using ..MPutil
 
   Contracts `A` and any number of `B` along common indices; simple algorithm at present for the order
   """
-  function *(A::TNobj,B::TNobj)#;arrows::Bool=false)
+  function *(A::TNobj,B::TNobj)
     vecA,vecB = contractinds(A,B)
-
-    if sort(vecA) == [ndims(A)-i+1 for i = 1:length(vecA)]
-      Aplace = "L"
-    elseif sort(vecA) == [i for i = 1:length(vecA)]
-      Aplace = "R"
-    else
-      Aplace = "LR"
-    end
-
-    if sort(vecB) == [ndims(B)-i+1 for i = 1:length(vecB)]
-      Bplace = "L"
-    elseif sort(vecB) == [i for i = 1:length(vecB)]
-      Bplace = "R"
-    else
-      Bplace = "LR"
-    end
-
-    if Aplace == "L" || Aplace == "LR"
-      if Bplace == "L"
-        LR = prod(size(A)) > prod(size(B))
-      else
-        LR = true
-      end
-    elseif Aplace == "R"
-      if Bplace == "R"
-        LR = prod(size(A)) > prod(size(B))
-      else
-        LR = false
-      end
-    else #if Aplace == Bplace == "LR"
-      LR = true
-    end
-
-    #println(vecA," ",vecB)
 
     retindsA = setdiff([i for i = 1:ndims(A)],vecA)
     retindsB = setdiff([i for i = 1:ndims(B)],vecB)
 
-    newnames = setdiff(A.names,B.names) #Any[]
-#    newc = Bool[]
-    if LR
-      newnames = vcat(A.names[retindsA],B.names[retindsB])
-#      newc = vcat(A.arrows[retindsA],B.arrows[retindsB])
-      newTens = contract(A.N,vecA,B.N,vecB)
-    else
-      newnames = vcat(B.names[retindsB],A.names[retindsA])
-#      newc = vcat(B.arrows[retindsB],A.arrows[retindsA])
-      newTens = contract(B.N,vecB,A.N,vecA)
-    end
+    newnames = setdiff(A.names,B.names)
+    newnames = vcat(A.names[retindsA],B.names[retindsB])
+    newTens = contract(A.N,vecA,B.N,vecB)
 
-    return nameT(newTens,newnames)#,newc)
+    return nametens(newTens,newnames)
   end
 
-  function *(R::TNobj...)#;arrows::Bool=false)
-    out = *(R[1],R[2])#,arrows=arrows)
+  function *(R::TNobj...)
+    out = *(R[1],R[2])
     @simd for b = 3:length(R)
-      out = *(out,R[b])#,arrows=arrows)
+      out = *(out,R[b])
     end
     return out
   end
@@ -297,9 +256,9 @@ using ..MPutil
 
     U,D,V,truncerr,newmag = svd(AA.N,neworder,power=power,mag=mag,cutoff=cutoff,m=m,nozeros=nozeros)
 
-    TNobjU = nameT(U,vcat(AA.names[left],[leftname]))#,vcat(AA.arrows[left],[true]))
-    TNobjD = nameT(D,[leftname,rightname])#,[false,true])
-    TNobjV = nameT(V,vcat([rightname],AA.names[right]))#,vcat([false],AA.arrows[right]))
+    TNobjU = nametens(U,vcat(AA.names[left],[leftname]))
+    TNobjD = nametens(D,[leftname,rightname])
+    TNobjV = nametens(V,vcat([rightname],AA.names[right]))
 
     return TNobjU,TNobjD,TNobjV,truncerr,newmag
   end
@@ -340,8 +299,8 @@ using ..MPutil
 
     D,U,truncerr,newmag = eigen(AA.N,order,mag=mag,cutoff=cutoff,m=m)
 
-    TNobjD = nameT(D,[leftname,rightname])#,[false,true])
-    TNobjU = nameT(U,vcat(AA.names[left],[leftname]))#,vcat(AA.arrows[left],[true]))
+    TNobjD = nametens(D,[leftname,rightname])
+    TNobjU = nametens(U,vcat(AA.names[left],[leftname]))
     return TNobjD,TNobjU,truncerr,newmag
   end
 
@@ -352,14 +311,11 @@ using ..MPutil
 
   See also: [`nameMPO`](@ref)
   """
-  function nameMPS(psi::MPS) #::Array{TNobj,1}
-    TNmps = Array{TNobj,1}(undef,size(psi,1))
-#    TNmps[1] = nameT(psi[1],["p1","l1"])#,[true,true])
-#    counter = 0
-    for i = 1:size(psi,1)
-      TNmps[i] = nameT(psi[i],[join(["l",i-1]),join(["p",i]),join(["l",i])])#,[false,true,true])
+  function nameMPS(psi::MPS)
+    TNmps = Array{TNobj,1}(undef,length(psi))
+    for i = 1:length(TNmps)
+      TNmps[i] = nametens(psi[i],["l$(i-1)","p$i","l$i"])
     end
-#    TNmps[size(psi,1)] = nameT(psi[size(psi,1)],[join(["l",size(psi,1)-1]),join(["p",size(psi,1)])])#,[false,true])
     return network(TNmps)
   end
   export nameMPS
@@ -371,17 +327,25 @@ using ..MPutil
 
   See also: [`nameMPS`](@ref)
   """
-  function nameMPO(mpo::MPO) #::Array{TNobj,1}
+  function nameMPO(mpo::MPO)
     TNmpo = Array{TNobj,1}(undef,size(mpo,1))
-#    TNmpo[1] = nameT(psi[1],["p1","p1","lmpo1"])#,[false,true,true])
-#    counter = 0
     for i = 1:size(mpo,1)
-      TNmpo[i] = nameT(mpo[i],[join(["lmpo",i-1]),join(["p",i]),join(["p",i]),join(["lmpo",i])])#,[false,false,true,true])
+      TNmpo[i] = nametens(mpo[i],["l$(i-1)","p$i","d$i","l$i"])
     end
-#    TNmpo[size(psi,1)] = nameT(psi[size(psi,1)],[join(["lmpo",size(psi,1)-1]),join(["p",size(psi,1)]),join(["p",size(psi,1)])])#,[false,false,true])
     return network(TNmpo)
   end
   export nameMPO
+
+  """
+      conj(A)
+
+  Conjugates named MPS `A`
+
+  See also: [`conj!`](@ref)
+  """
+  function conj(A::TNnetwork)
+    return network([conj(A.net[i]) for i = 1:length(A)])
+  end
 
   import Base.copy
   """
@@ -389,8 +353,8 @@ using ..MPutil
 
   Returns a copy of named tensor `A`
   """
-  function copy(A::nameT{W,B}) where {W <: Union{qarray,AbstractArray,denstens}, B <: Union{Any,String}}
-    return nameT{W,B}(copy(A.N),copy(A.names))#,[true for i = 1:length(A.names)])#,copy(A.arrows))
+  function copy(A::nametens{W,B}) where {W <: Union{qarray,AbstractArray,denstens}, B <: Union{Any,String}}
+    return nametens{W,B}(copy(A.N),copy(A.names))
   end
 
   import Base.println
@@ -409,12 +373,11 @@ using ..MPutil
 
     println("size = ",size(A))
     println("index names = ",A.names)
-#    println("arrowss = ",A.arrows)
     if typeof(A.N) <: denstens ||  typeof(A.N) <: qarray
       temp = length(A.N.T)
       maxshow = min(show,temp)
       println("elements = ",A.N.T[1:maxshow])
-    else #if typeof(A.N) <: AbstractArray
+    else
       rAA = reshape(A.N,prod(size(A)))
       temp = length(rAA)
       maxshow = min(show,temp)
@@ -425,35 +388,9 @@ using ..MPutil
       end
     end
     println()
-#    print(A,show=show)
     nothing
   end
-#=
-  import Base.print
-  """
-      print(A[,show=])
 
-  Prints named tensor `A`
-
-  # Outputs:
-  + `size`: size of `A`
-  + `index names`: current names on `A`
-  + `arrowss`: fluxes for each index on `A`
-  + `elements`: elements of `A` if reshaped into a vector (out to `show`)
-  """
-  function print(A::TNobj;show::intType=10)
-    println("size = ",size(A))
-    println("index names = ",A.names)
-    println("arrowss = ",A.arrows)
-    rAA = reshape(A.N,prod(size(A)))
-    if length(rAA) > show
-      println("elements = ",rAA[1:show],"...")
-    else
-      println("elements = ",rAA[1:show])
-    end
-    nothing
-  end
-=#
   import Base.size
   """
       size(A[,w=])
@@ -478,7 +415,6 @@ using ..MPutil
     return size(A.N,w)
   end
 
-#  import ..Qtensor.norm
   """
       norm(A)
 
@@ -488,9 +424,6 @@ using ..MPutil
     return norm(A.N)
   end
 
-
-
-#  import ..Qtensor.div!
   """
       div!(A,num)
 
@@ -503,7 +436,6 @@ using ..MPutil
     return A
   end
 
-#  import ..Qtensor./
   """
       /(A,num)
 
@@ -515,9 +447,6 @@ using ..MPutil
     return div!(copy(A),num)
   end
 
-
-
-#  import ..Qtensor.mult!
   """
       mult!(A,num)
 
@@ -530,7 +459,6 @@ using ..MPutil
     return A
   end
 
-#  import ..Qtensor.*
   """
       *(A,num)
 
@@ -546,17 +474,6 @@ using ..MPutil
     return A*num
   end
 
-
-#  import .QN.add!
-  #=
-  """
-      add!(A,B)
-
-  Adds tensors `A` and `B` (changes `A`)
-
-  See also: [`+`](@ref)
-  """
-  =#
   function add!(A::TNobj,B::TNobj)
     reorder = matchnames(A,B.names)
     if !issorted(reorder)
@@ -568,7 +485,6 @@ using ..MPutil
     return A
   end
 
-#  import ..Qtensor.+
   """
       +(A,B)
 
@@ -580,8 +496,6 @@ using ..MPutil
     return add!(copy(A),B)
   end
 
-
-#  import ..Qtensor.sub!
   """
       sub!(A,B)
 
@@ -600,7 +514,6 @@ using ..MPutil
     return A
   end
 
-#  import ..Qtensor.-
   """
       -(A,B)
 
@@ -625,7 +538,6 @@ using ..MPutil
     return sqrt!(B)
   end
 
-#  import .tensor.sqrt!
   """
       sqrt!(A)
 
@@ -648,7 +560,6 @@ using ..MPutil
     return length(A.names)
   end
 
-#  import ..Qtensor.conj!
   """
       conj!(A)
 
@@ -658,7 +569,6 @@ using ..MPutil
   """
   function conj!(A::TNobj)
     conj!(A.N)
-#    A.arrows = Bool[!A.arrows[i] for i = 1:ndims(A)]
     nothing
   end
 
@@ -676,8 +586,6 @@ using ..MPutil
     return B
   end
 
-
-#  import ..contractions.trace
   """
       trace(A)
 
@@ -690,7 +598,7 @@ using ..MPutil
       z = w+1
       while condition && z < length(A.names)
         z += 1
-        if A.names[w] == A.names[z] #&& A.arrows[w] && A.arrows[z]
+        if A.names[w] == A.names[z]
           push!(vect,[w,z])
           condition = false
         end
@@ -708,7 +616,7 @@ using ..MPutil
     if W <: Integer
       return trace(A.N,inds)
     else
-      vect = Array{intType,1}[zeros(intType,2) for i = 1:length(inds)] #Array{intType,1}[Array{intType,1}(undef,2) for i = 1:length(inds)]
+      vect = Array{intType,1}[zeros(intType,2) for i = 1:length(inds)]
       for w = 1:length(A.names)
         matchindex!(A,vect,inds,w,1)
         matchindex!(A,vect,inds,w,2)
@@ -734,8 +642,6 @@ using ..MPutil
   See also: [`trace`](@ref)
   """
   function matchindex!(A::TNobj,vect::Array{Array{P,1},1},inds::Array{Array{W,1},1},w::Integer,q::Integer) where {W <: Union{Any,Integer}, P <: Integer}
-#    condition = true
-#    z = 0
     convInds!(A,inds,vect)
     nothing
   end
@@ -777,7 +683,6 @@ using ..MPutil
         if A.names[b] == inds[a][1]
           if typeof(inds[a][2]) <: Array
             A.names[b] = inds[a][2][1]
-#            A.arrows[b] = inds[a][2][2]
           else
             A.names[b] = inds[a][2]
           end
@@ -797,7 +702,7 @@ using ..MPutil
 
   replaces a string `currvar` in named indices of `A` with `newvar`; can also set arrows if needed
   """
-  function rename!(A::TNobj,currvar::String,newvar::String)#,arrows::Array{Bool,1}...)
+  function rename!(A::TNobj,currvar::String,newvar::String)
     for a = 1:length(A.names)
       loc = findfirst(currvar,A.names[a])
       if !(typeof(loc) <: Nothing)
@@ -806,9 +711,6 @@ using ..MPutil
         newstring = first * newvar * last
         A.names[a] = newstring
       end
-#      if length(arrows) > 0
-#        A.arrows[a] = arrows[a]
-#      end
     end
     nothing
   end
@@ -820,56 +722,18 @@ using ..MPutil
     return B
   end
   export rename
-#=
-  function reshape(A,order)
-    newnumberorder = Int64[]
-    for i = 1:size(order,1)
-      for j = 1:size(A.names,1)
-        if order[i] == A.names[j]
-          push!(newnumberorder,j)
-          continue
-        end
-      end
-    end
-    W = permutedims(A,newnumberorder)
-    counter = 0
-    reshapevec = Array{intType,1}[]
-    for a = 1:length(newnumberorder)
-      temp = [i+counter for i = 1:length(newnumberorder[a])]
-      push!(reshapevec,temp)
-      counter += length(temp)
-    end
-    return reshape(W,reshapevec)
-  end
-=#
 
   function addindex!(X::TNobj,Y::TNobj)
-#    push!(X.arrows,true)
-#    push!(Y.arrows,false)
     if typeof(X.N) <: denstens || typeof(X.N) <: qarray
-      X.N.size = (size(X.N)...,1) #not super efficient if you're copying beforehand
-    else #if typeof(X.N) <: AbstractArray
-#      try 
-#        X.N = reshape(X.N,size(X.N)...,1) #not super efficient if you're copying beforehand
-#      catch
+      X.N.size = (size(X.N)...,1)
+    else
         error("trying to convert an array to the wrong type...switch to using the denstens class")
-#      end
-#    elseif typeof(X.N) <: qarray
-#      X.N = reshape!(X.N,size(X.N)...,1) #not super efficient if you're copying beforehand
     end
     if typeof(Y.N) <: denstens || typeof(Y.N) <: qarray
-      Y.N.size = (size(Y.N)...,1) #not super efficient if you're copying beforehand
+      Y.N.size = (size(Y.N)...,1)
     elseif typeof(Y.N) <: AbstractArray
-#      try
-#        Y.N = reshape(Y.N,size(Y.N)...,1) #not super efficient if you're copying beforehand
-#      catch
         error("trying to convert an array to the wrong type...switch to using the denstens class")
-#      end
-#    elseif typeof(Y.N) <: qarray
-#      Y.N = reshape!(Y.N,size(Y.N)...,1) #not super efficient if you're copying beforehand
     end
-#    push!(X.size,1)
-#    push!(Y.size,1)
     push!(X.names,"extra_ones")
     push!(Y.names,"extra_ones")
     nothing
@@ -884,20 +748,6 @@ using ..MPutil
   end
   export addindex
 
-#=
-  function joinTens!(X::TNobj,Y::TNobj)
-    addindex!(X,Y)
-    res = X*Y
-    if typeof(X.N) <: denstens || typeof(X.N) <: qarray
-      X.N.size = X.N.size[1:end-1]
-    end
-    if typeof(Y.N) <: denstens || typeof(Y.N) <: qarray
-      Y.N.size = Y.N.size[1:end-1]
-    end
-    return res
-  end
-  export joinTens!
-=#
   function joinTens(X::TNobj,Y::TNobj)
     A,B = addindex(X,Y)
     return A*B
@@ -912,8 +762,8 @@ using ..MPutil
     names::Array{B,1}
   end
 
-  function sizeT(Qt::nameT{W,B})::TNobj where {W <: Union{qarray,AbstractArray,denstens}, B <: Union{Any,String}}
-    return sizeT{Int64,B}(size(Qt),Qt.names)#,[true for i = 1:length(namez)])
+  function sizeT(Qt::nametens{W,B})::TNobj where {W <: Union{qarray,AbstractArray,denstens}, B <: Union{Any,String}}
+    return sizeT{Int64,B}(size(Qt),Qt.names)
   end
 
   function size(Qt::sizeT{W,B}) where {W <: Integer,B <: Union{Any,String}}
@@ -928,9 +778,9 @@ using ..MPutil
     Ainds = intType[]
     Binds = intType[]
     let A = A, B = B, Ainds = Ainds, Binds = Binds
-      #=Threads.@threads=# for i = 1:length(A.names)
+      for i = 1:length(A.names)
         for j = 1:length(B.names)
-          if A.names[i] == B.names[j] #&& A.arrows[i] != B.arrows[j]
+          if A.names[i] == B.names[j]
             push!(Ainds,i)
             push!(Binds,j)
           end

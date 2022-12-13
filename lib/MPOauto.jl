@@ -15,112 +15,7 @@
 #       +---------------------------------------+
 
 """
-    reorder!(C[,Ncols=])
-
-Reorders the `Ncols` columns of `C` according to the Fiedler vector reordering in place if site is not 0
-
-See also: [`reorder`](@ref)
-"""
-function reorder!(C::Array{W,2};Ncols::Integer=2) where W <: Number
-    sitevec = vcat(C[:,1],C[:,2])
-    for w = 3:Ncols
-      sitevec = vcat(sitevec,C[:,w])
-    end
-    Ns = maximum(sitevec)
-    A = zeros(Int64,Ns,Ns) #adjacency matrix = neighbor table
-    D = zeros(Int64,Ns) #degree matrix
-    for i = 1:size(C,1)
-      for x = 1:Ncols
-        xpos = C[i,x]
-        for w = x+1:Ncols
-          ypos = C[i,w]
-          if xpos != 0 && ypos != 0
-            A[xpos,ypos] = 1
-            D[xpos] += 1
-            D[ypos] += 1
-          end
-        end
-      end
-    end
-    L = D - A
-    D,U = LinearAlgebra.eigen(L)
-    fiedlervec = sortperm(U[:,2]) #lowest is all ones, so this is the first non-trivial one
-    for i = 1:size(C,1)
-      for w = 1:Ncols
-        if C[i,w] != 0
-          C[i,w] = fiedlervec[C[i,w]]
-        end
-      end
-    end
-    return C,fiedlervec #second eigenvector is the Fiedler vector
-  end
-
-  """
-      reorder(C[,Ncols=])
-
-  Reorders the `Ncols` columns of `C` according to the Fiedler vector reordering if site is not 0
-
-  See also: [`reorder!`](@ref)
-  """
-  function reorder(C::Array{W,2};Ncols::Integer=2) where W <: Number
-    P = copy(C)
-    return reorder!(P,Ncols=Ncols)
-  end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  struct zeroMPO
-    base::Array
-  end
-  
-  function mpoterm(base::Array{G,1}) where G <: densTensType
-    return zeroMPO(base)
-  end
-  
-  #import Base.+
-  function +(X::zeroMPO,Y::MPO)
-    W = elnumtype(Y)
-    mpotens = Array{Array{W,4},1}(undef,length(X.base))
-    O = zero(X.base[1])
-    d = size(O,1)
-    temp = [Y[1] X.base[1]]
-    mpotens[1] = reshape(temp,1,d,d,2)
-    @inbounds for i = 2:length(X.base)-1
-      O = zero(X.base[i])
-      d = size(O,1)
-      mpotens[i] = reshape([X.base[i] O;
-                    Y[i] X.base[i]],2,d,d,2)
-    end
-    O = zero(X.base[end])
-    d = size(O,1)
-    mpotens[end] = reshape([X.base[end];
-                    Y[end]],2,d,d,1)
-    return MPO(mpotens)
-  end
-
-
-
-
-
-
-
-
-
-
-"""
-    mpoterm(val,operator,ind,base,trail...)
+  mpoterm(val,operator,ind,base,trail...)
 
 Creates an MPO from operators (`operator`) with a prefactor `val` on sites `ind`.  Must also provide a `base` function which are identity operators for each site.  `trail` operators can be defined (example: fermion string operators)
 
@@ -162,7 +57,8 @@ function mpoterm(val::Number,operator::Array{W,1},ind::Array{P,1},base::Array{X,
     opString[i] = base[i]
   end
   for i = length(ind):-1:1
-    opString[ind[i]] = contract(operator[i],2,opString[ind[i]],1)
+    thisval = i == 1 ? val : 1.0
+    opString[ind[i]] = contract(operator[i],2,opString[ind[i]],1,alpha=thisval)
     if applytrail
       for b = 1:ind[i]-1
         opString[b] = contract(fulltrail[i],2,opString[b],1)
@@ -172,6 +68,47 @@ function mpoterm(val::Number,operator::Array{W,1},ind::Array{P,1},base::Array{X,
   return MPO(opString)
 end
 
+function mpoterm(operator::TensType,ind::Array{P,1},base::Array{G,1},trail::TensType...)::MPO where {P <: Integer, G <: TensType}
+  return mpoterm(1.,operator,ind,base,trail...)
+end
+
+function mpoterm(val::Number,operator::TensType,ind::Integer,base::Array{G,1},trail::TensType...)::MPO where G <: densTensType
+  return mpoterm(val,[operator],[ind],base,trail...)
+end
+
+function mpoterm(operator::TensType,ind::Integer,base::Array{G,1},trail::TensType...)::MPO where G <: densTensType
+  return mpoterm(1.,[operator],[ind],base,trail...)
+end
+#=
+
+function mpoterm(val::Number,operator::TensType,ind::Integer,Ns::Integer,trail::TensType...)::MPO
+  return mpoterm(val,[operator],[ind],Ns,trail...)
+end
+
+function mpoterm(operator::TensType,ind::Integer,Ns::Integer,trail::TensType...)::MPO
+  return mpoterm(1.,[operator],[ind],Ns,trail...)
+end
+=#
+#=
+function mpoterm(W::DataType,base::Array{G,1}) where G <: densTensType
+  mpotens = Array{Array{W,4},1}(undef,length(base))
+  O = zero(base[1])
+  d = size(O,1)
+  temp = [O base[1]]
+  mpotens[1] = reshape(temp,1,d,d,2)
+  @inbounds for i = 2:length(base)-1
+    O = zero(base[i])
+    d = size(O,1)
+    mpotens[i] = reshape([base[i] O;
+                  O base[i]],2,d,d,2)
+  end
+  O = zero(base[end])
+  d = size(O,1)
+  mpotens[end] = reshape([base[end];
+                  O],2,d,d,1)
+  return MPO(mpotens)
+end
+=#
 function mpoterm(val::Number,operator::Array{W,1},ind::Array{P,1},base::Array{X,1},trail::Y...)::MPO where {W <: qarray, X <: qarray, Y <: qarray, P <: Integer}
   Qlabels = [fullQnumMat(base[w])[2] for w = 1:length(base)]
   densbase = [makeArray(base[w]) for w = 1:length(base)]
@@ -186,36 +123,8 @@ function mpoterm(val::Number,operator::Array{W,1},ind::Array{P,1},base::Array{X,
   return makeqMPO(densmpo,Qlabels)
 end
 
-#=
-function mpoterm(val::Number,operator::Array{W,1},ind::Array{P,1},Ns::Integer,trail::Y...)::MPO where {W <: densTensType, Y <: densTensType, P <: Integer}
-  Id = zeros(eltype(operator[1]),size(operator[1])) + LinearAlgebra.I
-  base = [Id for i = 1:Ns]
-  return mpoterm(val,operator,ind,base,trail...)
-end
-=#
-function mpoterm(operator::TensType,ind::Array{P,1},base::Array{G,1},trail::TensType...)::MPO where {P <: Integer, G <: TensType}
-  return mpoterm(1.,operator,ind,base,trail...)
-end
-
-function mpoterm(val::Number,operator::TensType,ind::Integer,base::Array{G,1},trail::TensType...)::MPO where G <: densTensType
-  return mpoterm(val,[operator],[ind],base,trail...)
-end
-
-function mpoterm(val::Number,operator::TensType,ind::Integer,Ns::Integer,trail::TensType...)::MPO
-  return mpoterm(val,[operator],[ind],Ns,trail...)
-end
-
-function mpoterm(operator::TensType,ind::Integer,base::Array{G,1},trail::TensType...)::MPO where G <: densTensType
-  return mpoterm(1.,[operator],[ind],base,trail...)
-end
-
-function mpoterm(operator::TensType,ind::Integer,Ns::Integer,trail::TensType...)::MPO
-  return mpoterm(1.,[operator],[ind],Ns,trail...)
-end
-export mpoterm
-
 """
-    mpoterm(Qlabels,val,operator,ind,base,trail...)
+  mpoterm(Qlabels,val,operator,ind,base,trail...)
 
 Same as `mpoterm` but converts to quantum number MPO with `Qlabels` on the physical indices
 
@@ -230,9 +139,10 @@ function mpoterm(Qlabels::Array{Array{Q,1},1},operator::Array,ind::Array{P,1},ba
 end
 export mpoterm
 
+#=
 #import Base.*
 """
-    mps * mps
+  mps * mps
 
 functionality for multiplying MPOs together; joins physical indices together
 """
@@ -271,7 +181,7 @@ function mult!(X::MPS,Y::MPS;infinite::Bool=false)
 end
 
 """
-    mpo * mpo
+  mpo * mpo
 
 functionality for multiplying MPOs together; joins physical indices together
 """
@@ -306,30 +216,11 @@ function mult!(X::MPO,Y::MPO;infinite::Bool=false)
   end
   return deparallelize!(X)
 end
+=#
 
-
-
-function mpoterm(W::DataType,base::Array{G,1}) where G <: densTensType
-  mpotens = Array{Array{W,4},1}(undef,length(base))
-  O = zero(base[1])
-  d = size(O,1)
-  temp = [O base[1]]
-  mpotens[1] = reshape(temp,1,d,d,2)
-  @inbounds for i = 2:length(base)-1
-    O = zero(base[i])
-    d = size(O,1)
-    mpotens[i] = reshape([base[i] O;
-                  O base[i]],2,d,d,2)
-  end
-  O = zero(base[end])
-  d = size(O,1)
-  mpotens[end] = reshape([base[end];
-                  O],2,d,d,1)
-  return MPO(mpotens)
-end
 
 """
-    A + B
+  A + B
 
 functionality for adding (similar to direct sum) of MPOs together; uses joinindex function to make a combined MPO
 
@@ -337,26 +228,120 @@ note: deparallelizes after every addition
 
 See also: [`deparallelization`](@ref) [`add!`](@ref)
 """
-function +(X::MPO...)
+
+function +(X::MPO...;nthreads::Integer=Threads.nthreads())
   checktype = typeof(prod(w->eltype(X[w])(1),1:length(X)))
-  if checktype != eltype(X[1])
-    Z = MPO(checktype,copy(X[1]))
+  if length(X) > 2
+    sizeparts = cld(length(X),nthreads)
+    startparts = Array{intType,1}(undef,nthreads+1)
+    startparts[1] = 0
+    for i = 1:nthreads-1
+      startparts[i+1] = sizeparts*i
+    end
+    startparts[end] = length(X)
+
+    R = Array{MPO,1}(undef,nthreads)
+
+    Threads.@threads for w = 1:nthreads
+
+      start = startparts[w] + 1
+      stop = startparts[w+1]
+
+      if checktype != eltype(X[start])
+        Z = MPO(checktype,copy(X[start]))
+      else
+        Z = copy(X[start])
+      end
+      for g = start+1:stop
+        add!(Z,X[g])
+      end
+      R[w] = Z
+    end
+    finalMPO = R[1]
+    for w = 2:length(R)
+      add!(finalMPO,R[w])
+    end
   else
-    Z = copy(X[1])
+    if checktype != eltype(X[1])
+      finalMPO = MPO(checktype,copy(X[1]))
+    else
+      finalMPO = copy(X[1])
+    end
+    for w = 2:length(X)
+      add!(finalMPO,X[w])
+    end
   end
-  for w = 2:length(X)
-    add!(Z,X[w])
-  end
-  return Z
+  return finalMPO
 end
 
+#=
+function +(X::MPO...;nthreads::Integer=Threads.nthreads())
+
+  sizeparts = cld(length(X),nthreads)
+  startparts = Array{intType,1}(undef,nthreads+1)
+  startparts[1] = 0
+  for i = 1:nthreads-1
+    startparts[i+1] = sizeparts*i
+  end
+  startparts[end] = length(X)
+
+  Z = Array{MPO,1}(undef,nthreads)
+
+  #=Threads.@threads =#for w = 1:nthreads
+
+    checktype = typeof(prod(w->eltype(X[w])(1),startparts[w]+1:startparts[w+1]))
+    if checktype != eltype(X[startparts[w]+1])
+      C = MPO(checktype,copy(X[startparts[w]+1]))
+    else
+      C = copy(X[startparts[w]+1])
+    end
+    for k = startparts[w]+2:startparts[w+1]
+      add!(C,X[k])
+    end
+    Z[w] = C
+  end
+  R = Z[1]
+  for w = 2:nthreads
+    R += Z[w]
+  end
+  return R
+end
+=#
+
+#  import .QN.add!
 """
-    H + c
+  add!(A,B)
+
+functionality for adding (similar to direct sum) of MPOs together and replacing `A`; uses joinindex function to make a combined MPO
+
+note: deparallelizes after every addition
+
+See also: [`deparallelization`](@ref) [`+`](@ref)
+"""
+function add!(A::MPO,B::MPO;finiteBC::Bool=true)
+  Ns = length(A)
+  if finiteBC
+    A[1] = joinindex!(4,A[1],B[1])
+    for a = 2:Ns-1
+      A[a] = joinindex!([1,4],A[a],B[a])
+    end
+    A[end] = joinindex!(1,A[Ns],B[Ns])
+  else
+    for a = 1:Ns
+      A[a] = joinindex!([1,4],A[a],B[a])
+    end
+  end
+  return deparallelize!(A)
+end
+
+
+"""
+  H + c
 
 Adds a constant `c` to a Hamiltonian `H` (commutative)
 """
 function +(H::MPO,c::Number;pos::Integer=1)
-  const_term = MPO([i == pos ? mult!(c,makeId(H[i],[2,3])) : makeId(H[i],[2,3]) for i = 1:length(H)])
+  const_term = MPO([i == pos ? mult!(c,makeId(H[i],[2]))  : makeId(H[i],[2]) for i = 1:length(H)])
   return copy(H) + const_term
 end
 
@@ -366,7 +351,7 @@ end
 
 #import Base.-
 """
-    H - c
+  H - c
 
 Adds a constant `c` to a Hamiltonian `H`
 """
@@ -374,37 +359,29 @@ function -(H::MPO,c::Number;pos::Integer=1)
   return +(H,-c,pos=pos)
 end
 
-#  import .QN.add!
-"""
-    add!(A,B)
 
-functionality for adding (similar to direct sum) of MPOs together and replacing `A`; uses joinindex function to make a combined MPO
 
-note: deparallelizes after every addition
 
-See also: [`deparallelization`](@ref) [`+`](@ref)
-"""
-function add!(A::MPO,B::MPO;finiteBC::Bool=true)
-  if finiteBC
-    A[1] = joinindex!(4,A[1],B[1])
-    for a = 2:size(A,1)-1
-      A[a] = joinindex!([1,4],A[a],B[a])
-    end
-    A[end] = joinindex!(1,A[size(A,1)],B[size(A,1)])
-  else
-    for a = 1:size(A,1)
-      A[a] = joinindex!([1,4],A[a],B[a])
-    end
-  end
-  return deparallelize!(A)
-end
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 function pullvec(M::TensType,j::Integer,left::Bool)
   return left ? M[:,j:j] : M[j:j,:]
 end
 
 """
-    deparallelize!(M[,left=])
+  deparallelize!(M[,left=])
 
 Deparallelizes a matrix-equivalent of a rank-4 tensor `M`; toggle the decomposition into the `left` or `right`
 """
@@ -491,9 +468,9 @@ function deparallelize_block(rM::densTensType,left::Bool,zero::Float64)
     i = 0
     while condition  && i < size(K,1)
       i += 1
-#      if left
+  #      if left
         thisdot = dot(K[i],thisvec)
-#=      else
+  #=      else
         thisdot = contractc(K[i],thisvec)
       end
       =#
@@ -557,7 +534,7 @@ function deparallelize!(M::tens{W};left::Bool=true) where W <: Number
 end
 
 """
-    deparallelize!(W[,sweeps=])
+  deparallelize!(W[,sweeps=])
 
 Applies `sweeps` to MPO (`W`) to compress the bond dimension
 """
@@ -577,7 +554,7 @@ end
 export deparallelize!
 
 """
-    deparallelize!(W[,sweeps=])
+  deparallelize!(W[,sweeps=])
 
 Deparallelize an array of MPOs (`W`) for `sweeps` passes; compressed MPO appears in first entry
 """
@@ -608,7 +585,7 @@ function deparallelize!(W::Array{MPO,1};sweeps::Integer=1)
 end
 
 """
-    deparallelize(W[,sweeps=])
+  deparallelize(W[,sweeps=])
 
 makes copy of W while deparallelizing
 
@@ -624,8 +601,38 @@ end
 export deparallelize
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 """
-    invDfactor(D)
+  invDfactor(D)
 
 Finds nearest factor of 2 to the magnitude of `D`
 """
@@ -643,21 +650,21 @@ const forwardshape = Array{intType,1}[intType[1,2,3],intType[4]]
 const backwardshape = Array{intType,1}[intType[1],intType[2,3,4]]
 
 """
-    compressMPO!(W[,sweeps=,cutoff=,deltam=,minsweep=,nozeros=])
+  compressMPO!(W[,sweeps=,cutoff=,deltam=,minsweep=,nozeros=])
 
 compresses MPO (`W`; or several `M`) with SVD compression for `sweeps` sweeps, `cutoff` applied to the SVD, `deltam` target for teh bond dimension compression, and `nozeros` defaulted to true to eliminate all zeros in the SVD
 """
 function compressMPO!(W::MPO,M::MPO...;sweeps::Integer=1000,cutoff::Float64=0.,
-                      deltam::Integer=0,minsweep::Integer=1,nozeros::Bool=false)
+                    deltam::Integer=0,minsweep::Integer=1,nozeros::Bool=false)
   for a = 1:length(M)
     W = add!(W,M[a])
   end
   n = 0
   mchange = 1000
-  lastmdiff = [size(W[i],4) for i = 1:size(W,1)-1]
+  lastmdiff = [size(W[i],4) for i = 1:length(W)-1]
   while (n < sweeps && mchange > deltam) || (n < minsweep)
     n += 1
-    for i = 1:size(W,1)-1
+    for i = 1:length(W)-1
       U,D,V = svd(W[i],forwardshape,cutoff=cutoff,nozeros=nozeros)
       scaleD = invDfactor(D)
 
@@ -667,7 +674,7 @@ function compressMPO!(W::MPO,M::MPO...;sweeps::Integer=1000,cutoff::Float64=0.,
       scaleDV = contract(D,2,V,1,alpha=1/scaleD)
       W[i+1] = contract(scaleDV,2,W[i+1],1)
     end
-    for i = size(W,1):-1:2
+    for i = length(W):-1:2
       U,D,V = svd(W[i],backwardshape,cutoff=cutoff,nozeros=nozeros)
       scaleD = invDfactor(D)
       
@@ -677,7 +684,7 @@ function compressMPO!(W::MPO,M::MPO...;sweeps::Integer=1000,cutoff::Float64=0.,
       scaleUD = contract(U,2,D,1,alpha=1/scaleD)
       W[i-1] = contract(W[i-1],4,scaleUD,1)
     end
-    thismdiff = intType[size(W[i],4) for i = 1:size(W,1)-1]
+    thismdiff = intType[size(W[i],4) for i = 1:length(W)-1]
     mchange = sum(a->lastmdiff[a]-thismdiff[a],1:size(thismdiff,1))
     lastmdiff = copy(thismdiff)
   end
@@ -685,15 +692,15 @@ function compressMPO!(W::MPO,M::MPO...;sweeps::Integer=1000,cutoff::Float64=0.,
 end
 
 """
-    compressMPO!(W[,sweeps=,cutoff=,deltam=,minsweep=,nozeros=])
+  compressMPO!(W[,sweeps=,cutoff=,deltam=,minsweep=,nozeros=])
 
 compresses an array of MPOs (`W`) in parallel with SVD compression for `sweeps` sweeps, `cutoff` applied to the SVD, `deltam` target for teh bond dimension compression, and `nozeros` defaulted to true to eliminate all zeros in the SVD
 """
 function compressMPO!(W::Array{MPO,1};sweeps::Integer=1000,cutoff::Float64=1E-16,
-                      deltam::Integer=0,minsweep::Integer=1,nozeros::Bool=true)
-  nlevels = floor(intType,log(2,size(W,1)))
-  active = Bool[true for i = 1:size(W,1)]
-  if size(W,1) > 2
+                    deltam::Integer=0,minsweep::Integer=1,nozeros::Bool=true)
+  nlevels = floor(intType,log(2,length(W)))
+  active = Bool[true for i = 1:length(W)]
+  if length(W) > 2
     for j = 1:nlevels
       currsize = fld(length(W),2^(j-1))
       for i = 1:2^j:currsize
@@ -709,21 +716,127 @@ function compressMPO!(W::Array{MPO,1};sweeps::Integer=1000,cutoff::Float64=1E-16
       compressMPO!(W[active],sweeps=sweeps,cutoff=cutoff,nozeros=nozeros)
     end
   end
-  return size(W,1) == 2 ? compressMPO!(W[1],W[2],nozeros=nozeros) : compressMPO!(W[1],nozeros=nozeros)
+  return length(W) == 2 ? compressMPO!(W[1],W[2],nozeros=nozeros) : compressMPO!(W[1],nozeros=nozeros)
 end
 export compressMPO!
 
 """
-    compressMPO(W,sweeps=,cutoff=,deltam=,minsweep=,nozeros=])
+  compressMPO(W,sweeps=,cutoff=,deltam=,minsweep=,nozeros=])
 
 Same as `compressMPO!` but a copy is made of the original vector of MPOs
 
 See also: [`compressMPO!`](@ref)
 """
-function compressMPO(W::Array{MPO,1};sweeps::Integer=1000,cutoff::Float64=1E-16,deltam::Integer=0,minsweep::Integer=1,nozeros::Bool=true)
+  function compressMPO(W::Array{MPO,1};sweeps::Integer=1000,cutoff::Float64=1E-16,deltam::Integer=0,minsweep::Integer=1,nozeros::Bool=true)
   M = copy(W)
   return compressMPO!(M;sweeps=sweeps,cutoff=cutoff,deltam=deltam,minsweep=minsweep,nozeros=nozeros)
 end
 export compressMPO
 
 #end
+
+
+"""
+  reorder!(C[,Ncols=])
+
+Reorders the `Ncols` columns of `C` according to the Fiedler vector reordering in place if site is not 0
+
+See also: [`reorder`](@ref)
+"""
+function reorder!(C::Array{W,2};Ncols::Integer=2) where W <: Number
+  sitevec = vcat(C[:,1],C[:,2])
+  for w = 3:Ncols
+    sitevec = vcat(sitevec,C[:,w])
+  end
+  Ns = maximum(sitevec)
+  A = zeros(Int64,Ns,Ns) #adjacency matrix = neighbor table
+  D = zeros(Int64,Ns) #degree matrix
+  for i = 1:size(C,1)
+    for x = 1:Ncols
+      xpos = C[i,x]
+      for w = x+1:Ncols
+        ypos = C[i,w]
+        if xpos != 0 && ypos != 0
+          A[xpos,ypos] = 1
+          D[xpos] += 1
+          D[ypos] += 1
+        end
+      end
+    end
+  end
+  L = D - A
+  D,U = LinearAlgebra.eigen(L)
+  fiedlervec = sortperm(U[:,2]) #lowest is all ones, so this is the first non-trivial one
+  for i = 1:size(C,1)
+    for w = 1:Ncols
+      if C[i,w] != 0
+        C[i,w] = fiedlervec[C[i,w]]
+      end
+    end
+  end
+  return C,fiedlervec #second eigenvector is the Fiedler vector
+end
+
+"""
+    reorder(C[,Ncols=])
+
+Reorders the `Ncols` columns of `C` according to the Fiedler vector reordering if site is not 0
+
+See also: [`reorder!`](@ref)
+"""
+function reorder(C::Array{W,2};Ncols::Integer=2) where W <: Number
+  P = copy(C)
+  return reorder!(P,Ncols=Ncols)
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#=
+
+struct zeroMPO
+  base::Array
+end
+
+function mpoterm(base::Array{G,1}) where G <: densTensType
+  return zeroMPO(base)
+end
+
+#import Base.+
+function +(X::zeroMPO,Y::MPO)
+  W = elnumtype(Y)
+  mpotens = Array{Array{W,4},1}(undef,length(X.base))
+  O = zero(X.base[1])
+  d = size(O,1)
+  temp = [Y[1] X.base[1]]
+  mpotens[1] = reshape(temp,1,d,d,2)
+  @inbounds for i = 2:length(X.base)-1
+    O = zero(X.base[i])
+    d = size(O,1)
+    mpotens[i] = reshape([X.base[i] O;
+                  Y[i] X.base[i]],2,d,d,2)
+  end
+  O = zero(X.base[end])
+  d = size(O,1)
+  mpotens[end] = reshape([X.base[end];
+                  Y[end]],2,d,d,1)
+  return MPO(mpotens)
+end
+=#

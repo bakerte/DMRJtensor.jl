@@ -287,9 +287,9 @@ end
 
 Creates set of dense `operator`s as a Qtensor with quantum numbers `QnumMat` on each index (`Array{Array{Q,1},1}`) according to arrow convention `Arrows` and all elements equal to `zero` are not included (default 0)
 """
-@inline function Qtens(Qlabels::Array{Array{Q,1},1},Op#=::R=#...;zero::Number=0.,currblock::currblockTypes=([i for i = 1:ndims(Op[1])-1],[ndims(Op[1])]),datatype::DataType=eltype(Op)) where Q <: Qnum
+@inline function Qtens(Qlabels::Array{Array{Q,1},1},Op...;zero::Number=0.,currblock::currblockTypes=([i for i = 1:ndims(Op[1])-1],[ndims(Op[1])])) where Q <: Qnum
   if length(Op) > 1
-    out = ntuple(w->Qtens(Op[w],Qlabels,zero=zero,currblock=currblock,datatype=datatype),length(Op))
+    out = ntuple(w->Qtens(Op[w],Qlabels,zero=zero,currblock=currblock),length(Op))
   else
     out = Qtens(Op[1],Qlabels,zero=zero,currblock=currblock,datatype=datatype)
   end
@@ -301,13 +301,13 @@ end
 
 Creates set of dense `operator`s as a Qtensor with identical quantum numbers `Qlabel` on each index (`Array{Q,1}`) according to arrow convention `Arrows` and all elements equal to `zero` are not included (default 0). Will conjugate the second index (assume rank-2 input for `operator`)
 """
-function Qtens(Qlabels::Array{Q,1},Op::R...;zero::Number=0.,currblock::currblockTypes=([i for i = 1:ndims(Op[1])-1],[ndims(Op[1])]),datatype::DataType=eltype(Op)) where {Q <: Qnum, R <: densTensType}
+function Qtens(Qlabels::Array{Q,1},Op...;zero::Number=0.,currblock::currblockTypes=([i for i = 1:ndims(Op[1])-1],[ndims(Op[1])])) where {Q <: Qnum}
   Qnumvec = [Qlabels,inv.(Qlabels)]
-  return Qtens(Qnumvec,Op...,zero=zero,currblock=currblock,datatype=datatype)
+  return Qtens(Qnumvec,Op...,zero=zero,currblock=currblock)
 end
 
 function Qtens(Op::densTensType,Qlabels::Array{Array{Q,1},1};zero::R=eltype(Op)(0),currblock::currblockTypes=([i for i = 1:ndims(Op)-1],[ndims(Op)]),datatype::DataType=eltype(Op),blockfct::Function=undefMat) where {Q <: Qnum, R <: Number}
-  outtype = R
+  outtype = datatype
   if isapprox(norm(Op),0)
     return zeros(Qlabels,datatype=outtype,currblock=currblock)
   end
@@ -469,6 +469,10 @@ Finds the number of dimensions of the base quantum number tensor `A` no matter h
 """
 @inline function basedims(Qtensor::qarray)
   return length(Qtensor.QnumMat)
+end
+
+@inline function basedims(A::denstens)
+  return ndims(A)
 end
 
 

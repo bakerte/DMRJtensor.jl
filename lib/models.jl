@@ -107,6 +107,7 @@ function heisenbergMPO(i::intType;spinmag::Number=0.5,Ops::Tuple=spinOps(spinmag
           Sz O O O O;
           O Sm/2 Sp/2 Sz Id]
 end
+export heisenbergMPO
 
 function hubbardMPO(i::intType;t::Number=1.0,mu::Number=-2.0,HubU::Number=4.0,Ops::Tuple = fermionOps())
   Cup, Cdn, Nup, Ndn, Ndens, F, O, Id = Ops
@@ -118,6 +119,7 @@ function hubbardMPO(i::intType;t::Number=1.0,mu::Number=-2.0,HubU::Number=4.0,Op
         conj(t)*Cdn  O O O O O;
         onsite Cup*F Cup'*F Cdn*F Cdn'*F Id]
 end
+export hubbardMPO
 
 function tjMPO(i::intType;t::Number=1.0,mu::Number=0.0,J::Number=1.0,Ops::Tuple = tJOps())
     Cup,Cdn,Nup,Ndn,Ndens,F,Sz,Sp,Sm,O,Id = Ops
@@ -133,3 +135,4 @@ function tjMPO(i::intType;t::Number=1.0,mu::Number=0.0,J::Number=1.0,Ops::Tuple 
             Ndens O O O O O O O O O;
             onsite -t*F*Cup conj(t)*F*Cup' -t*F*Cdn conj(t)*F*Cdn' J*Sm J*Sp J*Sz -J*Ndens/4 Id]
 end
+export tjMPO

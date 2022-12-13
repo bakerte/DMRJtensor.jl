@@ -401,27 +401,33 @@ end
 
 
 
-import LinearAlgebra.lmul!
-function lmul!(Y::tens{R},X::LinearAlgebra.Diagonal{W, Vector{W}}) where {R <: Number, W <: Number}
+import LinearAlgebra.rmul!
+function rmul!(Y::tens{R},X::LinearAlgebra.Diagonal{W, Vector{W}}) where {R <: Number, W <: Number}
   longdim = cld(length(Y.T),size(X,1))
   for y = 1:size(X,1)
     zval = longdim*(y-1)
+    val = X[y,y]
     @inbounds @simd for x = 1:longdim
-      Y.T[x + zval] *= X[y,y]
+      Y.T[x + zval] *= val
     end
   end
   return Y
 end
-function lmul!(X::R,Y::tens{W}) where {R <: Number, W <: Number}
+#=
+function rmul!(Y::AbstractArray{W,N},X::LinearAlgebra.Diagonal{W, Vector{W}}) where {R <: Number, W <: Number, N}
+  return LinearAlgebra.rmul!(Y,X)
+end
+=#
+function rmul!(X::R,Y::tens{W}) where {R <: Number, W <: Number}
   return tensorcombination!((X,),Y)
 end
-function lmul!(Y::tens{W},X::R) where {R <: Number, W <: Number}
-  return lmul!(X,Y)
+function rmul!(Y::tens{W},X::R) where {R <: Number, W <: Number}
+  return rmul!(X,Y)
 end
-export lmul!
+export rmul!
 
-import LinearAlgebra.rmul!
-function rmul!(X::LinearAlgebra.Diagonal{R, Vector{R}},Y::tens{W}) where {R <: Number, W <: Number}
+import LinearAlgebra.lmul!
+function lmul!(X::LinearAlgebra.Diagonal{R, Vector{R}},Y::tens{W}) where {R <: Number, W <: Number}
   longdim = cld(length(Y.T),size(X,1))
   for y = 1:longdim
     tempind = size(X,1)*(y-1)
@@ -431,13 +437,18 @@ function rmul!(X::LinearAlgebra.Diagonal{R, Vector{R}},Y::tens{W}) where {R <: N
   end
   return Y
 end
-function rmul!(Y::TensType,X::R) where {R <: Number}
+#=
+function lmul!(X::LinearAlgebra.Diagonal{R, Vector{R}},Y::AbstractArray{W,N}) where {R <: Number, W <: Number, N}
+  return LinearAlgebra.lmul!(Y,X)
+end
+=#
+function lmul!(Y::TensType,X::R) where {R <: Number}
   return tensorcombination!((X,),Y)
 end
-function rmul!(X::R,Y::tens{W}) where {R <: Number, W <: Number}
-  return rmul!(Y,X)
+function lmul!(X::R,Y::tens{W}) where {R <: Number, W <: Number}
+  return lmul!(Y,X)
 end
-export rmul!
+export lmul!
 
 
 function contract(A::LinearAlgebra.Diagonal{W,Vector{W}},B::densTensType;alpha::Number=eltype(A)(1)) where W <: Number
@@ -446,7 +457,7 @@ end
 
 function contract!(A::LinearAlgebra.Diagonal{W,Vector{W}},B::densTensType;alpha::Number=eltype(A)(1)) where W <: Number
   out = dot(A,B,Lfct=identity,Rfct=identity)
-  return isapprox(alpha,1) ? out : rmul!(alpha,out)
+  return isapprox(alpha,1) ? out : lmul!(alpha,out)
 end
 
 function contract(A::Union{TensType,LinearAlgebra.Diagonal{W, Vector{W}}},iA::intvecType,B::Union{TensType,LinearAlgebra.Diagonal{W, Vector{W}}},iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1)) where W <: Number
@@ -482,7 +493,7 @@ function diagcontract(A::LinearAlgebra.Diagonal{W, Vector{W}},iA::intvecType,B::
     if isapprox(alpha,1)
       out = C
     else
-      out = lmul!(alpha,C)
+      out = rmul!(alpha,C)
     end
   else
     out = tensorcombination!((alpha,beta),C,Z[1])
@@ -518,7 +529,7 @@ function diagcontract(A::TensType,iA::intvecType,B::LinearAlgebra.Diagonal{W, Ve
     if isapprox(alpha,1)
       out = C
     else
-      out = lmul!(alpha,C)
+      out = rmul!(alpha,C)
     end
   else
     out = tensorcombination!((alpha,beta),C,Z[1])
@@ -536,7 +547,7 @@ See also: [`ccontract`](@ref) [`contractc`](@ref) [`ccontractc`](@ref)
 function contract(A::TensType,B::TensType;alpha::Number=eltype(A)(1))
   mA,mB = checkType(A,B)
   out = dot(mA,mB,Lfct=identity,Rfct=identity)
-  return isapprox(alpha,1) ? out : rmul!(alpha,out)
+  return isapprox(alpha,1) ? out : lmul!(alpha,out)
 end
 
 """
@@ -549,7 +560,7 @@ See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 function ccontract(A::TensType,B::TensType;alpha::Number=eltype(A)(1))
   mA,mB = checkType(A,B)
   out = dot(mA,mB,Lfct=adjoint,Rfct=identity)
-  return isapprox(alpha,1) ? out : rmul!(alpha,out)
+  return isapprox(alpha,1) ? out : lmul!(alpha,out)
 end
 
 """
@@ -562,7 +573,7 @@ See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 function contractc(A::TensType,B::TensType;alpha::Number=eltype(A)(1))
   mA,mB = checkType(A,B)
   out = dot(mA,mB,Lfct=identity,Rfct=adjoint)
-  return isapprox(alpha,1) ? out : rmul!(alpha,out)
+  return isapprox(alpha,1) ? out : lmul!(alpha,out)
 end
 
 """
@@ -575,7 +586,7 @@ See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 function ccontractc(A::TensType,B::TensType;alpha::Number=eltype(A)(1))
   mA,mB = checkType(A,B)
   out = dot(mA,mB,Lfct=adjoint,Rfct=adjoint)
-  return isapprox(alpha,1) ? out : rmul!(alpha,out)
+  return isapprox(alpha,1) ? out : lmul!(alpha,out)
 end
 
 """
@@ -587,7 +598,7 @@ See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 """
 function contract(A::TensType;alpha::Number=eltype(A)(1))
   out = dot(A,A,Lfct=identity,Rfct=identity)
-  return isapprox(alpha,1) ? out : rmul!(alpha,out)
+  return isapprox(alpha,1) ? out : lmul!(alpha,out)
 end
 
 """
@@ -599,7 +610,7 @@ See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 """
 function ccontract(A::TensType;alpha::Number=eltype(A)(1))
   out = dot(A,A,Lfct=adjoint,Rfct=identity)
-  return isapprox(alpha,1) ? out : rmul!(alpha,out)
+  return isapprox(alpha,1) ? out : lmul!(alpha,out)
 end
 
 """
@@ -611,7 +622,7 @@ See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 """
 function contractc(A::TensType;alpha::Number=eltype(A)(1))
   out = dot(A,A,Lfct=identity,Rfct=adjoint)
-  return isapprox(alpha,1) ? out : rmul!(alpha,out)
+  return isapprox(alpha,1) ? out : lmul!(alpha,out)
 end
 
 """
@@ -623,7 +634,7 @@ See also: ['ccontract'](@ref) ['contractc'](@ref) ['contract'](@ref)
 """
 function ccontractc(A::TensType;alpha::Number=eltype(A)(1))
   out = dot(A,A,Lfct=adjoint,Rfct=adjoint)
-  return isapprox(alpha,1) ? out : rmul!(alpha,out)
+  return isapprox(alpha,1) ? out : lmul!(alpha,out)
 end
 
 """
@@ -1110,13 +1121,13 @@ function permq(A::Qtens{W,Q},iA::Array{intType,1}) where {W <: Number, Q <: Qnum
   return nopermL,nopermR
 end
 
-function lmul!(X::Qtens{R,Q},Y::Qtens{W,Q}) where {R <: Number, W <: Number, Q <: Qnum}
+function rmul!(X::Qtens{R,Q},Y::Qtens{W,Q}) where {R <: Number, W <: Number, Q <: Qnum}
   #assert diagonal types in one of hte matrices here
   return maincontractor(false,false,X,(ndims(X),),Y,(1,),inplace=true)
 end
 
-function rmul!(X::Qtens{R,Q},Y::Qtens{W,Q}) where {R <: Number, W <: Number, Q <: Qnum}
-  return maincontractor(false,false,X,(2,),Y,(1,),inplace=true)
+function lmul!(X::Qtens{R,Q},Y::Qtens{W,Q}) where {R <: Number, W <: Number, Q <: Qnum}
+  return maincontractor(false,false,X,(ndims(X),),Y,(1,),inplace=true)
 end
 
 function maincontractor(conjA::Bool,conjB::Bool,QtensA::Qtens{W,Q},vecA::Tuple,QtensB::Qtens{R,Q},vecB::Tuple,Z::Qtens{S,Q}...;alpha::Number=W(1),beta::Number=W(1),inplace::Bool=false) where {W <: Number, R <: Number, S <: Number, Q <: Qnum}

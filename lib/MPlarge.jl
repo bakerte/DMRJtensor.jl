@@ -220,7 +220,7 @@ Writes tensors from environment `lenv` to hard disk as retrieved through `G` acc
 
 See also: [`largeMPS`](@ref) [`largeMPO`](@ref) [`largeRenv`](@ref) [`largeEnv`](@ref)
 """
-function largeLenv(lenv::P;label::String="Lenv_",names::Array{String,1}=[label*"$i" for i = 1:length(lenv)],ext::String=file_extension) where P <: Union{Array,MPO}
+function largeLenv(lenv::P;label::String="Lenv_",names::Array{String,1}=[label*"$i" for i = 1:length(lenv)],ext::String=file_extension) where P <: Union{Array,Env}
   lastnum = 1
   for b = 1:length(lenv)
     C = lenv[b]
@@ -260,7 +260,7 @@ Writes tensors from environment `renv` to hard disk as retrieved through `G` acc
 
 See also: [`largeMPS`](@ref) [`largeMPO`](@ref) [`largeLenv`](@ref) [`largeEnv`](@ref)
 """
-function largeRenv(renv::P;label::String="Renv_",names::Array{String,1}=[label*"$i" for i = 1:length(renv)],ext::String=file_extension) where P <: Union{Array,MPO}
+function largeRenv(renv::P;label::String="Renv_",names::Array{String,1}=[label*"$i" for i = 1:length(renv)],ext::String=file_extension) where P <: Union{Array,Env}
   return largeLenv(renv,label=label,names=names,ext=ext)
 end
 
@@ -294,8 +294,8 @@ Writes tensors from environments `lenv` and `renv` to hard disk as retrieved thr
 
 See also: [`largeMPS`](@ref) [`largeMPO`](@ref) [`largeLenv`](@ref) [`largeRenv`](@ref)
 """
-function largeEnv(lenv::P,renv::P;Llabel::String="Lenv_",Lnames::Array{String,1}=[Llabel*"$i" for i = 1:Ns],Rlabel::String="Renv_",Rnames::Array{String,1}=[Rlabel*"$i" for i = 1:Ns],ext::String=file_extension,type::DataType=Float64) where P <: Union{Array,MPO}
-  return largeLenv(lenv,names=Lnames,type=type),largeRenv(renv,names=Rnames,type=type)
+function largeEnv(lenv::P,renv::P;Llabel::String="Lenv_",Lnames::Array{String,1}=[Llabel*"$i" for i = 1:length(lenv)],Rlabel::String="Renv_",Rnames::Array{String,1}=[Rlabel*"$i" for i = 1:length(renv)],ext::String=file_extension,type::DataType=Float64) where P <: Union{Array,Env}
+  return largeLenv(lenv,names=Lnames),largeRenv(renv,names=Rnames)
 end
 
 """
@@ -349,7 +349,7 @@ function setindex!(H::largeEnv,A::TensType,i::intType;ext::String=file_extension
   tensor2disc(H.V[i],A,ext=ext)
   nothing
 end
-
+#=
 #import Base.lastindex
 function lastindex(A::largeMPS;ext::String=file_extension)
   return tensorfromdisc(A.A[end],ext=ext)
@@ -362,7 +362,7 @@ end
 function lastindex(H::largeEnv;ext::String=file_extension)
   return tensorfromdisc(H.V[end],ext=ext)
 end
-
+=#
 function length(A::largeMPS)
   return length(A.A)
 end
@@ -386,7 +386,7 @@ If MPS tensors are stored on hard disk, then they can be retrieved by using `loa
 """
 function loadMPS(Ns::Integer;label::String="mps_",names::Array{String,1}=[label*"$i" for i = 1:Ns],ext::String=file_extension,oc::Integer=0)
   lastnum = 1
-  storeoc = [1.]
+  storeoc = [1]
   for i = 1:Ns
     name = names[i]
     A = tensorfromdisc(name,ext=ext)
@@ -485,13 +485,16 @@ export loadEnv
 Copies tensors from `largeMPS` input `X` to a new tensor with a vector of strings `names` representing the new filenames
 """
 function copy(names::Array{String,1},X::largeMPS;ext::String=file_extension,copyext::String=ext)
-  newObj = copy(X)
-  newObj.A = names
+  newObj = largematrixproductstate([names[(i-1) % length(names) + 1] for i = 1:length(X)],X.oc,X.type)
   for i = 1:length(X)
-    Y = tensorfromdisc(names[i],ext=ext)
-    tensor2disc(X.A[i],Y,ext=copyext)
+    Y = tensorfromdisc(X.A[i],ext=ext)
+    tensor2disc(newObj.A[i],Y,ext=copyext)
   end
   return newObj
+end
+
+function copy(names::String,X::largeMPS;ext::String=file_extension,copyext::String=ext)
+  return copy(names .* X.A,X,ext=ext,copyext=copyext)
 end
 
 """
@@ -500,13 +503,16 @@ end
 Copies tensors from `largeMPO` input `X` to a new tensor with a vector of strings `names` representing the new filenames
 """
 function copy(names::Array{String,1},X::largeMPO;ext::String=file_extension,copyext::String=ext)
-  newObj = copy(X)
-  newObj.H = names
+  newObj = largematrixproductoperator([names[(i-1) % length(names) + 1] for i = 1:length(X)],X.type)
   for i = 1:length(X)
-    Y = tensorfromdisc(names[i],ext=ext)
-    tensor2disc(X.H[i],Y,ext=copyext)
+    Y = tensorfromdisc(X.H[i],ext=ext)
+    tensor2disc(newObj.H[i],Y,ext=copyext)
   end
   return newObj
+end
+
+function copy(names::String,X::largeMPO;ext::String=file_extension,copyext::String=ext)
+  return copy(names .* X.H,X,ext=ext,copyext=copyext)
 end
 
 """
@@ -515,11 +521,19 @@ end
 Copies tensors from `largeEnv` input `X` to a new tensor with a vector of strings `names` representing the new filenames
 """
 function copy(names::Array{String,1},X::largeEnv;ext::String=file_extension,copyext::String=ext)
-  newObj = copy(X)
-  newObj.V = names
+  newObj = largeenvironment([names[(i-1) % length(names) + 1] for i = 1:length(X)],X.type)
   for i = 1:length(X)
-    Y = tensorfromdisc(names[i],ext=ext)
-    tensor2disc(X.V[i],Y,ext=copyext)
+    Y = tensorfromdisc(X.V[i],ext=ext)
+    tensor2disc(newObj.V[i],Y,ext=copyext)
   end
   return newObj
 end
+
+function copy(names::String,X::largeEnv;ext::String=file_extension,copyext::String=ext)
+  return copy(names .* X.V,X,ext=ext,copyext=copyext)
+end
+
+
+
+
+
