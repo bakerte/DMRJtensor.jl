@@ -126,12 +126,20 @@ end
 Constructs `psi` for MPS with tensors `A` (Array of tensors or MPS) with orthogonality center `oc`. `regtens` avoids conversion to `denstens` type (defaulted to perform the conversion for efficiency)
 """
 function MPS(psi::Array{W,1};regtens::Bool=false,oc::Integer=1,type::DataType=eltype(psi[1])) where W <: TensType
-  if eltype(psi[1]) != type && !regtens
-    MPSvec = [tens(convertTens(type, copy(psi[i]))) for i = 1:length(psi)]
-    out = matrixproductstate{tens{type}}(MPSvec,oc)
-  elseif !regtens
-    MPSvec = [tens(copy(psi[i])) for i = 1:length(psi)]
-    out = matrixproductstate{tens{type}}(MPSvec,oc)
+  if W <: densTensType
+    if eltype(psi[1]) != type && !regtens
+      MPSvec = [tens(convertTens(type, copy(psi[i]))) for i = 1:length(psi)]
+      out = matrixproductstate{tens{type}}(MPSvec,oc)
+    elseif !regtens
+      MPSvec = [tens(copy(psi[i])) for i = 1:length(psi)]
+      out = matrixproductstate{tens{type}}(MPSvec,oc)
+    else
+      MPSvec = psi
+      out = matrixproductstate{W}(MPSvec,oc)
+    end
+  elseif eltype(psi[1]) != type && W <: qarray
+    MPSvec = [convertTens(type, copy(psi[i])) for i = 1:length(psi)]
+    out = matrixproductstate{Qtens{type,typeof(psi[1].flux)}}(MPSvec,oc)
   else
     MPSvec = psi
     out = matrixproductstate{W}(MPSvec,oc)

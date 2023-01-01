@@ -99,13 +99,13 @@ function tJOps()
 end
 export tJOps
 
-function heisenbergMPO(i::intType;spinmag::Number=0.5,Ops::Tuple=spinOps(spinmag))
+function heisenbergMPO(i::intType;spinmag::Number=0.5,J::Number=0.5,Ops::Tuple=spinOps(spinmag))
   Sx,Sy,Sz,Sp,Sm,O,Id = Ops
   return [Id O O O O;
-          Sp O O O O;
-          Sm O O O O;
+          J*Sm O O O O;
+          J*Sp O O O O;
           Sz O O O O;
-          O Sm/2 Sp/2 Sz Id]
+          O Sp Sm Sz Id]
 end
 export heisenbergMPO
 

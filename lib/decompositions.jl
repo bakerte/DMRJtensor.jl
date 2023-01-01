@@ -111,7 +111,7 @@ function findnewm(D::Array{Float64,1},m::Integer,minm::Integer,mag::Float64,cuto
   if cutoff > 0.
     modcutoff = sumD*cutoff
     @inbounds truncadd = abs(D[p])^power
-    @inbounds while p > 0 && ((truncerr + truncadd < modcutoff) || (nozeros && D[p] < effZero))
+    @inbounds while p > 0 && ((truncerr + truncadd < modcutoff) || (nozeros && abs(D[p]) < effZero))
       truncerr += truncadd
       p -= 1
       truncadd = abs(D[p])^power
@@ -876,7 +876,7 @@ function truncate(sizeinnerm::Integer,newD::Array{Array{W,1},1},power::Number,
   order = sortperm(rhodiag,rev=true)
 
   truncerr = 0.
-  y = length(order) #m == 0 ? length(order) : min(m,length(order))
+  y = length(order)
 
   truncadd = rhodiag[order[y]]
   while y > 1 && ((truncerr + truncadd < modcutoff) || (nozeros && isapprox(truncadd,0.)))
@@ -906,38 +906,29 @@ function truncate(sizeinnerm::Integer,newD::Array{Array{W,1},1},power::Number,
     qranges[q] = UnitRange(qstarts[q]+1,qstarts[q+1])
   end
   
-  keepers = Array{Array{intType,1},1}(undef,nQN)
-  @inbounds @simd for q = 1:nQN
-    keepers[q] = Array{intType,1}(undef,thism)
-  end
   sizekeepers = zeros(intType,nQN)
   for q = 1:nQN
     @inbounds for x = 1:thism
-      if qranges[q][1] <= order[x] <= qranges[q][end] #order[x] in qranges[q]
+      if qranges[q][1] <= order[x] <= qranges[q][end]
         sizekeepers[q] += 1
-        keepers[q][sizekeepers[q]] = order[x] - qstarts[q]
       end
     end
   end
-  @inbounds for q = 1:nQN
-    if sizekeepers[q] != length(keepers[q])
-      keepers[q] = keepers[q][1:sizekeepers[q]]
-    end
-  end
+
   
   finalinds = Array{Array{intType,2},1}(undef,nQN)
   @inbounds for q = 1:nQN
     offset = 0
     @inbounds @simd for w = 1:q-1
-      offset += length(keepers[w])
+      offset += sizekeepers[w]
     end
-    tempvec = Array{intType,2}(undef,1,length(keepers[q])) #[i + offset - 1 for i = 1:sizekeepers[q]]
-    @inbounds @simd for i = 1:length(keepers[q])
+    tempvec = Array{intType,2}(undef,1,sizekeepers[q])
+    @inbounds @simd for i = 1:sizekeepers[q]
       tempvec[i] = i + offset - 1
     end
     finalinds[q] = tempvec
   end
-  return finalinds,thism,qstarts,qranges,keepers,truncerr,sumD
+  return finalinds,thism,sizekeepers,truncerr,sumD
 end
 #=
 @inline function threeterm(arr::Array{Array{W,2},1};decomposer::Function=safesvd) where W <: Number
@@ -986,19 +977,19 @@ function svd(QtensA::Qtens{W,Q};a::Integer=size(QtensA,1),b::Integer=size(QtensA
     sizeinnerm += size(newD[q],1)
   end
     
-  finalinds,thism,qstarts,qranges,keepers,truncerr,sumD = truncate(sizeinnerm,newD,power,nozeros,cutoff,m,nQN,mag,keepdeg)
+  finalinds,thism,keepers,truncerr,sumD = truncate(sizeinnerm,newD,power,nozeros,cutoff,m,nQN,mag,keepdeg)
 
   newqindexL = Array{intType,1}(undef,thism)
   keepq = Array{Bool,1}(undef,nQN)
   tempD = Array{LinearAlgebra.Diagonal{W,Array{W,1}},1}(undef,nQN)
   @inbounds for q = 1:nQN
-    keepq[q] = length(keepers[q]) > 0
-    if keepq[q]
-      newU[q] = newU[q][:,keepers[q]]
+    keepq[q] = keepers[q] > 0
 
-      dimD = length(keepers[q])
-      tempD[q] = LinearAlgebra.Diagonal(newD[q][1:dimD])
-      newV[q] = newV[q][keepers[q],:]
+    if keepq[q]
+      newU[q] = newU[q][:,1:keepers[q]]
+
+      tempD[q] = LinearAlgebra.Diagonal(newD[q][1:keepers[q]])
+      newV[q] = newV[q][1:keepers[q],:]
 
       offset = 0
       @inbounds @simd for w = 1:q-1
@@ -1070,20 +1061,16 @@ function eigen!(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
   nQN = length(A.T)
 
   LRinds = 1
+
+  QNsummary = Array{Q,1}(undef,nQN)
+  invQNsummary = Array{Q,1}(undef,nQN)
+  @inbounds @simd for q = 1:nQN
+    invQNsummary[q] = A.Qblocksum[q][LRinds]
+    QNsummary[q] = inv(A.Qblocksum[q][LRinds])
+  end
+
   if transpose
-#    QNsummary = Array{Q,1}(undef,nQN)
-    invQNsummary = Array{Q,1}(undef,nQN)
-    @inbounds @simd for q = 1:nQN
-      invQNsummary[q] = A.Qblocksum[q][LRinds]
-#      QNsummary[q] = inv(A.Qblocksum[q][LRinds])
-    end
-  else
-    QNsummary = Array{Q,1}(undef,nQN)
-#    invQNsummary = Array{Q,1}(undef,nQN)
-    @inbounds @simd for q = 1:nQN
-#      invQNsummary[q] = A.Qblocksum[q][LRinds]
-      QNsummary[q] = inv(A.Qblocksum[q][LRinds])
-    end
+    QNsummary,invQNsummary = invQNsummary,QNsummary
   end
 
   
@@ -1091,7 +1078,12 @@ function eigen!(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
   newU = Array{Array{W,2},1}(undef,nQN)
   newD = Array{Array{W,1},1}(undef,nQN)
   for q = 1:nQN
-    newD[q],newU[q] = decomposer(A.T[q],transpose=transpose)
+    newD[q],tempU = decomposer(A.T[q])
+    if transpose
+      newU[q] = tempU'
+    else
+      newU[q] = tempU
+    end
   end
 #  newD,newU = twoterm(A.T,decomposer=decomposer)
 
@@ -1101,18 +1093,17 @@ function eigen!(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
     sizeinnerm += size(newD[q],1)
   end
     
-  finalinds,thism,qstarts,qranges,keepers,truncerr,sumD = truncate(sizeinnerm,newD,power,nozeros,cutoff,m,nQN,mag,keepdeg)
+  finalinds,thism,keepers,truncerr,sumD = truncate(sizeinnerm,newD,power,nozeros,cutoff,m,nQN,mag,keepdeg)
 
   newqindexL = Array{intType,1}(undef,thism)
   keepq = Array{Bool,1}(undef,nQN)
-  tempD = Array{Array{W,2},1}(undef,nQN)
+  tempD = Array{LinearAlgebra.Diagonal{W,Array{W,1}},1}(undef,nQN)
   @inbounds for q = 1:nQN
-    keepq[q] = length(keepers[q]) > 0
+    keepq[q] = keepers[q] > 0
     if keepq[q]
-      newU[q] = newU[q][:,keepers[q]]
-      dimD = length(keepers[q])
- 
-      tempD[q] = LinearAlgebra.Diagonal(newD[q][1:dimD])
+      newU[q] = newU[q][:,1:keepers[q]]
+  
+      tempD[q] = LinearAlgebra.Diagonal(newD[q][1:keepers[q]])
 
       offset = 0
       @inbounds @simd for w = 1:q-1
@@ -1125,11 +1116,8 @@ function eigen!(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
     end
   end
 
-  if transpose
-    newqindexRsum = invQNsummary
-  else
-    newqindexLsum = QNsummary
-  end
+  newqindexLsum = QNsummary
+  newqindexRsum = invQNsummary
   newqindexR = newqindexL
 
 
@@ -1142,7 +1130,7 @@ function eigen!(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
   end
 
   if transpose
-    U = makeU(nQN,keepq,outU,A,finalinds,newqindexR,newqindexRsum,!leftflux,Rinds,thism)
+    U = makeV(nQN,keepq,outU,A,finalinds,newqindexR,newqindexRsum,!leftflux,Rinds,thism)
   else
     U = makeU(nQN,keepq,outU,A,finalinds,newqindexL,newqindexLsum,leftflux,Linds,thism)
   end

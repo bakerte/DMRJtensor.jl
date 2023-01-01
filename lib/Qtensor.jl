@@ -813,7 +813,7 @@ function changeblock(Qt::Qtens{W,Q},newblock::Array{Array{P,1},1};zeroblocks::Bo
   return changeblock(Qt,(newblock[1],newblock[2]),zeroblocks=zeroblocks)
 end
 
-const parallel_trigger = 1000 #set as of DMRjulia v0.8.6
+const parallel_trigger = 2000 #set as of DMRjulia v0.8.6
 
 function changeblock(Qt::Qtens{W,Q},newblock::NTuple{2,Array{P,1}};minelements::Integer=parallel_trigger,zeroblocks::Bool=false) where {W <: Number, Q <: Qnum, P <: Integer}
   if Qt.currblock == newblock
@@ -2780,6 +2780,7 @@ function makedens(QtensA::Qtens{W,Q}) where {W <: Number, Q <: Qnum}
   @inbounds for q = 1:length(QtensA.ind)
     thisTens = QtensA.T[q]
     theseinds = QtensA.ind[q]
+
     @inbounds for y = 1:size(thisTens,2)
       @inbounds for n = 1:length(QtensA.currblock[2])
         rr = QtensA.currblock[2][n]
@@ -2921,6 +2922,16 @@ function checkflux(Qt::Qtens{W,Q},;silent::Bool = true) where {W <: Number, Q <:
   condition = condition && !subcondition
   if subcondition
     println("size field does not match QnumMat")
+  end
+
+  A = Qt
+  p = [size(A.T[q]) == (size(A.ind[q][1],2),size(A.ind[q][2],2)) for q = 1:length(A.T)]
+  g = [((size(A.ind[q][1],1),size(A.ind[q][2],1))) == (length(A.currblock[1]),length(A.currblock[2])) for q = 1:length(A.T)]
+  h = length(A.Qblocksum) == length(A.T)
+  subcondition = !(sum(p) == sum(g) == length(A.T) && h)
+  condition = condition && !subcondition
+  if subcondition
+    println("sizes of fields is not correct (.T and .ind) and/or length of Qblocksum")
   end
 
   firstnorm = norm(Qt)

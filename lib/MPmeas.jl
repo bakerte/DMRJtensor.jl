@@ -30,7 +30,9 @@ See also: [`moveR!`](@ref)
     D = DV
     truncerr = 0.
   else
-    Ltens,D,V,truncerr,sumD = svdfct(Lpsi,[[1,2],[3]],cutoff=cutoff,m=m,minm=minm,mag=mag)      
+
+    Ltens,D,V,truncerr,sumD = svdfct(Lpsi,[[1,2],[3]],cutoff=cutoff,m=m,minm=minm,mag=mag)
+
     modV = (condition ? getindex!(V,:,1:size(Rpsi,1)) : V)
     DV = lmul!(D,modV)
   end

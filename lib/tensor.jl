@@ -297,12 +297,12 @@ Generates an identity tensor (`denstens` of output type `W`, `G`) that contracts
 
 See also: [`denstens`](@ref)
 """
-function makeId(W::DataType,ldim::Integer;addone::Bool=false,addRightDim::Bool=false)#,loadleft::Bool=true)
-  return tens(makeIdarray(W,ldim,ldim;addone=addone,addRightDim=addRightDim))#,loadleft=loadleft))
+function makeId(W::DataType,ldim::Integer;addone::Bool=false,addRightDim::Bool=false)
+  return tens(makeIdarray(W,ldim,ldim;addone=addone,addRightDim=addRightDim))
 end
 
 function makeId(W::DataType,ldim::Integer,rdim::Integer;addone::Bool=false,addRightDim::Bool=false,loadleft::Bool=true)
-  return tens(makeIdarray(W,ldim,rdim;addone=addone,addRightDim=addRightDim))#,loadleft=loadleft))
+  return tens(makeIdarray(W,ldim,rdim;addone=addone,addRightDim=addRightDim))
 end
 
 """

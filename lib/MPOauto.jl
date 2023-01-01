@@ -46,9 +46,9 @@ function mpoterm(val::Number,operator::Array{W,1},ind::Array{P,1},base::Array{X,
     fulltrail = [trail[(a-1) % length(trail) + 1] for a = 1:length(ind)]
   end
 
-  isdens = W <: denstens
+  isdens = W <: denstens || X <: denstens
   if isdens
-    opString = Array{tens{finaltype},1}(undef,length(base))
+    opString = Array{tens{finalType},1}(undef,length(base))
   else
     opString = Array{Array{finalType,2},1}(undef,length(base))
   end
