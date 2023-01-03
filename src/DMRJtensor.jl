@@ -113,7 +113,7 @@ include(algpath*"optimizeMPS.jl")
 include(algpath*"DMRG.jl")
 
 #Lanczos methods
-include(libpath*"Krylov.jl")
+include(algpath*"Krylov.jl")
 
 end
 
