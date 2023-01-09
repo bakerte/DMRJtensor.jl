@@ -9,8 +9,7 @@
 # This code is native to the julia programming language (v1.1.1) or (v1.5)
 #
 
-path = "../../"
-include(path*"DMRjulia.jl")
+include("../src/DMRjulia.jl")
 using .DMRJtensor
 
 #create reduced site problem (step 2)
