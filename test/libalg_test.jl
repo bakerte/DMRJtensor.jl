@@ -168,4 +168,3 @@ end
 testval = isapprox(out,0)
 global fulltest &= testfct(testval,"libLowerHessenberg!")
 
-println("All tests passed? ",fulltest)

@@ -7,7 +7,7 @@ import LinearAlgebra
 
 Ns = 10
 
-Sx,Sy,Sz,Sp,Sm,O,Id = spinOps()
+Sp,Sm,Sz,Sy,Sx,O,Id = spinOps()
 
 function checkqubitops(val)
   base = [Id for i = 1:Ns]

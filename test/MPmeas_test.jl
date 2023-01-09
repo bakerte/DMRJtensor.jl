@@ -262,7 +262,7 @@ end
 
 psi = MPS(initTensor)
 
-Sx,Sy,Sz,Sp,Sm,O,Id = spinOps()
+Sp,Sm,Sz,Sy,Sx,O,Id = spinOps()
 upsites = [2,4]
 applyOps!(psi,upsites,Sp)
 
@@ -273,7 +273,7 @@ println()
 
 psi = MPS(initTensor)
 
-Sx,Sy,Sz,Sp,Sm,O,Id = spinOps()
+Sp,Sm,Sz,Sy,Sx,O,Id = spinOps()
 upsites = [2,4]
 newpsi = applyOps(psi,upsites,Sp)
 
@@ -376,9 +376,14 @@ fulltest &= testfct(testval,"correlations(psi,psi,Sp,Sm)")
 
 println()
 
-penalty!(mpo,2.0,psi,compress=false)
-En = dmrg(psi,mpo,sweeps=20,maxm=45,cutoff=1E-9,silent=true)
-testval = isapprox(En,-3.930631023099)
+En = expect(psi,mpo)
+
+lambda = 0.1
+
+penalty!(mpo,lambda,psi,compress=false)
+shiftedEn = dmrg(psi,mpo,sweeps=20,maxm=45,cutoff=1E-9,silent=true)
+testval = isapprox(abs(En-shiftedEn),lambda)
+fulltest &= testfct(testval,"penalty!(mpo,Real,mps")
 
 println()
 

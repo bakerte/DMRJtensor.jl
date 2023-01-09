@@ -32,6 +32,7 @@ tests = [
 "MPmeas_test.jl",
 "MPlarge_test.jl",
 "MPOauto_test.jl",
+"model_test.jl",
 "Qlinearalgebra.jl",
 "tensornetwork_test.jl"]
 
@@ -45,7 +46,7 @@ end
 println()
 
 for i = 1:length(tests)
-  println(fulltestrecord[i],"     ",tests[i])
+  println(i," ",fulltestrecord[i],"     ",tests[i])
 end
 
 println()

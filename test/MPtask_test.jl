@@ -364,33 +364,33 @@ println()
 
 println()
 
-A = makeqMPS(psi,Qlabels[1],silent=true)
+A = makeqMPS(Qlabels[1],psi,silent=true)
 testval = isapprox(expect(A),expect(psi))
-fulltest &= testfct(testval,"makeqMPS(MPS,Vector{Qnum})")
+fulltest &= testfct(testval,"makeqMPS(Vector{Qnum},MPS)")
 
-A = makeqMPS(psi,Qlabels,silent=true)
+A = makeqMPS(Qlabels,psi,silent=true)
 testval = isapprox(expect(A),expect(psi))
-fulltest &= testfct(testval,"makeqMPS(MPS,Vector{Vector{Qnum}})")
+fulltest &= testfct(testval,"makeqMPS(Vector{Vector{Qnum}},MPS)")
 
-A = makeqMPS(psi.A,Qlabels,silent=true)
+A = makeqMPS(Qlabels,psi.A,silent=true)
 testval = isapprox(expect(A),expect(psi))
-fulltest &= testfct(testval,"makeqMPS(vector,Vector{Vector{Qnum}})")
+fulltest &= testfct(testval,"makeqMPS(Vector{Vector{Qnum}},vector)")
 
 println()
 
-A = makeqMPO(mpo,Qlabels[1])
+A = makeqMPO(Qlabels[1],mpo)
 testvalvec = [true]
 for i = 1:length(A)
   testvalvec[1] &= isapprox(makeArray(A[i]),makeArray(mpo[i]))
 end
-fulltest &= testfct(testvalvec[1],"makeqMPO(MPO,Vector{Qnum})")
+fulltest &= testfct(testvalvec[1],"makeqMPO(Vector{Qnum},MPO)")
 
-A = makeqMPO(mpo,Qlabels)
+A = makeqMPO(Qlabels,mpo)
 testvalvec = [true]
 for i = 1:length(A)
   testvalvec[1] &= isapprox(makeArray(A[i]),makeArray(mpo[i]))
 end
-fulltest &= testfct(testvalvec[1],"makeqMPO(MPO,Vector{Vector{Qnum}})")
+fulltest &= testfct(testvalvec[1],"makeqMPO(Vector{Vector{Qnum}},MPO)")
 #=
 A = makeqMPO(mpo.H,Qlabels)
 testvalvec = [true]

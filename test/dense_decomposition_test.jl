@@ -323,4 +323,71 @@ testval &= isapprox(contract(UV,ndims(UV),VDV,1).T,A.T)
 
 fulltest &= testfct(testval,"polar(tens) [left and right]")
 
-println("All tests passed? ",testval)
+println()
+
+m = 200
+
+A = rand(m,m)
+A = A + A'
+
+D,U = eigen(A)
+
+testval = isapprox(U*D*U',A)
+fulltest &= testfct(testval,"regular eigen [base check]")
+
+D,Ut = eigen(A,transpose=true)
+testval = isapprox(norm(U-Ut'),0) && isapprox(Ut'*D*Ut,A)
+fulltest &= testfct(testval,"regular eigen [transpose]")
+
+@makeQNs "testxyz" U1
+
+Qlabels = [[testxyz(-2),testxyz(0),testxyz(),testxyz(2)] for i = 1:8]
+
+B = rand(Qlabels,[false,false,false,false,true,true,true,true])
+for q = 1:length(B.T)
+  B.T[q] += B.T[q]'
+end
+
+println()
+
+C = makeArray(B)
+rC = reshape(C,[[1,2,3,4],[5,6,7,8]])
+rD,rU = eigen(rC)
+D,U = eigen(C,[[1,2,3,4],[5,6,7,8]])
+
+newC = contractc(contract(U,ndims(U),D,1),ndims(U),U,ndims(U))
+
+testval = norm(newC-C) < 1E-12 && norm(rC-reshape(C,[[1,2,3,4],[5,6,7,8]])) < 1E-12
+fulltest &= testfct(testval,"quantum eigen")
+
+
+qD,qU = eigen(B,[[1,2,3,4],[5,6,7,8]])
+
+P = makeArray(qD)
+testval = isapprox(sort([P[i,i] for i = 1:size(P,1)]),sort([D[i,i] for i = 1:size(D,1)]))
+fulltest &= testfct(testval,"quantum eigen [comparison with dense version]")
+
+println()
+
+newqC = contractc(contract(qU,ndims(qU),qD,1),ndims(qU),qU,ndims(qU))
+
+
+testvalvec = [true]
+for q = 1:length(newqC.T)
+  testvalvec[1] &= isapprox(qU.T[q]*qD.T[q]*qU.T[q]',B.T[q])
+end
+
+testvalvec[1] &= norm(makeArray(newqC)-newC) < 1E-12
+fulltest &= testfct(testvalvec[1],"reconstruct U*D*U' [quantum number version]")
+
+
+qDt,qUt = eigen(B,[[1,2,3,4],[5,6,7,8]],transpose=true)
+
+testvalvec = [true]
+for q = 1:length(newqC.T)
+  testvalvec[1] &= isapprox(qUt.T[q]'*qD.T[q]*qUt.T[q],B.T[q])
+end
+
+newqCt = contract(contractc(qDt,1,qUt,1),1,qUt,1)
+testvalvec[1] &= norm(makeArray(newqCt)-newC) < 1E-12
+fulltest &= testfct(testvalvec[1],"reconstruct U'*D*U [quantum number version, transposed]")
