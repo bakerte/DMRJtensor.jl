@@ -1,5 +1,6 @@
 
 include("../src/DMRjulia.jl")
+using .DMRJtensor
 
 function testfct(test::Bool,message::String)
 #  try test
