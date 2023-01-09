@@ -9,7 +9,7 @@
 # This code is native to the julia programming language (v1.1.1) or (v1.5)
 #
 
-path = "../src/"
+path = "../../"
 include(path*"DMRjulia.jl")
 using .DMRJtensor
 
@@ -108,7 +108,7 @@ for i = 1:Ns
 end
 psi = MPS(initTensor,oc=1)
 
-Sx,Sy,Sz,Sp,Sm,O,Id = spinOps(s=spinmag)
+Sp,Sm,Sz,Sy,Sx,O,Id = spinOps(s=spinmag)
 H = [Id O O O O;
      Sp O O O O;
      Sm O O O O;

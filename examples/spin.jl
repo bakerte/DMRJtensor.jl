@@ -10,7 +10,7 @@
 #
 
 
-path = "../src/"
+path = "../../"
 include(path*"DMRjulia.jl")
 using .DMRJtensor
 
@@ -26,31 +26,46 @@ end
 
 psi = MPS(initTensor)
 
-Sx,Sy,Sz,Sp,Sm,O,Id = spinOps(s=spinmag)
-function H(i::Int64)
-    return [Id O O O O;
-        Sp O O O O;
-        Sm O O O O;
-        Sz O O O O;
-        O Sm/2 Sp/2 Sz Id]
+Sp,Sm,Sz = spinOps(s=spinmag)
+
+function makeheisenberg(Ns,Sp,Sm,Sz)
+  mpo = 0
+  for j in [1] #,4] #j-ranged interaction
+    for i = 1:Ns-j
+      mpo += mpoterm(0.5,Sp,i,Sm,i+j)
+      mpo += mpoterm(0.5,Sm,i,Sp,i+j)
+      mpo += mpoterm(Sz,i,Sz,i+j)
+      #add higher than quadratic terms like
+      #mpo += mpoterm(Sp,i,Sm,i+j,Sz,i+1,Sz,i+j)
     end
+  end
 
-println("Making qMPO")
-@time mpo = makeMPO(H,hereQS,Ns)
+  #=
+  #single site terms
+  for i = 1:Ns
+    mpo += mpoterm(0.3,Sz,i)
+  end
+  =#
 
+  return MPO(mpo)
+end
+
+mpo = makeheisenberg(Ns,Sp,Sm,Sz)
 
 #Quantum number specification
 @makeQNs "spin" U1
 Qlabels = [[spin(1),spin(-1)]]
 
-qpsi = makeqMPS(psi,Qlabels)
-qmpo = makeqMPO(mpo,Qlabels)
+qpsi,qmpo = MPS(Qlabels,psi,mpo)
+#qmpo,qpsi = MPO(Qlabels,mpo,psi)
+
+#mpo += expMPO(exp(-1/2.0),Sz,Sz,Ns) #to add an exponential interaction between all sites
 
 println("#############")
 println("QN version")
 println("#############")
 
-@time energy = dmrg(qpsi,qmpo,maxm=45,sweeps=20,cutoff=1E-9,method="twosite")
+@time energyQN = dmrg(qpsi,qmpo,maxm=45,sweeps=20,cutoff=1E-9,method="twosite")
 
 println("#############")
 println("nonQN version")
