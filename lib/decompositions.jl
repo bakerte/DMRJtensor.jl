@@ -514,23 +514,42 @@ export svdvals!
 
 function truncate_eigen(Dsq::G,U::R,B::P...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,
   minm::Integer=1,nozeros::Bool=false,power::Number=1,effZero::Float64 = 1E-16,keepdeg::Bool=false,
-  transpose::Bool=false,decomposer::Function=libeigen) where {G <: Union{Array{W,1},Array{W,2},tens{W}}, R <: Union{Array{W,1},Array{W,2},tens{W}}, P <: Union{Array{W,1},Array{W,2},tens{W}}} where W <: Number
+  transpose::Bool=false,decomposer::Function=libeigen) where {G <: Union{Array{W,1},Array{W,2},tens{W}}, R <: Union{Array{S,2},Array{S,1}}, P <: Union{Array{S,1},Array{S,2},tens{S}}} where {W <: Number, S <: Number}
 
   thism,sizeD,truncerr,sumD = findnewm(Dsq,m,minm,mag,cutoff,effZero,nozeros,power,keepdeg)
+
   if sizeD < minm
     Utrunc = zeros(eltype(U),size(U,1),minm)
     Dtrunc = zeros(eltype(Dsq),minm)
+    for y = 1:thism
+      for x = 1:sizeD
+        Utrunc[x+sizeD*(y-1)] = U
+      end
+    end
     @inbounds Utrunc[:,1:thism] = U
     @inbounds Dtrunc[1:thism] = Dsq
   elseif sizeD > thism
-    @inbounds Utrunc = U[:,sizeD-thism+1:sizeD]
+    size_one_U = sizeD
+    if ndims(U) == 1
+      Utrunc = Array{eltype(U),1}(undef,sizeD*thism)
+    else
+      Utrunc = Array{eltype(U),2}(undef,sizeD,thism)
+    end
+    counter = 0
+    for y = sizeD-thism+1:sizeD
+      @inbounds @simd for x = 1:sizeD
+        counter += 1
+        Utrunc[counter] = U[x+sizeD*(y-1)]
+      end
+    end
+#    @inbounds Utrunc = U[:,sizeD-thism+1:sizeD]
     @inbounds Dtrunc = Dsq[sizeD-thism+1:sizeD]
   else
     Utrunc = U
     Dtrunc = Dsq
   end
   if transpose
-    UT = Array{W,2}(undef,size(Utrunc,2),size(Utrunc,1))
+    UT = Array{eltype(Utrunc),2}(undef,size(Utrunc,2),size(Utrunc,1))
     for y = 1:size(Utrunc,2)
       @inbounds @simd for x = y:size(Utrunc,1)
         UT[x,y],UT[y,x] = Utrunc[y,x],Utrunc[x,y]
@@ -545,7 +564,42 @@ function truncate_eigen(Dsq::G,U::R,B::P...;cutoff::Float64 = 0.,m::Integer = 0,
   finalD = LinearAlgebra.Diagonal(Dtrunc) #::Array{Float64,2}
   return finalD,Utrunc,truncerr,sumD
 end
+#=
+function truncate_eigen(Dsq::G,U::Array{S,1},B::P...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,
+  minm::Integer=1,nozeros::Bool=false,power::Number=1,effZero::Float64 = 1E-16,keepdeg::Bool=false,
+  transpose::Bool=false,decomposer::Function=libeigen) where {G <: Union{Array{W,1},Array{W,2},tens{W}}, P <: Union{Array{S,1},Array{S,2},tens{S}}} where {W <: Number, S <: Number}
 
+  thism,sizeD,truncerr,sumD = findnewm(Dsq,m,minm,mag,cutoff,effZero,nozeros,power,keepdeg)
+
+  if sizeD < minm
+    Utrunc = zeros(eltype(U),size(U,1),minm)
+    Dtrunc = zeros(eltype(Dsq),minm)
+    @inbounds Utrunc[:,1:thism] = U
+    @inbounds Dtrunc[1:thism] = Dsq
+  elseif sizeD > thism
+    @inbounds Utrunc = reshape(U,size(Dsq,1),cld(length(U),size(Dsq,1)))[:,sizeD-thism+1:sizeD]
+    @inbounds Dtrunc = Dsq[sizeD-thism+1:sizeD]
+  else
+    Utrunc = U
+    Dtrunc = Dsq
+  end
+  if transpose
+    UT = Array{eltype(Utrunc),2}(undef,size(Utrunc,2),size(Utrunc,1))
+    for y = 1:size(Utrunc,2)
+      @inbounds @simd for x = y:size(Utrunc,1)
+        UT[x,y],UT[y,x] = Utrunc[y,x],Utrunc[x,y]
+      end
+    end
+    if eltype(UT) <: Complex
+      Utrunc = conj!(UT)
+    else
+      Utrunc = UT
+    end
+  end
+  finalD = LinearAlgebra.Diagonal(Dtrunc) #::Array{Float64,2}
+  return finalD,Utrunc,truncerr,sumD
+end
+=#
 """
     D,U = eigen(AA[,B,cutoff=,m=,mag=,minm=,nozeros=])
 
@@ -553,7 +607,7 @@ Eigensolver routine with truncation (output to `D` and `U` just as `LinearAlgebr
 
 See also: [`svd`](@ref)
 """
-function eigen(AA::Array{W,2},B::Array{W,2}...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,
+function eigen(AA::Array{W,2},B::Array{W,2}...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,a::Integer=size(AA,1),b::Integer=size(AA,2),
                 minm::Integer=1,nozeros::Bool=false,power::Number=1,effZero::Float64 = 1E-16,keepdeg::Bool=false,
                 transpose::Bool=false,decomposer::Function=libeigen) where {W <: Number}
 
@@ -1139,7 +1193,7 @@ function eigen!(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
   return D,U,truncerr,sumD
 end
 
-function eigen(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,
+function eigen(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,a::Integer=size(QtensA,1),b::Integer=size(QtensA,2),
                 minm::Integer=1,nozeros::Bool=false,recursive::Bool=false,
                 power::Number=1,leftflux::Bool=false,mag::Float64=0.,
                 decomposer::Function=libeigen,keepdeg::Bool=false,transpose::Bool=false) where {W <: Number, Q <: Qnum}

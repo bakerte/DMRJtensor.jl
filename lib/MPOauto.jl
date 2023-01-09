@@ -15,6 +15,23 @@
 #       +---------------------------------------+
 
 """
+  MPOterm
+
+Abstract type used to store terms of an MPO
+"""
+abstract type MPOterm end
+export MPOterm
+
+"""
+  mpoterm{W}
+
+Stores terms of an MPO
+"""
+struct mpoterm{W} <: MPOterm where W <: Tuple
+  T::Vector{W}
+end
+
+"""
   mpoterm(val,operator,ind,base,trail...)
 
 Creates an MPO from operators (`operator`) with a prefactor `val` on sites `ind`.  Must also provide a `base` function which are identity operators for each site.  `trail` operators can be defined (example: fermion string operators)
@@ -79,36 +96,7 @@ end
 function mpoterm(operator::TensType,ind::Integer,base::Array{G,1},trail::TensType...)::MPO where G <: densTensType
   return mpoterm(1.,[operator],[ind],base,trail...)
 end
-#=
 
-function mpoterm(val::Number,operator::TensType,ind::Integer,Ns::Integer,trail::TensType...)::MPO
-  return mpoterm(val,[operator],[ind],Ns,trail...)
-end
-
-function mpoterm(operator::TensType,ind::Integer,Ns::Integer,trail::TensType...)::MPO
-  return mpoterm(1.,[operator],[ind],Ns,trail...)
-end
-=#
-#=
-function mpoterm(W::DataType,base::Array{G,1}) where G <: densTensType
-  mpotens = Array{Array{W,4},1}(undef,length(base))
-  O = zero(base[1])
-  d = size(O,1)
-  temp = [O base[1]]
-  mpotens[1] = reshape(temp,1,d,d,2)
-  @inbounds for i = 2:length(base)-1
-    O = zero(base[i])
-    d = size(O,1)
-    mpotens[i] = reshape([base[i] O;
-                  O base[i]],2,d,d,2)
-  end
-  O = zero(base[end])
-  d = size(O,1)
-  mpotens[end] = reshape([base[end];
-                  O],2,d,d,1)
-  return MPO(mpotens)
-end
-=#
 function mpoterm(val::Number,operator::Array{W,1},ind::Array{P,1},base::Array{X,1},trail::Y...)::MPO where {W <: qarray, X <: qarray, Y <: qarray, P <: Integer}
   Qlabels = [fullQnumMat(base[w])[2] for w = 1:length(base)]
   densbase = [makeArray(base[w]) for w = 1:length(base)]
@@ -120,7 +108,7 @@ function mpoterm(val::Number,operator::Array{W,1},ind::Array{P,1},base::Array{X,
     opString = mpoterm(val,densop,ind,densbase)
   end
   densmpo = MPO(opString)
-  return makeqMPO(densmpo,Qlabels)
+  return makeqMPO(Qlabels,densmpo)
 end
 
 """
@@ -131,7 +119,7 @@ Same as `mpoterm` but converts to quantum number MPO with `Qlabels` on the physi
 See also: [`mpoterm`](@ref)
 """
 function mpoterm(Qlabels::Array{Array{Q,1},1},val::Number,operator::Array,ind::Array{P,1},base::Array,trail::Array...)::MPO where {Q <: Qnum, P <: Integer}
-  return makeqMPO(mpoterm(val,operator,ind,base,trail...),Qlabels)
+  return makeqMPO(Qlabels,mpoterm(val,operator,ind,base,trail...))
 end
 
 function mpoterm(Qlabels::Array{Array{Q,1},1},operator::Array,ind::Array{P,1},base::Array,trail::Array...)::MPO where {Q <: Qnum, P <: Integer}
@@ -139,84 +127,310 @@ function mpoterm(Qlabels::Array{Array{Q,1},1},operator::Array,ind::Array{P,1},ba
 end
 export mpoterm
 
-#=
-#import Base.*
-"""
-  mps * mps
-
-functionality for multiplying MPOs together; joins physical indices together
-"""
-function *(X::MPS...)
-  checktype = typeof(prod(w->eltype(X[w])(1),1:length(X)))
-  if checktype != eltype(X[1])
-    Z = MPS(checktype,copy(X),oc=X.oc)
-  else
-    Z = copy(X[1])
-  end
-  for w = 2:length(X)
-    mult!(Z,X[w])
-  end
-  return Z
+function mpoterm(Op1::TensType,i::Integer,other...)# where U <: Union{Tuple,Array}
+  return mpoterm(1.,Op1,i,other...)
 end
 
-#  import .Qtensor.mult!
-function mult!(X::MPS,Y::MPS;infinite::Bool=false)
-  if X.oc != Y.oc
-    move!(X,Y.oc)
-  end
-  if infinite
-    X[1] = joinindex!(X[1],Y[1])
-  else
-    X[1] = joinindex!(X[1],Y[1],[g for g = 2:ndims(X[1])])
-  end
-  for i = 2:length(X)-1
-    X[i] = joinindex!(X[i],Y[i])
-  end
-  if infinite
-    X[end] = joinindex!(X[end],Y[end])
-  else
-    X[end] = joinindex!(X[end],Y[end],[g for g = 1:ndims(X[end])-1])
-  end
-  return X
+function mpoterm(val::Number,Op1::TensType,i::Integer,other...)# where U <: Union{Tuple,Array}
+  return mpoterm([(val,Op1,i,other...)])
 end
 
-"""
-  mpo * mpo
-
-functionality for multiplying MPOs together; joins physical indices together
-"""
-function *(X::MPO...)
-  checktype = typeof(prod(w->eltype(X[w])(1),1:length(X)))
-  if checktype != eltype(X[1])
-    Z = MPO(checktype,copy(X))
-  else
-    Z = copy(X[1])
-  end
-  for w = 2:length(X)
-    mult!(Z,X[w])
-    deparallelize!(Z)
-  end
-  return Z
+import .DMRjulia.+
+function +(A::MPOterm,B::MPOterm)
+  return mpoterm([A.T...,B.T...])
 end
 
-#  import .Qtensor.mult!
-function mult!(X::MPO,Y::MPO;infinite::Bool=false)
-  if infinite
-    X[1] = joinindex!(X[1],Y[1])
-  else
-    X[1] = joinindex!(X[1],Y[1],[2,3,4])
-  end
-  for i = 2:length(X)-1
-    X[i] = joinindex!(X[i],Y[i])
-  end
-  if infinite
-    X[end] = joinindex!(X[end],Y[end])
-  else
-    X[end] = joinindex!(X[end],Y[end],[1,2,3])
-  end
-  return deparallelize!(X)
+function +(int::Integer,tup::MPOterm)
+  return tup
 end
-=#
+
+function length(R::MPOterm)
+  return length(R.T)
+end
+
+function getindex(R::MPOterm,i::Integer)
+  return R.T[i]
+end
+
+
+function prepare_autoInfo(opstring::MPOterm)
+  #find the total number of sites
+  Ns = 0
+  @inbounds for y = 1:length(opstring)
+    this_string = opstring[y]
+    @inbounds for x = 1:fld(length(this_string)-1,2)
+      Ns = max(this_string[2*x+1],Ns)
+    end
+  end
+
+  qarrayops = false
+
+  #find physical index sizes
+  physind = zeros(intType,Ns)
+  @inbounds for y = 1:length(opstring)
+    this_string = opstring[y]
+    @inbounds for x = 1:fld(length(this_string)-1,2)
+      site = this_string[2*x+1]
+      if physind[site] == 0
+        physind[site] = size(this_string[2*x],2)
+      elseif physind[site] != size(this_string[2*x],2)
+        error("double definition of operator on site $site (had $(physind[site]) and also size $(size(this_string[2*x],2)) on two operators when they must match)")
+      end
+      if qarrayops && typeof(this_string[2*x]) <: densTensType
+        error("must be all Qtensor all denstens or all Array types input into operator")
+      end
+      qarrayops = qarrayops || typeof(this_string[2*x]) <: qarray
+    end
+  end
+
+  if qarrayops
+    Qnumvec = Array{Array{typeof(opstring[1][2].flux),1},1}(undef,Ns)
+    checksites = [true for i = 1:Ns]
+    w = 0
+    while sum(checksites) != 0 && w < length(opstring)
+      w += 1
+      this_string = opstring[w]
+      for x = 1:fld(length(this_string)-1,2)
+        ind = this_string[2*x+1]
+        if checksites[ind]
+          thisop = this_string[2*x]
+          Qnumvec[ind] = recoverQNs(1,thisop)
+          checksites[ind] = false
+        end
+      end
+    end
+  else
+    Qnumvec = [U1[]]
+  end
+
+  #find element type for the MPO tensors
+  valtype = 1.0
+  @inbounds for w = 1:length(opstring)
+    this_string = opstring[w]
+    valtype *= typeof(this_string[1])(1)
+    @inbounds @simd for g = 2:2:length(this_string)
+      valtype *= eltype(this_string[g])(1)
+    end
+  end
+  mpotype = typeof(valtype)
+
+  base = [makeArray(makeId(mpotype,physind[w])) for w = 1:Ns]
+  if qarrayops
+    base = [Qtens(Qnumvec[i],base[i]) for i = 1:Ns]
+  end
+
+  return Ns,mpotype,base,Qnumvec,qarrayops,physind
+end
+
+function MPO(opstring::MPOterm,reverse::Bool=true)
+
+  Ns,mpotype,base,Qnumvec,qarrayops,physinds = prepare_autoInfo(opstring)
+
+  mpo = 0
+  singlempo = 0
+
+
+  singlesite = [1 < length(opstring[w]) < 5 for w = 1:length(opstring)]
+  nosingles = findfirst(singlesite)
+  if typeof(nosingles) <: Integer
+
+    singleterms = Array{Array{mpotype,2},1}(undef,Ns)
+    for i = 1:Ns
+      Id = makeArray(base[i])
+      O = zero(Id)
+      singleterms[i] = mpotype[Id O; O Id]
+    end
+
+    singlempo = makeMPO(singleterms,physinds)
+
+    if qarrayops
+      singlempo = makeqMPO(Qnumvec,singlempo)
+    end
+
+    terms = findall(singlesite)
+    for a in terms
+      ind = opstring[a][3]
+      value = opstring[a][1]
+      operator = opstring[a][2]
+
+
+      singlempo[ind][end,:,:,1] += operator * value
+
+      trailon = length(opstring[a]) % 2 == 0
+
+      if trailon
+        trailvec = opstring[a][end]
+        for g = 1:ind-1
+          checkzero = true
+          y = 0
+          while checkzero && y < physind[ind]
+            y += 1
+            x = 0
+            while checkzero && x < physind[ind]
+              x += 1
+              checkzero = searchindex(size(singleterms[g],1),x,y,1) == 0
+            end
+          end
+          if checkzero
+            singlempo[g][end,:,:,1] = trailvec[g]
+          else
+            singlempo[g][end,:,:,1] = contract(trailvec[g],2,singlempo[g][end,:,:,1],1)
+          end
+        end
+      end
+    end
+  end
+
+  value_mpo = 0
+
+  regularterms = findall(w->!singlesite[w],1:length(singlesite))
+  for a in regularterms
+    if length(opstring) == 1
+      value_mpo += opstring[1]
+    else
+
+      value = opstring[a][1]
+      Opvec = [opstring[a][x] for x = 2:2:length(opstring[a])]
+      posvec = [opstring[a][x] for x = 3:2:length(opstring[a])]
+
+      trailon = length(opstring[a]) % 2 == 0
+      if trailon
+        mpo += mpoterm(value,Opvec,posvec,base,opstring[a][end])
+      else
+        mpo += mpoterm(value,Opvec,posvec,base)
+      end
+    end
+  end
+
+  mpo += singlempo
+  mpo += value_mpo
+
+  if reverse && typeof(mpo[1]) <: qarray
+    for a = 1:length(mpo)
+      mpo[a] = permutedims!(mpo[a],[1,3,2,4])
+    end
+  end
+
+  return mpo
+end
+
+
+function expMPO(opstring::MPOterm)
+
+  Ns,mpotype,base,Qnumvec,qarrayops = prepare_autoInfo(opstring)
+
+  lambda = opstring[1][1]
+
+  true_expterms = [mpotype[base[i] zero(base[i]) zero(base[i]); zero(base[i]) lambda*base[i] zero(base[i]); zero(base[i]) zero(base[i]) base[i]] for i = 1:Ns]
+
+
+  mpo = makeMPO(true_expterms,physind)
+  if qarrayops
+    mpo = makeqMPO(Qnumvec,mpo)
+  end
+
+  firstop = [true for i = 1:Ns]
+  lastop = [true for i = 1:Ns]
+
+  i = 0
+  while sum(firstop) != 0 && sum(secondop) != 0 && i < length(opstring)
+    i += 1
+
+    if opstring[i][3] < opstring[i][5]
+      a = opstring[i][3]
+      op1 = opstring[i][2]
+      b = opstring[i][5]
+      op2 = opstring[i][4]
+    else
+      a = opstring[i][5]
+      op1 = opstring[i][4]
+      b = opstring[i][3]
+      op2 = opstring[i][2]
+    end
+
+    if firstop[b]
+      mpo[b][2,:,:,1] = op2
+      firstop[b] = false
+    end
+    if secondop[a]
+      mpo[a][end,:,:,2] = ops1
+      secondop[a] = false
+    end
+  end
+
+  if reverse && typeof(mpo[1]) <: qarray
+    for a = 1:length(mpo)
+      mpo[a] = permutedims!(mpo[a],[1,3,2,4])
+    end
+  end
+
+  return mpo
+end
+
+function expMPO(lambda::Number,op1::TensType,op2::TensType,Ns::Integer;start::Integer=1,stop::Integer=Ns,reverse::Bool=true)
+
+  mpotype = typeof(typeof(lambda)(1) * eltype(op1)(1) * eltype(op2)(1))
+
+  physind = size(op1,2)
+
+  base = [zeros(mpotype,i == 1 ? 1 : 3,physind,physind,i == Ns ? 1 : 3) for i = 1:Ns]
+  mpo = MPO(base)
+
+  Id = makeId(mpotype,physind)
+  if typeof(op1) <: qarray
+    Qlabel = recoverQNs(1,op1)
+    mpo = makeqMPO(Qlabel,mpo)
+    Id = Qtens(Qlabel,Id)
+  end
+
+  lambda_Id = lambda*Id
+
+  for i = 1:Ns
+    if i > 1
+      mpo[i][1,:,:,1] = Id
+      if start <= i <= stop
+        mpo[i][2,:,:,1] = op2
+      end
+    end
+    if i < Ns
+      mpo[i][end,:,:,end] = Id
+      if start <= i <= stop
+        mpo[i][end,:,:,2] = op1
+      end
+    end
+    if 1 < i < Ns
+      mpo[i][2,:,:,2] = lambda_Id
+    end
+  end
+
+  if reverse && typeof(mpo[1]) <: qarray
+    for a = 1:length(mpo)
+      mpo[a] = permutedims!(mpo[a],[1,3,2,4])
+    end
+  end
+
+  return mpo
+end
+export expMPO
+
+function expmpoterm(lambda::Number,Op1::TensType,Op2::TensType,trailterm::U...) where U <: Union{Tuple,Array}
+
+  mpotype = typeof(typeof(lambda)(1)*eltype(Op1)(1)*eltype(Op2)(1))
+  Id = makeArray(makeId(mpotype,size(Op1,1)))
+  O = zero(Id)
+  if length(trailterm) > 0
+    trail = trailterm[1]
+    out = [Id O O;
+            makeArray(Op1) lambda*makeArray(trail[i]) O;
+            O makeArray(Op2*trail[i]) Id]
+  else
+    out = [Id O O;
+            makeArray(Op1) lambda*Id O;
+            O makeArray(Op2) Id]
+  end
+  return out
+end
+export expmpoterm
 
 
 """
@@ -685,7 +899,7 @@ function compressMPO!(W::MPO,M::MPO...;sweeps::Integer=1000,cutoff::Float64=0.,
       W[i-1] = contract(W[i-1],4,scaleUD,1)
     end
     thismdiff = intType[size(W[i],4) for i = 1:length(W)-1]
-    mchange = sum(a->lastmdiff[a]-thismdiff[a],1:size(thismdiff,1))
+    mchange = sum(a->lastmdiff[a]-thismdiff[a],1:length(thismdiff))
     lastmdiff = copy(thismdiff)
   end
   return W

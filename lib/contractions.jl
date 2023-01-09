@@ -292,6 +292,9 @@ export dot
 
 
 function *(X::TensType,Y::TensType)
+  if ndims(X) == 1 && ndims(Y) == 2
+    X = reshape(X,size(X,1),1)
+  end
   return contract(X,ndims(X),Y,1)
 end
 

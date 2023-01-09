@@ -182,9 +182,17 @@ function Qtens(Qlabels::Array{Array{Q,1},1};datatype::DataType=Float64,currblock
   return Qtens{datatype,Q}(newsize, newblocks, newind, newcurrblock, finalQblocksum, finalQnumMat, QnumSum, flux)
 end
 
-function Qtens(Qlabels::Array{Array{Q,1},1}, arrows::Array{Bool,1};datatype::DataType=Float64,currblock::currblockTypes=equalblocks(Qlabels),flux::Q=Q()) where Q <: Qnum
+function Qtens(Qlabels::Array{Array{Q,1},1}, arrows::Array{Bool,1};datatype::DataType=Float64,currblock::currblockTypes=equalblocks(Qlabels),flux::Q=Q(),blockfct::Function=undefMat) where Q <: Qnum
   newQlabels = Array{Q,1}[arrows[a] ? Qlabels[a] : inv.(Qlabels[a]) for a = 1:length(arrows)]
-  return Qtens(newQlabels,datatype=datatype,currblock=currblock,flux=flux)
+  return Qtens(newQlabels,datatype=datatype,currblock=currblock,flux=flux,blockfct=blockfct)
+end
+
+function Qtens(datatype::DataType,Qlabels::Array{Array{Q,1},1}, arrows::Array{Bool,1};currblock::currblockTypes=equalblocks(Qlabels),flux::Q=Q(),blockfct::Function=undefMat) where Q <: Qnum
+  return Qtens(Qlabels,arrows,datatype=datatype,currblock=currblock,flux=flux,blockfct=blockfct)
+end
+
+function Qtens(datatype::DataType,Qlabels::Array{Array{Q,1},1};currblock::currblockTypes=equalblocks(Qlabels),flux::Q=Q(),blockfct::Function=undefMat) where Q <: Qnum
+  return Qtens(Qlabels,datatype=datatype,currblock=currblock,flux=flux,blockfct=blockfct)
 end
 
 """
@@ -291,7 +299,7 @@ Creates set of dense `operator`s as a Qtensor with quantum numbers `QnumMat` on 
   if length(Op) > 1
     out = ntuple(w->Qtens(Op[w],Qlabels,zero=zero,currblock=currblock),length(Op))
   else
-    out = Qtens(Op[1],Qlabels,zero=zero,currblock=currblock,datatype=datatype)
+    out = Qtens(Op[1],Qlabels,zero=zero,currblock=currblock)
   end
   return out
 end
@@ -2704,6 +2712,7 @@ function getinds(currQtens::qarray, vec::Union{Array{intType,1},NTuple{N,intType
 end
 export getinds
 
+#=
 """
     Idhelper(A,iA)
 
@@ -2722,6 +2731,7 @@ function Idhelper(A::TensType,iA::Array{NTuple{2,P},1}) where P <: Integer
   finalsizes = (leftsizes...,rightsizes...)
   return lsize,finalsizes
 end
+=#
 
 #  import ..tensor.makeId
 """
@@ -2731,11 +2741,18 @@ generates an identity matrix from tensor `A` with indices `iA`
 
 See also: [`trace`](@ref)
 """
-function makeId(A::Qtens{W,Q},iA::Array{NTuple{2,P},1}) where {W <: Number, Q <: Qnum, P <: Integer}
-  lsize,finalsizes = Idhelper(A,iA)
-  newQnumMat = A.QnumMat[iA]
+function makeId(A::Qtens{W,Q},iA::Array{P,1}) where {W <: Number, Q <: Qnum, P <: Integer}
+#  lsize,finalsizes = Idhelper(A,iA)
+  lsize = prod(w->size(A,iA[w][1]),1:length(iA))
+  leftsizes = ntuple(w->size(A,iA[w][1]),length(iA))
+
+  finalsizes = (leftsizes...,leftsizes...)
+
+  leftQNs = [[getQnum(iA[w],x,A) for x = 1:size(A,iA[w])] for w = 1:length(iA)]
+  rightQNs = [inv.(leftQNs[a]) for a = 1:length(leftQNs)]
+  newQnumMat = vcat(leftQNs,rightQNs)
   typeA = eltype(A)
-  Id = rand(A,blockfct=makeIdarray)
+  Id = Qtens(typeA,newQnumMat,blockfct=makeIdarray)
   return Id
 end
 

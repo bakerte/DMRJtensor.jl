@@ -15,6 +15,11 @@
 Some MPO models for DMRG
 """
 
+"""
+  spinOps([,s=0.5])
+
+Generates operators Sp,Sm,Sz,Sy,Sx,O,Id for a heisenberg model (spin-`s`, default 1/2)
+"""
 function spinOps(;s=0.5)
   states = convert(Int64,2*s+1) #number of quantum states
 
@@ -32,7 +37,7 @@ function spinOps(;s=0.5)
   ox = (op+om)/2 #x matrix
   oy = (op-om)/(2*im) #y matrix
 
-  return ox,oy,oz,op,om,O,Id # equal to Sx,Sy,Sz,Sp,Sm,O,Id
+  return op,om,oz,oy,ox,O,Id # equal to Sp,Sm,Sz,Sy,Sx,O,Id
 end
 
 function spinOps(a::Float64)
@@ -42,7 +47,8 @@ export spinOps
 
 """
     fermionOps()
-Make fermion operators
+
+Make fermion operators Cup,Cdn,F,Nup,Ndn,Ndens,O,Id
 """
 function fermionOps()
   states = 4 #fock space size
@@ -65,17 +71,18 @@ function fermionOps()
   F[2,2] *= -1.
   F[3,3] *= -1.
 
-  return Cup,Cdn,Nup,Ndn,Ndens,F,O,Id
+  return Cup,Cdn,F,Nup,Ndn,Ndens,O,Id
 end
 export fermionOps
 
 """
     tJOps()
-Operators for a t-J model
+
+Operators for a t-J model Cup,Cdn,F,Nup,Ndn,Ndens,Sp,Sm,Sz,O,Id
 """
 function tJOps()
   #many of the Hubbard operators can be truncated
-  Cup,Cdn,Nup,Ndn,Ndens,F,O,Id = fermionOps()
+  Cup,Cdn,F,Nup,Ndn,Ndens,O,Id = fermionOps()
   states = 3 #fock space size
   s = states
   Cup = Cup[1:s,1:s]
@@ -95,12 +102,12 @@ function tJOps()
   Sp[3,2] = 1#/sqrt(2)
   Sm = Array(Sp') #spin lowering operator
 
-  return Cup,Cdn,Nup,Ndn,Ndens,F,Sz,Sp,Sm,O,Id
+  return Cup,Cdn,F,Nup,Ndn,Ndens,Sp,Sm,Sz,O,Id
 end
 export tJOps
 
 function heisenbergMPO(i::intType;spinmag::Number=0.5,J::Number=0.5,Ops::Tuple=spinOps(spinmag))
-  Sx,Sy,Sz,Sp,Sm,O,Id = Ops
+  Sp,Sm,Sz,Sy,Sx,O,Id = Ops
   return [Id O O O O;
           J*Sm O O O O;
           J*Sp O O O O;
@@ -110,7 +117,7 @@ end
 export heisenbergMPO
 
 function hubbardMPO(i::intType;t::Number=1.0,mu::Number=-2.0,HubU::Number=4.0,Ops::Tuple = fermionOps())
-  Cup, Cdn, Nup, Ndn, Ndens, F, O, Id = Ops
+  Cup,Cdn,F,Nup,Ndn,Ndens,O,Id = Ops
   onsite = mu * Ndens + HubU * Nup * Ndn
     return [Id  O O O O O;
         -t*Cup' O O O O O;
@@ -122,7 +129,7 @@ end
 export hubbardMPO
 
 function tjMPO(i::intType;t::Number=1.0,mu::Number=0.0,J::Number=1.0,Ops::Tuple = tJOps())
-    Cup,Cdn,Nup,Ndn,Ndens,F,Sz,Sp,Sm,O,Id = Ops
+    Cup,Cdn,F,Nup,Ndn,Ndens,Sp,Sm,Sz,O,Id = Ops
     onsite = mu * Ndens #- Ne*exp(-abs(i-Ns/2)/2)*Ndens
     return [Id  O O O O O O O O O;
             Cup' O O O O O O O O O;
