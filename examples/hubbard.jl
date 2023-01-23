@@ -9,7 +9,9 @@
 # This code is native to the julia programming language (v1.1.1) or (v1.5)
 #
 
-include("../src/DMRjulia.jl")
+
+path = "../../"
+include(path*"DMRjulia.jl")
 using .DMRJtensor
 
 Ns = 10
@@ -39,11 +41,11 @@ function makeHubbard(Ns,t,HubU,mu,Cup,Cdn,F,Nup,Ndn,Ndens)
   mpo = 0
   for i = 1:Ns-1
     #spin up
-    mpo += mpoterm(t,Cup,i,Cup',i+1,F)
-    mpo += mpoterm(-t,Cup',i,Cup,i+1,F)
+    mpo += mpoterm(-t,Cup,i,Cup',i+1,F)
+    mpo += mpoterm(t,Cup',i,Cup,i+1,F)
     #spin down
-    mpo += mpoterm(t,Cdn,i,Cdn',i+1,F)
-    mpo += mpoterm(-t,Cdn',i,Cdn,i+1,F)
+    mpo += mpoterm(-t,Cdn,i,Cdn',i+1,F)
+    mpo += mpoterm(t,Cdn',i,Cdn,i+1,F)
   end
 
   onsite = mu * Ndens + HubU * Nup * Ndn
@@ -83,14 +85,14 @@ println("#############")
 println("QN version")
 println("#############")
 
-energyQN = dmrg(qpsi,qmpo,maxm=45,sweeps=20,cutoff=1E-9)
+energyQN = dmrg(qpsi,qmpo,m=45,sweeps=20,cutoff=1E-9)
 
 
 println("#############")
 println("nonQN version")
 println("#############")
 
-energy = dmrg(psi,mpo,maxm=45,sweeps=20,cutoff=1E-9)
+energy = dmrg(psi,mpo,m=45,sweeps=20,cutoff=1E-9)
 
 println(energyQN-energy)
 

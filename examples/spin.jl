@@ -9,7 +9,9 @@
 # This code is native to the julia programming language (v1.1.1) or (v1.5)
 #
 
-include("../src/DMRjulia.jl")
+
+path = "../../"
+include(path*"DMRjulia.jl")
 using .DMRJtensor
 
 Ns = 100
@@ -52,7 +54,7 @@ mpo = makeheisenberg(Ns,Sp,Sm,Sz)
 
 #Quantum number specification
 @makeQNs "spin" U1
-Qlabels = [[spin(1),spin(-1)]]
+Qlabels = [spin(1),spin(-1)]
 
 qpsi,qmpo = MPS(Qlabels,psi,mpo)
 #qmpo,qpsi = MPO(Qlabels,mpo,psi)
@@ -63,11 +65,26 @@ println("#############")
 println("QN version")
 println("#############")
 
-@time energyQN = dmrg(qpsi,qmpo,maxm=45,sweeps=20,cutoff=1E-9,method="twosite")
+@time energyQN = dmrg(qpsi,qmpo,m=45,sweeps=20,cutoff=1E-9,method="twosite")
 
 println("#############")
 println("nonQN version")
 println("#############")
 
-@time energy = dmrg(psi,mpo,maxm=45,sweeps=20,cutoff=1E-9,method="twosite")
+@time energy = dmrg(psi,mpo,m=45,sweeps=20,cutoff=1E-9,method="twosite")
 
+
+dense_rho = correlationmatrix(psi,Sp,Sm)
+
+
+qSp,qSm,qSz = Qtens(Qlabels,Sp,Sm,Sz)
+symmetry_rho = correlationmatrix(qpsi,qSp,qSm)
+
+println("dense version: E = ",energy)
+
+display(dense_rho)
+
+println()
+
+println("symmetry version: E = ",energyQN)
+display(symmetry_rho)
