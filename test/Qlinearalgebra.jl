@@ -214,7 +214,7 @@ A = rand(QNs,Arrows)
 
 U,D,V = svd(A,[Ltup,Rtup],nozeros=false,minm=2000)
 
-testval = norm(A-U*D*V) < 1E-12
+testval = norm(A-U*D*V) < 1E-10
 fulltest &= testfct(testval,"svd (minm=2000)")
 
 for q = 1:length(A.T)

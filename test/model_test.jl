@@ -6,7 +6,7 @@ fulltest = true
 
 Ns = 10
 spinmag = 0.5
-#=
+
 hereQS = convert(Int64,2*spinmag+1)
 QS = cld(hereQS,2)
 
@@ -300,7 +300,7 @@ end
 fulltest &= testfct(sum(testvals)==length(testvals),"r-neighbour models with exponential interaction")
 
 println()
-=#
+
 
 Ns = 10
 
