@@ -10,7 +10,7 @@
 #
 
 
-path = "../../"
+path = "../src/"
 include(path*"DMRjulia.jl")
 using .DMRJtensor
 
