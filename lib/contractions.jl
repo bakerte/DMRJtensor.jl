@@ -1150,6 +1150,13 @@ function maincontractor(conjA::Bool,conjB::Bool,QtensA::Qtens{W,Q},vecA::Tuple,Q
   Aperm,transA = willperm(conjA,eltype(QtensA),AnopermL,AnopermR)
   Bperm,transB = willperm(conjB,eltype(QtensB),BnopermR,BnopermL)
 
+
+
+#  println("contractions:")
+#  println(Aperm," ",Bperm)
+#  println(transA," ",transB)
+
+
   if Aperm
     A = QtensA
   else
@@ -1218,10 +1225,29 @@ function maincontractor(conjA::Bool,conjB::Bool,QtensA::Qtens{W,Q},vecA::Tuple,Q
 
     Adiag = typeof(mulblockA) <: LinearAlgebra.Diagonal
     if Adiag || typeof(mulblockB) <: LinearAlgebra.Diagonal
-      if inplace
-        outTens[q] = Adiag ? lmul!(mulblockA,mulblockB) : rmul!(mulblockA,mulblockB)
+#      println("IN HERE? ",transA," ",transB)
+      if transA == 'N' && transB == 'N'
+        if inplace
+          outTens[q] = Adiag ? lmul!(mulblockA,mulblockB) : rmul!(mulblockA,mulblockB)
+        else
+          outTens[q] = mulblockA*mulblockB
+        end
       else
-        outTens[q] = mulblockA*mulblockB
+        if Adiag
+          if eltype(mulblockA) <: Complex
+            mulblockA = conj(mulblockA)
+          end
+        else
+          if eltype(mulblockB) <: Complex
+            mulblockB = conj(mulblockB)
+          end
+        end
+        if inplace
+          outTens[q] = Adiag ? rmul!(mulblockB,mulblockA) : lmul!(mulblockB,mulblockA)
+        else
+          outTens[q] = mulblockB*mulblockA
+        end
+        outTens[q] = transpose(outTens[q])
       end
     else
       if useZ
@@ -1309,7 +1335,7 @@ function checkcontract(A::TensType,iA::intvecType,B::TensType,iB::intvecType,Z::
   if size(mA)[[iA...]] == size(mB)[[iB...]]
     println("contracting over indices with equal sizes")
   else
-    error("some indices in A or B are not equal size; A->",size(mA)[iA],", B->",size(mB)[iB])
+    error("some indices in A or B are not equal size; A->",size(mA)[[iA...]],", B->",size(mB)[[iB...]])
   end
   if typeof(mA) <: qarray
     println("checking flux left:")
@@ -1331,7 +1357,8 @@ function checkcontract(A::TensType,iA::intvecType,B::TensType,iB::intvecType,Z::
       else
         error("unmatching quantum number vector lengths")
       end
-      println("maching quantum numbers on both indices")
+      println("matching quantum numbers on both indices")
+      println("FULL PASS")
     end
   end
   nothing

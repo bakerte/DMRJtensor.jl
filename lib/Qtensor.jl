@@ -580,7 +580,7 @@ Copies a Qtensor; `deepcopy` is inherently not type stable, so this function sho
 """
 function copy(Qt::Qtens{W,Q}) where {W <: Number, Q <: Qnum}
   newsize = [copy(Qt.size[i]) for i = 1:length(Qt.size)]
-  copyQtT = Array{typeof(Qt.T[1]),1}(undef,length(Qt.T))
+  copyQtT = Array{Array{eltype(Qt),2},1}(undef,length(Qt.T))
   @inbounds @simd for q = 1:length(copyQtT)
     copyQtT[q] = copy(Qt.T[q])
   end
@@ -2563,7 +2563,7 @@ function joinindex!(bareinds::intvecType,QtensA::Qtens{R,Q},QtensB::Qtens{S,Q};o
 
   joinloop!(A,B,commonblocks,origAsize...)
 
-  Ttype = typeof(eltype(QtensA.T[1])(0)*eltype(QtensB.T[1])(0))
+  Ttype = typeof(eltype(QtensA)(0)*eltype(QtensB)(0))
   newT = Array{Array{Ttype,2},1}(undef,length(A.T)+length(Bleftover))
   newindexlist = Array{NTuple{2,Array{intType,2}},1}(undef,length(newT))
   newQblocksum = Array{NTuple{2,Q},1}(undef,length(newT))
@@ -2948,6 +2948,9 @@ function checkflux(Qt::Qtens{W,Q},;silent::Bool = true) where {W <: Number, Q <:
   subcondition = !(sum(p) == sum(g) == length(A.T) && h)
   condition = condition && !subcondition
   if subcondition
+    println("Sector by sector ($(length(A.T)) sectors):")
+    println("T sizes ",p)
+    println("ind sizes ",g)
     println("sizes of fields is not correct (.T and .ind) and/or length of Qblocksum")
   end
 

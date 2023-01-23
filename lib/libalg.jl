@@ -57,6 +57,10 @@ for elty in (:Float32,:Float64,:ComplexF32,:ComplexF64)
       return libeigen!(copy(A),size(A,1),job=job,uplo=uplo)
     end
 
+    function libeigen(A::Union{AbstractMatrix{$elty},Vector{$elty}},a::Integer;job::Char='V',uplo::Char='U') #syev!
+      return libeigen!(copy(A),a,job=job,uplo=uplo)
+    end
+
     function libeigen(A::tens{$elty};job::Char='V',uplo::Char='U') #syev!
       return libeigen!(copy(A.T),size(A,1),job=job,uplo=uplo)
     end
@@ -77,6 +81,10 @@ for elty in (:Float32,:Float64,:ComplexF32,:ComplexF64)
       return fct(A,m,n,job=job)
     end
 
+    function libsvd!(A::tens{$elty},m::Integer,n::Integer;job::Char=inplaceChar,fct::Function=gesdd!) #gesvd!)#
+      return fct(A,m,n,job=job)
+    end
+
     function libsvd!(A::AbstractMatrix{$elty};job::Char=inplaceChar)
         return libsvd!(A,size(A,1),size(A,2),job=job)
     end
@@ -87,6 +95,10 @@ for elty in (:Float32,:Float64,:ComplexF32,:ComplexF64)
 
     function libsvd(A::Array{$elty,N},m::Integer,n::Integer;job::Char='S') where N #LinearAlgebra.LAPACK.gesdd!
         return libsvd!(copy(A),m,n,job=job)
+    end
+
+    function libsvd(A::tens{$elty},m::Integer,n::Integer;job::Char='S') #LinearAlgebra.LAPACK.gesdd!
+      return libsvd!(copy(A.T),m,n,job=job)
     end
 
     function libsvd(A::AbstractMatrix{$elty};job::Char='S')
@@ -261,7 +273,7 @@ for (stev, stebz, stegr, stein, elty) in
   @eval begin
 
       function stev!(dv::AbstractVector{$elty}, ev::AbstractVector{$elty},n::Integer; job::Char='V', rank::Integer=2) #stev!
-          Zmat = rank == 1 ? Array{$elty,1}(undef,job != 'N' ? n*n : 0) : Array{$elty,2}(undef,n,job != 'N' ? n : 0)
+          Zmat = #=rank == 1 ? Array{$elty,1}(undef,job != 'N' ? n*n : 0) : =#Array{$elty,2}(undef,n,job != 'N' ? n : 0)
           work = Vector{$elty}(undef, max(1, 2n-2))
           info = Ref{BlasInt}()
           ccall((@blasfunc($stev), libblastrampoline), Cvoid,
@@ -920,6 +932,7 @@ for (gesvd, gesdd, ggsvd, elty, relty) in
       function gesdd!(A::AbstractArray{$elty,N},m::Integer,n::Integer;job::Char='O') where N
           minmn  = min(m, n)
           
+#=
           if N == 2
             if job == 'A'
               U  = Array{$elty,2}(undef, m, m)
@@ -936,6 +949,7 @@ for (gesvd, gesdd, ggsvd, elty, relty) in
               VT = Array{$elty,2}(undef, n, 0)
             end
           else
+            =#
             if job == 'A'
               U  = Array{$elty,1}(undef, m*m)
               VT = Array{$elty,1}(undef, n*n)
@@ -950,7 +964,7 @@ for (gesvd, gesdd, ggsvd, elty, relty) in
               U  = Array{$elty,1}(undef, 0)
               VT = Array{$elty,1}(undef, 0)
             end
-          end
+#          end
 
           work   = Vector{$elty}(undef, 1)
           lwork  = BlasInt(-1)

@@ -150,6 +150,11 @@ using ..MPutil
     return out
   end
 
+
+  function sum(R::TNobj)
+    return sum(R.N)
+  end
+
   """
       *(a,b)
 

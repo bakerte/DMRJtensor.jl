@@ -1022,7 +1022,7 @@ end
 function MPS(Qlabels::Array{Array{Q,1},1},Ns::Integer;oc::Integer=1,type::DataType=Float64) where Q <: Qnum
   physindvec = [length(Qlabels[(i-1) % length(Qlabels) + 1]) for i = 1:Ns]
   psi = MPS(physindvec,oc=oc,type=type)
-  qpsi = makeqMPS(Qlabels,psi,silent=true)
+  qpsi = makeqMPS(Qlabels,psi)
   return qpsi
 end
 
@@ -1057,7 +1057,7 @@ function randMPS(Qlabels::Array{Array{Q,1},1},Ns::Integer;m::Integer=2,type::Dat
   return mps
 end
 
-function MPS(Tarray::Array{W,1},Qlabels::Array{Array{Q,1},1},arrows::Array{Bool,1}...;newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,silent::Bool=false,lastfluxzero::Bool=false)::MPS where {Q <: Qnum, W <: densTensType}
+function MPS(Tarray::Array{W,1},Qlabels::Array{Array{Q,1},1},arrows::Array{Bool,1}...;newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false)::MPS where {Q <: Qnum, W <: densTensType}
 
   A = MPS(Tarray,arrows...)
   return makeqMPS(Qlabels,A)
@@ -1180,13 +1180,16 @@ creates quantum number MPS from regular MPS according to `Qlabels`
 + `setflux::Bool`: toggle to force this to be the total flux of the MPS tensor
 + `flux::Qnum`: quantum number to force total MPS flux to be if setflux=true
 + `randomize::Bool`: randomize last tensor if flux forces a zero tensor
-+ `warning::Bool`: Toggle warning message if last tensor has no values or is zero
 """
 function makeqMPS(Qlabels::Array{Array{Q,1},1},mps::MPS,arrows::Array{Bool,1}...;newnorm::Bool=true,setflux::Bool=false,
-                  flux::Q=Q(),randomize::Bool=true,override::Bool=true,silent::Bool=false,lastfluxzero::Bool=false)::MPS where Q <: Qnum
+                  flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false)::MPS where Q <: Qnum
   if newnorm
-    if !silent
-      println("(makeqMPS: If converting from a non-QN MPS to a QN MPS, then beware that applying a 3S or adding noise in general to the MPS is not considered when calling makeqMPS...use move! to regauge the MPS to another site to remove these degrees of freedom)")
+    if mps.oc < length(mps)
+      move!(mps,mps.oc+1)
+      move!(mps,mps.oc-1)
+    else
+      move!(mps,mps.oc-1)
+      move!(mps,mps.oc+1)
     end
     start_norm = expect(mps)
   end
@@ -1267,17 +1270,16 @@ creates quantum number MPS from regular MPS according to `Qlabels`
 + `setflux::Bool`: toggle to force this to be the total flux of the MPS tensor
 + `flux::Qnum`: quantum number to force total MPS flux to be if setflux=true
 + `randomize::Bool`: randomize last tensor if flux forces a zero tensor
-+ `silent::Bool`: Toggle warning message if last tensor has no values or is zero
 """
-function makeqMPS(Qlabels::Array{Q,1},mps::MPS,arrows::Array{Bool,1}...;newnorm::Bool=true,setflux::Bool=false,silent::Bool=false,
+function makeqMPS(Qlabels::Array{Q,1},mps::MPS,arrows::Array{Bool,1}...;newnorm::Bool=true,setflux::Bool=false,
   flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false)::MPS where Q <: Qnum
-  return makeqMPS([Qlabels],mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,silent=silent,lastfluxzero=lastfluxzero)
+  return makeqMPS([Qlabels],mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
 end
 
 function makeqMPS(Qlabels::W,arr::Array,arrows::Array{Bool,1}...;oc::Integer=1,newnorm::Bool=true,setflux::Bool=false,
-                  flux::Q=Q(),randomize::Bool=true,override::Bool=true,silent::Bool=false,lastfluxzero::Bool=false)::MPS where W <: Union{Array{Array{Q,1},1},Array{Q,1}} where Q <: Qnum
+                  flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false)::MPS where W <: Union{Array{Array{Q,1},1},Array{Q,1}} where Q <: Qnum
   mps = MPS(arr,oc=oc)
-  makeqMPS(Qlabels,mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,silent=silent,lastfluxzero=lastfluxzero)
+  makeqMPS(Qlabels,mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
 end
 export makeqMPS
 
@@ -1373,25 +1375,25 @@ export makeqMPO
 
 
 #ease of use
-function MPO(Qlabels::Array{Q,1},mpo::MPO,mps::MPS,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,silent::Bool=false,lastfluxzero::Bool=false) where Q <: Qnum
+function MPO(Qlabels::Array{Q,1},mpo::MPO,mps::MPS,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
   qmpo = makeqMPO([Qlabels],mpo,arrows...,infinite=infinite,unitcell=unitcell)
-  qpsi = makeqMPS([Qlabels],mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,silent=silent,lastfluxzero=lastfluxzero)
+  qpsi = makeqMPS([Qlabels],mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
   return qmpo,qpsi
 end
 
-function MPS(Qlabels::Array{Q,1},mps::MPS,mpo::MPO,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,silent::Bool=false,lastfluxzero::Bool=false) where Q <: Qnum
+function MPS(Qlabels::Array{Q,1},mps::MPS,mpo::MPO,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
   qmpo = makeqMPO([Qlabels],mpo,arrows...,infinite=infinite,unitcell=unitcell)
-  qpsi = makeqMPS([Qlabels],mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,silent=silent,lastfluxzero=lastfluxzero)
+  qpsi = makeqMPS([Qlabels],mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
   return qpsi,qmpo
 end
 
-function MPO(Qlabels::Array{Q,1},mpo::MPO,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,silent::Bool=false,lastfluxzero::Bool=false) where Q <: Qnum
+function MPO(Qlabels::Array{Q,1},mpo::MPO,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
   qmpo = makeqMPO([Qlabels],mpo,arrows...,infinite=infinite,unitcell=unitcell)
   return qmpo
 end
 
-function MPS(Qlabels::Array{Q,1},mps::MPS,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,silent::Bool=false,lastfluxzero::Bool=false) where Q <: Qnum
-  qpsi = makeqMPS([Qlabels],mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,silent=silent,lastfluxzero=lastfluxzero)
+function MPS(Qlabels::Array{Q,1},mps::MPS,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
+  qpsi = makeqMPS([Qlabels],mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
   return qpsi
 end
 
@@ -1399,24 +1401,24 @@ end
 
 
 
-function MPO(Qlabels::Array{Array{Q,1},1},mpo::MPO,mps::MPS,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,silent::Bool=false,lastfluxzero::Bool=false) where Q <: Qnum
+function MPO(Qlabels::Array{Array{Q,1},1},mpo::MPO,mps::MPS,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
   qmpo = makeqMPO(Qlabels,mpo,arrows...,infinite=infinite,unitcell=unitcell)
-  qpsi = makeqMPS(Qlabels,mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,silent=silent,lastfluxzero=lastfluxzero)
+  qpsi = makeqMPS(Qlabels,mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
   return qmpo,qpsi
 end
 
-function MPS(Qlabels::Array{Array{Q,1},1},mps::MPS,mpo::MPO,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,silent::Bool=false,lastfluxzero::Bool=false) where Q <: Qnum
+function MPS(Qlabels::Array{Array{Q,1},1},mps::MPS,mpo::MPO,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
   qmpo = makeqMPO(Qlabels,mpo,arrows...,infinite=infinite,unitcell=unitcell)
-  qpsi = makeqMPS(Qlabels,mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,silent=silent,lastfluxzero=lastfluxzero)
+  qpsi = makeqMPS(Qlabels,mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
   return qpsi,qmpo
 end
 
-function MPO(Qlabels::Array{Array{Q,1},1},mpo::MPO,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,silent::Bool=false,lastfluxzero::Bool=false) where Q <: Qnum
+function MPO(Qlabels::Array{Array{Q,1},1},mpo::MPO,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
   qmpo = makeqMPO(Qlabels,mpo,arrows...,infinite=infinite,unitcell=unitcell)
   return qmpo
 end
 
-function MPS(Qlabels::Array{Array{Q,1},1},mps::MPS,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,silent::Bool=false,lastfluxzero::Bool=false) where Q <: Qnum
-  qpsi = makeqMPS(Qlabels,mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,silent=silent,lastfluxzero=lastfluxzero)
+function MPS(Qlabels::Array{Array{Q,1},1},mps::MPS,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
+  qpsi = makeqMPS(Qlabels,mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
   return qpsi
 end
