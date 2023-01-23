@@ -195,10 +195,13 @@ function truncate(D::Array{W,1}...;m::Integer=0,minm::Integer=1,mag::Float64=0.,
         counts[r] += 1
       end
 
-#=
-      altcounts = zeros(intType,nQNs)
+      #=
+      println()
 
-      for q = 1:nQNs
+
+      altcounts = Array{intType,1}(undef,nQNs)
+
+      @inbounds @simd for q = 1:nQNs
         altcounts[q] = length(qranges[q])
       end
 
@@ -211,19 +214,19 @@ function truncate(D::Array{W,1}...;m::Integer=0,minm::Integer=1,mag::Float64=0.,
       rstop = nQNs
 
       notallfound = nQNs
-      while notallfound > 0 && z > 0#for z = thism:-1:1
+      @time while notallfound > 0 && z > 0#for z = thism:-1:1
 
 #        println(unfoundsectormax[sectionorder])
-#=
-        while !(unfoundsectormax[sectionorder[rstart]])
+
+        if !(unfoundsectormax[sectionorder[rstart]])
           rstart += 1
         end
         
 
-        while !(unfoundsectormax[sectionorder[rstop]])
+        if !(unfoundsectormax[sectionorder[rstop]])
           rstop -= 1
         end
-=#
+
 
 #println(order[z]," ",qranges)
 
@@ -263,7 +266,7 @@ function truncate(D::Array{W,1}...;m::Integer=0,minm::Integer=1,mag::Float64=0.,
 
 #      println(altcounts)
 
-      for r = rstart:rstop
+@time @inbounds for r = rstart:rstop
         rorder = sectionorder[r]
         if unfoundsectormax[rorder]
           altcounts[rorder] = 0
@@ -273,10 +276,17 @@ function truncate(D::Array{W,1}...;m::Integer=0,minm::Integer=1,mag::Float64=0.,
       println(altcounts)
 #println("should be:")
       println(counts)
-=#
+      println(counts-altcounts)
+
+      if sum(counts-altcounts) != 0
+        error("SOMEWHERE")
+      end
+
+#      println(sum(counts-altcounts))
+
 #      println()
 #counts = altcounts
-
+=#
 
     else
       @inbounds @simd for q = 1:length(D)
@@ -528,9 +538,6 @@ function eigen(AA::Array{W,G},B::Array{W,R}...;cutoff::Float64 = 0.,m::Integer =
 
   U = reshape!(U,a,b)
 
-#  println("WHERE:")
-#  println(size(U)," ",size(AA))
-
   m_intervals,sizeD,truncerr,sumD = truncate(Dsq,m=m,minm=minm,mag=mag,cutoff=cutoff,effZero=effZero,nozeros=nozeros,power=power,keepdeg=keepdeg,rev=rev)
 
   Dtrunc,Utrunc = Dsq,U
@@ -562,7 +569,10 @@ function eigen(AA::Array{W,G},B::Array{W,R}...;cutoff::Float64 = 0.,m::Integer =
   end
 
   if transpose
-    Utrunc = conj!(permutedims(Utrunc,[2,1]))
+    Utrunc = permutedims(Utrunc,[2,1])
+    if eltype(Utrunc) <: Complex
+      conj!(Utrunc)
+    end
   end
 
   return LinearAlgebra.Diagonal(Dtrunc),Utrunc,truncerr,sumD
@@ -1076,12 +1086,6 @@ function eigen!(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,effZero::
       keepq[q] = false
     end
   end
-
-#  for q = 1:length(finalinds)
-#    if keepq[q]
-#      println(q," ",finalinds[q])
-#    end
-#  end
 
   if length(newqindexL) > thism
 
