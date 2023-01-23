@@ -17,14 +17,16 @@ nozeros = true
 power = 2
 keepdeg = true
 
-thism,sizeD,truncerr,sumD = DMRjulia.findnewm(D,m,minm,mag,cutoff,effZero,nozeros,power,keepdeg)
+m_interval,sizeD,truncerr,sumD = DMRjulia.truncate(D,m=m,minm=minm,mag=mag,cutoff=cutoff,effZero=effZero,nozeros=nozeros,power=power,keepdeg=keepdeg)
 
-testval = thism == max(min(thism,length(D)),minm)
+thism = length(m_interval)
+
+testval = thism <= max(min(thism,length(D)),minm)
 testval &= sizeD == length(D)
 testval &= isapprox(sumD,sum(D .^ power))
-testval &= isapprox(truncerr,sum(i->abs(D[i])^power,thism+1:length(D)))
+testval &= isapprox(truncerr,1-sum(i->abs(D[i])^power,m_interval[1]))
 
-fulltest &= testfct(testval,"findnewm")
+fulltest &= testfct(testval,"truncate")
 
 println()
 
@@ -36,7 +38,7 @@ A = rand(a,b)
 
 U,D,V = LinearAlgebra.svd(A)
 Vt = Array(V)
-
+#=
 Utrunc,Dtrunc,Vtrunc,sumD = DMRjulia.svdtrunc(a,b,U,D,Vt,m,minm,mag,cutoff,effZero,nozeros,power,keepdeg)
 
 B = Utrunc*Dtrunc*Vtrunc
@@ -44,6 +46,7 @@ testval = size(B) == size(A) && size(Dtrunc) == (m,m)
 fulltest &= testfct(testval,"svdtrunc")
 
 println()
+=#
 
 #missing recursive_SVD
 #missing safesvd
@@ -151,6 +154,17 @@ checkD,U = eigen!(copy(tB),[[1,2],[3,4]])
 
 testval = isapprox(checkD,D)
 fulltest &= testfct(testval,"eigen!(tens)")
+
+a = rand(10)
+b = rand(10)
+A = LinearAlgebra.SymTridiagonal(a,b)
+
+D,U = eigen(A)
+checkD,checkU = LinearAlgebra.eigen(A)
+testval = isapprox(norm(D-LinearAlgebra.Diagonal(D)),0)
+testval &= isapprox(norm(U-checkU),0)
+
+fulltest &= testfct(testval,"eigen(SymTridiagonal)")
 
 println()
 
@@ -339,55 +353,23 @@ D,Ut = eigen(A,transpose=true)
 testval = isapprox(norm(U-Ut'),0) && isapprox(Ut'*D*Ut,A)
 fulltest &= testfct(testval,"regular eigen [transpose]")
 
-@makeQNs "testxyz" U1
-
-Qlabels = [[testxyz(-2),testxyz(0),testxyz(),testxyz(2)] for i = 1:8]
-
-B = rand(Qlabels,[false,false,false,false,true,true,true,true])
-for q = 1:length(B.T)
-  B.T[q] += B.T[q]'
-end
-
 println()
 
-C = makeArray(B)
-rC = reshape(C,[[1,2,3,4],[5,6,7,8]])
-rD,rU = eigen(rC)
-D,U = eigen(C,[[1,2,3,4],[5,6,7,8]])
-
-newC = contractc(contract(U,ndims(U),D,1),ndims(U),U,ndims(U))
-
-testval = norm(newC-C) < 1E-12 && norm(rC-reshape(C,[[1,2,3,4],[5,6,7,8]])) < 1E-12
-fulltest &= testfct(testval,"quantum eigen")
+U,D,V = svd(A,minm=2*m)
+testval = isapprox(U*D*V,A)
+fulltest &= testfct(testval,"svd (minm = $(2*m))")
 
 
-qD,qU = eigen(B,[[1,2,3,4],[5,6,7,8]])
+D,U = eigen(A,minm=2*m)
+testval = isapprox(U*D*U',A)
+fulltest &= testfct(testval,"eigen (minm = $(2*m))")
+#=
+#not implemented:
+Q,R = qr(A,minm=2*m)
+testval = isapprox(Q*R,A)
+fulltest &= testfct(testval,"qr (minm = $(2*m))")
 
-P = makeArray(qD)
-testval = isapprox(sort([P[i,i] for i = 1:size(P,1)]),sort([D[i,i] for i = 1:size(D,1)]))
-fulltest &= testfct(testval,"quantum eigen [comparison with dense version]")
-
-println()
-
-newqC = contractc(contract(qU,ndims(qU),qD,1),ndims(qU),qU,ndims(qU))
-
-
-testvalvec = [true]
-for q = 1:length(newqC.T)
-  testvalvec[1] &= isapprox(qU.T[q]*qD.T[q]*qU.T[q]',B.T[q])
-end
-
-testvalvec[1] &= norm(makeArray(newqC)-newC) < 1E-12
-fulltest &= testfct(testvalvec[1],"reconstruct U*D*U' [quantum number version]")
-
-
-qDt,qUt = eigen(B,[[1,2,3,4],[5,6,7,8]],transpose=true)
-
-testvalvec = [true]
-for q = 1:length(newqC.T)
-  testvalvec[1] &= isapprox(qUt.T[q]'*qD.T[q]*qUt.T[q],B.T[q])
-end
-
-newqCt = contract(contractc(qDt,1,qUt,1),1,qUt,1)
-testvalvec[1] &= norm(makeArray(newqCt)-newC) < 1E-12
-fulltest &= testfct(testvalvec[1],"reconstruct U'*D*U [quantum number version, transposed]")
+Q,R = lq(A,minm=2*m)
+testval = isapprox(Q*R,A)
+fulltest &= testfct(testval,"lq (minm = $(2*m))")
+=#

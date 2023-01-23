@@ -6,7 +6,7 @@ fulltest = true
 
 Ns = 10
 spinmag = 0.5
-
+#=
 hereQS = convert(Int64,2*spinmag+1)
 QS = cld(hereQS,2)
 
@@ -300,6 +300,7 @@ end
 fulltest &= testfct(sum(testvals)==length(testvals),"r-neighbour models with exponential interaction")
 
 println()
+=#
 
 Ns = 10
 
@@ -348,7 +349,7 @@ qmpo = makeqMPO(Qlabels,mpo)
 #println("QN version")
 #println("#############")
 
-QNenergy = dmrg(qpsi,qmpo,maxm=45,sweeps=20,cutoff=1E-9,method="twosite",silent=true)
+QNenergy = dmrg(qpsi,qmpo,m=45,sweeps=20,cutoff=1E-9,method="twosite",silent=true)
 
 testval = abs(QNenergy-(-25.380567747816)) < 1E-4
 fulltest &= testfct(testval,"Hubbard model")

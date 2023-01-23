@@ -364,15 +364,15 @@ println()
 
 println()
 
-A = makeqMPS(Qlabels[1],psi,silent=true)
+A = makeqMPS(Qlabels[1],psi)
 testval = isapprox(expect(A),expect(psi))
 fulltest &= testfct(testval,"makeqMPS(Vector{Qnum},MPS)")
 
-A = makeqMPS(Qlabels,psi,silent=true)
+A = makeqMPS(Qlabels,psi)
 testval = isapprox(expect(A),expect(psi))
 fulltest &= testfct(testval,"makeqMPS(Vector{Vector{Qnum}},MPS)")
 
-A = makeqMPS(Qlabels,psi.A,silent=true)
+A = makeqMPS(Qlabels,psi.A)
 testval = isapprox(expect(A),expect(psi))
 fulltest &= testfct(testval,"makeqMPS(Vector{Vector{Qnum}},vector)")
 

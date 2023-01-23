@@ -283,7 +283,7 @@ fulltest &= testfct(testval,"applyOps(psi,sites,Op)")
 
 println()
 
-dmrg(psi,mpo,sweeps=20,maxm=45,cutoff=1E-9,silent=true)
+dmrg(psi,mpo,sweeps=20,m=45,cutoff=1E-9,silent=true)
 
 
 
@@ -381,7 +381,7 @@ En = expect(psi,mpo)
 lambda = 0.1
 
 penalty!(mpo,lambda,psi,compress=false)
-shiftedEn = dmrg(psi,mpo,sweeps=20,maxm=45,cutoff=1E-9,silent=true)
+shiftedEn = dmrg(psi,mpo,sweeps=20,m=45,cutoff=1E-9,silent=true)
 testval = isapprox(abs(En-shiftedEn),lambda)
 fulltest &= testfct(testval,"penalty!(mpo,Real,mps")
 

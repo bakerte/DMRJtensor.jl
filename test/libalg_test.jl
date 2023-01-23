@@ -33,6 +33,9 @@ for g = 1:length(typevec)
 
   local U,D,V = DMRjulia.libsvd(A)
 
+  local U = reshape(U,200,100)
+  local V = reshape(V,100,100)
+
   local tA = tens(A)
   local tU,tD,tV = DMRjulia.libsvd(tA)
 

@@ -116,14 +116,14 @@ fulltest &= testfct(testval,"dot(A,B,C) [Array || tens]")
 
 println()
 
-A = rand(20,40,30,10)
-B = rand(10,30,20,40)
+A = rand(20,5,6,10)
+B = rand(10,6,20,5)
 
 C = A*B
 tC = tens(A)*tens(B)
 
-testval = size(C) == (20,40,30,30,20,40)
-testval &= size(tC) == (20,40,30,30,20,40)
+testval = size(C) == (20,5,6,6,20,5)
+testval &= size(tC) == (20,5,6,6,20,5)
 testval = isapprox(reshape(C,prod(size(C))),tC.T)
 fulltest &= testfct(testval,"*(A,B) [Array || tens]")
 
