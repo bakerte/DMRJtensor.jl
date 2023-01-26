@@ -148,30 +148,30 @@ fulltest &= testfct(testval,"*(A,diagonal) [Array || tens, commutes]")
 println()
 
 C = contract(copy(A),3,B,1)
-tC = rmul!(copy(tens(A)),B)
+tC = dmul!(copy(tens(A)),B)
 
 testval = isapprox(reshape(C,prod(size(C))),tC.T)
-fulltest &= testfct(testval,"rmul!(A,diagonal)")
+fulltest &= testfct(testval,"dmul!(A,diagonal)")
 
 C = 3. * copy(A)
-tC = rmul!(3.,copy(tens(A)))
+tC = dmul!(3.,copy(tens(A)))
 
 testval = isapprox(reshape(C,prod(size(C))),tC.T)
-fulltest &= testfct(testval,"rmul!(tens,number)")
+fulltest &= testfct(testval,"dmul!(tens,number)")
 
 println()
 
 D = contract(B,2,copy(A),1)
-tD = lmul!(B,copy(tens(A)))
+tD = dmul!(B,copy(tens(A)))
 
 testval = isapprox(reshape(D,prod(size(D))),tD.T)
-fulltest &= testfct(testval,"lmul!(diagonal,tens)")
+fulltest &= testfct(testval,"dmul!(diagonal,tens)")
 
 D = copy(A) * 3.
-tD = lmul!(copy(tens(A)),3.)
+tD = dmul!(copy(tens(A)),3.)
 
 testval = isapprox(reshape(D,prod(size(D))),tD.T)
-fulltest &= testfct(testval,"lmul!(number,tens)")
+fulltest &= testfct(testval,"dmul!(number,tens)")
 
 
 println()

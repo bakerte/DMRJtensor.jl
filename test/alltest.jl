@@ -41,7 +41,11 @@ tests = [
 "MPlarge_test.jl",
 "MPOauto_test.jl",
 "model_test.jl",
-"tensornetwork_test.jl"
+"tensornetwork_test.jl"#,
+######
+######
+######
+#"dmrg_test.jl"
 ]
 
 fulltestrecord = Array{Bool,1}(undef,length(tests))
