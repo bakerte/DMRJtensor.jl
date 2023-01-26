@@ -281,12 +281,19 @@ function MPO(opstring::MPOterm,reverse::Bool=true)
     end
   end
 
-  value_mpo = 0
-
   regularterms = findall(w->!singlesite[w],1:length(singlesite))
-  for a in regularterms
+  mpovec = Array{Any,1}(undef,Threads.nthreads())
+  value_mpo_vec = Array{Any,1}(undef,Threads.nthreads())
+  for i = 1:length(mpovec)
+    mpovec[i] = 0
+    value_mpo_vec[i] = 0
+  end
+  Threads.@threads for a in regularterms
+
+    numthread = Threads.threadid()
+
     if length(opstring) == 1
-      value_mpo += opstring[1]
+      value_mpo_vec[numthread] += opstring[1]
     else
 
       value = opstring[a][1]
@@ -295,15 +302,18 @@ function MPO(opstring::MPOterm,reverse::Bool=true)
 
       trailon = length(opstring[a]) % 2 == 0
       if trailon
-        mpo += mpoterm(value,Opvec,posvec,base,opstring[a][end])
+        mpovec[numthread] += mpoterm(value,Opvec,posvec,base,opstring[a][end])
       else
-        mpo += mpoterm(value,Opvec,posvec,base)
+        mpovec[numthread] += mpoterm(value,Opvec,posvec,base)
       end
     end
   end
+  for i = 1:length(mpovec)
+    mpo += mpovec[i]
+    mpo += value_mpo_vec[i]
+  end
 
   mpo += singlempo
-  mpo += value_mpo
 
   if reverse && typeof(mpo[1]) <: qarray
     for a = 1:length(mpo)

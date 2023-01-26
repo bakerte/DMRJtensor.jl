@@ -881,11 +881,11 @@ function searchindex(C::denstens,a::Integer...)
   return outnum
 end
 
-function searchindex(C::Array,a::Integer...)
+function searchindex(C::AbstractArray,a::Integer...)
   return searchindex(C,a)
 end
 
-function searchindex(C::Array{W,N},a::NTuple{N,intType}) where {W <: Number, N}
+function searchindex(C::Union{Array{W,N},LinearAlgebra.Diagonal{W,Array{W,1}}},a::NTuple{N,intType}) where {W <: Number, N}
   return C[a...]
 end
 export searchindex

@@ -404,8 +404,8 @@ end
 
 
 
-import LinearAlgebra.rmul!
-function rmul!(Y::tens{R},X::LinearAlgebra.Diagonal{W, Vector{W}}) where {R <: Number, W <: Number}
+#import LinearAlgebra.rmul!
+function dmul!(Y::tens{R},X::LinearAlgebra.Diagonal{W, Vector{W}}) where {R <: Number, W <: Number}
   longdim = cld(length(Y.T),size(X,1))
   for y = 1:size(X,1)
     zval = longdim*(y-1)
@@ -416,21 +416,33 @@ function rmul!(Y::tens{R},X::LinearAlgebra.Diagonal{W, Vector{W}}) where {R <: N
   end
   return Y
 end
+
+function dmul!(Y::Array{R,N},X::LinearAlgebra.Diagonal{W, Vector{W}}) where {R <: Number, N, W <: Number}
+  longdim = cld(length(Y),size(X,1))
+  for y = 1:size(X,1)
+    zval = longdim*(y-1)
+    val = X[y,y]
+    @inbounds @simd for x = 1:longdim
+      Y[x + zval] *= val
+    end
+  end
+  return Y
+end
 #=
 function rmul!(Y::AbstractArray{W,N},X::LinearAlgebra.Diagonal{W, Vector{W}}) where {R <: Number, W <: Number, N}
   return LinearAlgebra.rmul!(Y,X)
 end
 =#
-function rmul!(X::R,Y::tens{W}) where {R <: Number, W <: Number}
+function dmul!(X::R,Y::tens{W}) where {R <: Number, W <: Number}
   return tensorcombination!((X,),Y)
 end
-function rmul!(Y::tens{W},X::R) where {R <: Number, W <: Number}
-  return rmul!(X,Y)
+function dmul!(Y::tens{W},X::R) where {R <: Number, W <: Number}
+  return dmul!(X,Y)
 end
-export rmul!
+#export rmul!
 
-import LinearAlgebra.lmul!
-function lmul!(X::LinearAlgebra.Diagonal{R, Vector{R}},Y::tens{W}) where {R <: Number, W <: Number}
+#import LinearAlgebra.lmul!
+function dmul!(X::LinearAlgebra.Diagonal{R, Vector{R}},Y::tens{W}) where {R <: Number, W <: Number}
   longdim = cld(length(Y.T),size(X,1))
   for y = 1:longdim
     tempind = size(X,1)*(y-1)
@@ -440,18 +452,39 @@ function lmul!(X::LinearAlgebra.Diagonal{R, Vector{R}},Y::tens{W}) where {R <: N
   end
   return Y
 end
+
+function dmul!(X::LinearAlgebra.Diagonal{R, Vector{R}},Y::Array{W,N}) where {R <: Number, W <: Number, N}
+  longdim = cld(length(Y),size(X,1))
+  for y = 1:longdim
+    tempind = size(X,1)*(y-1)
+    @inbounds @simd for x = 1:size(X,1)
+      Y[x + tempind] *= X[x,x]
+    end
+  end
+  return Y
+end
+
+function dmul(X::LinearAlgebra.Diagonal{R, Vector{R}},Y::densTensType) where {R <: Number}
+  return dmul!(X,copy(Y))
+end
+
+function dmul(X::densTensType,Y::LinearAlgebra.Diagonal{R, Vector{R}}) where {R <: Number}
+  return dmul!(copy(X),Y)
+end
 #=
 function lmul!(X::LinearAlgebra.Diagonal{R, Vector{R}},Y::AbstractArray{W,N}) where {R <: Number, W <: Number, N}
   return LinearAlgebra.lmul!(Y,X)
 end
 =#
-function lmul!(Y::TensType,X::R) where {R <: Number}
+#=
+function dmul!(Y::TensType,X::R) where {R <: Number}
   return tensorcombination!((X,),Y)
 end
-function lmul!(X::R,Y::tens{W}) where {R <: Number, W <: Number}
-  return lmul!(Y,X)
+function dmul!(X::R,Y::tens{W}) where {R <: Number, W <: Number}
+  return dmul!(Y,X)
 end
-export lmul!
+=#
+export dmul!
 
 
 function contract(A::LinearAlgebra.Diagonal{W,Vector{W}},B::densTensType;alpha::Number=eltype(A)(1)) where W <: Number
@@ -460,14 +493,23 @@ end
 
 function contract!(A::LinearAlgebra.Diagonal{W,Vector{W}},B::densTensType;alpha::Number=eltype(A)(1)) where W <: Number
   out = dot(A,B,Lfct=identity,Rfct=identity)
-  return isapprox(alpha,1) ? out : lmul!(alpha,out)
+  return  alpha*out
 end
-
+#=
 function contract(A::Union{TensType,LinearAlgebra.Diagonal{W, Vector{W}}},iA::intvecType,B::Union{TensType,LinearAlgebra.Diagonal{W, Vector{W}}},iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1)) where W <: Number
   return diagcontract(A,convIn(iA),B,convIn(iB),Z...,alpha=alpha,beta=beta)
 end
+=#
 
-function diagcontract(A::LinearAlgebra.Diagonal{W, Vector{W}},iA::intvecType,B::TensType,iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1)) where W <: Number
+function contract(A::LinearAlgebra.Diagonal{W, Vector{W}},iA::intvecType,B::densTensType,iB::intvecType,Z::densTensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1)) where W <: Number
+  return diagcontract!(A,convIn(iA),B,convIn(iB),Z...,alpha=alpha,beta=beta,inplace=false)
+end
+
+function contract(A::densTensType,iA::intvecType,B::LinearAlgebra.Diagonal{W, Vector{W}},iB::intvecType,Z::densTensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1)) where W <: Number
+  return diagcontract!(A,convIn(iA),B,convIn(iB),Z...,alpha=alpha,beta=beta,inplace=false)
+end
+
+function diagcontract!(A::LinearAlgebra.Diagonal{W, Vector{W}},iA::intvecType,B::densTensType,iB::intvecType,Z::densTensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1),inplace::Bool=true) where W <: Number
 
   Lperm = true
   w = 0
@@ -484,19 +526,19 @@ function diagcontract(A::LinearAlgebra.Diagonal{W, Vector{W}},iA::intvecType,B::
   end
 
   if Lperm
-    C = A*B
+    C = inplace ? dmul!(A,B) : dmul(A,B)
   elseif Rperm
-    C = B*A
+    C = inplace ? dmul!(B,A) : dmul(B,A)
   else
     notvecB = findnotcons(ndims(B),iB)
     mB = prepareT(B,iB,notvecB,false)
-    C = A*mB
+    C = inplace ? dmul!(A,mB) : dmul(A,mB)
   end
   if length(Z) == 0
     if isapprox(alpha,1)
       out = C
     else
-      out = rmul!(alpha,C)
+      out = dmul!(alpha,C)
     end
   else
     out = tensorcombination!((alpha,beta),C,Z[1])
@@ -504,7 +546,8 @@ function diagcontract(A::LinearAlgebra.Diagonal{W, Vector{W}},iA::intvecType,B::
   return out
 end
 
-function diagcontract(A::TensType,iA::intvecType,B::LinearAlgebra.Diagonal{W, Vector{W}},iB::intvecType,Z::TensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1)) where W <: Number
+function diagcontract!(A::densTensType,iA::intvecType,B::LinearAlgebra.Diagonal{W, Vector{W}},iB::intvecType,Z::densTensType...;alpha::Number=eltype(A)(1),beta::Number=eltype(A)(1),inplace::Bool=true) where W <: Number
+
   Lperm = true
   w = 0
   while Lperm && w < length(iA)
@@ -520,25 +563,26 @@ function diagcontract(A::TensType,iA::intvecType,B::LinearAlgebra.Diagonal{W, Ve
   end
 
   if Lperm
-    C = B*A
+    C = inplace ? dmul!(B,A) : dmul(B,A)
   elseif Rperm
-    C = A*B
+    C = inplace ? dmul!(A,B) : dmul(A,B)
   else
     notvecA = findnotcons(ndims(A),iA)
     mA = prepareT(A,notvecA,iA,false)
-    C = mA*B
+    C = inplace ? dmul!(mA,B) : dmul(mA,B)
   end
   if length(Z) == 0
     if isapprox(alpha,1)
       out = C
     else
-      out = rmul!(alpha,C)
+      out = dmul!(alpha,C)
     end
   else
     out = tensorcombination!((alpha,beta),C,Z[1])
   end
   return out
 end
+export diagcontract!
 
 """
   C = contract(A,B[,alpha=])
@@ -550,7 +594,7 @@ See also: [`ccontract`](@ref) [`contractc`](@ref) [`ccontractc`](@ref)
 function contract(A::TensType,B::TensType;alpha::Number=eltype(A)(1))
   mA,mB = checkType(A,B)
   out = dot(mA,mB,Lfct=identity,Rfct=identity)
-  return isapprox(alpha,1) ? out : lmul!(alpha,out)
+  return  alpha*out
 end
 
 """
@@ -563,7 +607,7 @@ See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 function ccontract(A::TensType,B::TensType;alpha::Number=eltype(A)(1))
   mA,mB = checkType(A,B)
   out = dot(mA,mB,Lfct=adjoint,Rfct=identity)
-  return isapprox(alpha,1) ? out : lmul!(alpha,out)
+  return  alpha*out
 end
 
 """
@@ -576,7 +620,7 @@ See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 function contractc(A::TensType,B::TensType;alpha::Number=eltype(A)(1))
   mA,mB = checkType(A,B)
   out = dot(mA,mB,Lfct=identity,Rfct=adjoint)
-  return isapprox(alpha,1) ? out : lmul!(alpha,out)
+  return  alpha*out
 end
 
 """
@@ -589,7 +633,7 @@ See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 function ccontractc(A::TensType,B::TensType;alpha::Number=eltype(A)(1))
   mA,mB = checkType(A,B)
   out = dot(mA,mB,Lfct=adjoint,Rfct=adjoint)
-  return isapprox(alpha,1) ? out : lmul!(alpha,out)
+  return  alpha*out
 end
 
 """
@@ -601,7 +645,7 @@ See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 """
 function contract(A::TensType;alpha::Number=eltype(A)(1))
   out = dot(A,A,Lfct=identity,Rfct=identity)
-  return isapprox(alpha,1) ? out : lmul!(alpha,out)
+  return alpha*out
 end
 
 """
@@ -613,7 +657,7 @@ See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 """
 function ccontract(A::TensType;alpha::Number=eltype(A)(1))
   out = dot(A,A,Lfct=adjoint,Rfct=identity)
-  return isapprox(alpha,1) ? out : lmul!(alpha,out)
+  return  alpha*out
 end
 
 """
@@ -625,7 +669,7 @@ See also: ['ccontract'](@ref) ['contractc'](@ref) ['ccontractc'](@ref)
 """
 function contractc(A::TensType;alpha::Number=eltype(A)(1))
   out = dot(A,A,Lfct=identity,Rfct=adjoint)
-  return isapprox(alpha,1) ? out : lmul!(alpha,out)
+  return  alpha*out
 end
 
 """
@@ -637,7 +681,7 @@ See also: ['ccontract'](@ref) ['contractc'](@ref) ['contract'](@ref)
 """
 function ccontractc(A::TensType;alpha::Number=eltype(A)(1))
   out = dot(A,A,Lfct=adjoint,Rfct=adjoint)
-  return isapprox(alpha,1) ? out : lmul!(alpha,out)
+  return  alpha*out
 end
 
 """
@@ -1016,42 +1060,74 @@ export trace
 function checkblocks(Aqind::intType,Bqind::intType,A::Qtens{W,Q},B::Qtens{R,Q},inputA::Union{LinearAlgebra.Diagonal{W,Array{W,1}},Array{W,2}},inputB::Union{LinearAlgebra.Diagonal{R,Array{R,1}},Array{R,2}};Aind::intType=2,Bind::intType=1) where {W <: Number, R <: Number, Q <: Qnum}
   checksum = 0
   minAB = min(length(A.ind[Aqind][Aind]),length(B.ind[Bqind][Bind]))
-  @inbounds @simd for w = 1:minAB
+  w = 0
+  @inbounds while w < minAB && checksum == 0
+    w += 1
     checksum += A.ind[Aqind][Aind][w]-B.ind[Bqind][Bind][w]
   end
-  if length(A.ind[Aqind][Aind]) == length(B.ind[Bqind][Bind]) && isapprox(checksum,0)
-    mulblockA = inputA
-    mulblockB = inputB
-  else
-    keepA = [false for w = 1:size(A.ind[Aqind][Aind],2)]
-    Aperm = Array{intType,1}(undef,size(A.ind[Aqind][Aind],2))
-    keepB = [false for w = 1:size(B.ind[Bqind][Bind],2)]
-    Bperm = Array{intType,1}(undef,size(B.ind[Bqind][Bind],2))
-    counter = 0
-    @inbounds for a = 1:length(keepA)
-      b = 0
-      while b < length(keepB) && !keepA[a]
-        b += 1
-        verdict = true
-        r = 0
-        while r < length(A.currblock[2]) && !keepA[a] && verdict
-          r += 1
-          verdict = verdict && A.ind[Aqind][Aind][r,a] == B.ind[Bqind][Bind][r,b]
+
+  mulblockA = inputA
+  mulblockB = inputB
+
+  if !(length(A.ind[Aqind][Aind]) == length(B.ind[Bqind][Bind]) && checksum == 0)
+
+    blocksizes = ntuple(n->length(A.QnumMat[A.currblock[Aind][n]]),length(A.currblock[Aind]))
+
+    indsA = A.ind[Aqind][Aind]
+    indsB = B.ind[Bqind][Bind]
+
+    Lrowcols = Array{intType,1}(undef,size(indsA,2))
+    Rrowcols = Array{intType,1}(undef,size(indsB,2))
+
+    for p = 1:2
+      if p == 1
+        G = Lrowcols
+        K = indsA
+      else
+        G = Rrowcols
+        K = indsB
+      end
+      for x = 1:length(G)
+        z = K[end,x]
+        @inbounds @simd for y = length(blocksizes)-1:-1:1
+          z *= blocksizes[y]
+          z += K[y,x]
         end
-        if verdict
-          counter += 1
-          Aperm[a] = counter
-          keepA[a] = true
-          Bperm[b] = counter
-          keepB[b] = true
-        end
+        G[x] = z+1
       end
     end
-#    else
-#    end
 
-    mulblockA = (inputA[:,keepA])[:,Aperm[keepA]]
-    mulblockB = (inputB[keepB,:])[Bperm[keepB],:]
+    equalinds = length(Lrowcols) == length(Rrowcols)
+    if equalinds
+      k = 0
+      while equalinds && w < length(Lrowcols)
+        k += 1
+        equalinds = Lrowcols[k] == Rrowcols[k]
+      end
+    end
+    if !equalinds
+      commoninds = intersect(Lrowcols,Rrowcols)
+      if !issorted(commoninds)
+        sort!(commoninds)
+      end
+      orderL = sortperm(Lrowcols)
+      orderR = sortperm(Rrowcols)
+
+      keepL = Array{intType,1}(undef,length(commoninds))
+      keepR = Array{intType,1}(undef,length(commoninds))
+
+      for p = 1:length(commoninds)
+        b = 1
+        @inbounds while b < length(orderR) && Lrowcols[orderL[p]] != Rrowcols[orderR[b]]
+          b += 1
+        end
+        keepL[p] = orderL[p]
+        keepR[p] = orderR[b]
+      end
+
+      mulblockA = mulblockA[:,keepL]
+      mulblockB = mulblockB[keepR,:]
+    end
   end
   return mulblockA,mulblockB
 end
@@ -1124,12 +1200,12 @@ function permq(A::Qtens{W,Q},iA::Array{intType,1}) where {W <: Number, Q <: Qnum
   return nopermL,nopermR
 end
 
-function rmul!(X::Qtens{R,Q},Y::Qtens{W,Q}) where {R <: Number, W <: Number, Q <: Qnum}
+function dmul!(X::Qtens{R,Q},Y::Qtens{W,Q}) where {R <: Number, W <: Number, Q <: Qnum}
   #assert diagonal types in one of hte matrices here
   return maincontractor(false,false,X,(ndims(X),),Y,(1,),inplace=true)
 end
 
-function lmul!(X::Qtens{R,Q},Y::Qtens{W,Q}) where {R <: Number, W <: Number, Q <: Qnum}
+function dmul!(X::Qtens{R,Q},Y::Qtens{W,Q}) where {R <: Number, W <: Number, Q <: Qnum}
   return maincontractor(false,false,X,(ndims(X),),Y,(1,),inplace=true)
 end
 
@@ -1149,13 +1225,6 @@ function maincontractor(conjA::Bool,conjB::Bool,QtensA::Qtens{W,Q},vecA::Tuple,Q
 
   Aperm,transA = willperm(conjA,eltype(QtensA),AnopermL,AnopermR)
   Bperm,transB = willperm(conjB,eltype(QtensB),BnopermR,BnopermL)
-
-
-
-#  println("contractions:")
-#  println(Aperm," ",Bperm)
-#  println(transA," ",transB)
-
 
   if Aperm
     A = QtensA
@@ -1228,7 +1297,7 @@ function maincontractor(conjA::Bool,conjB::Bool,QtensA::Qtens{W,Q},vecA::Tuple,Q
 #      println("IN HERE? ",transA," ",transB)
       if transA == 'N' && transB == 'N'
         if inplace
-          outTens[q] = Adiag ? lmul!(mulblockA,mulblockB) : rmul!(mulblockA,mulblockB)
+          outTens[q] = dmul!(mulblockA,mulblockB)
         else
           outTens[q] = mulblockA*mulblockB
         end
@@ -1243,7 +1312,7 @@ function maincontractor(conjA::Bool,conjB::Bool,QtensA::Qtens{W,Q},vecA::Tuple,Q
           end
         end
         if inplace
-          outTens[q] = Adiag ? rmul!(mulblockB,mulblockA) : lmul!(mulblockB,mulblockA)
+          outTens[q] = dmul!(mulblockB,mulblockA)
         else
           outTens[q] = mulblockB*mulblockA
         end

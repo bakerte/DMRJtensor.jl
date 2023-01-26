@@ -89,7 +89,7 @@ The outputs are the size of the new bond (`newm`), size of the input `D` tensor 
 
 All parameters can be set in `svd` or `eigen` or similar.
 """
-function truncate(D::Array{W,1}...;m::Integer=0,minm::Integer=1,mag::Float64=0.,cutoff::Real=0.,effZero::Real=defzero,nozeros::Bool=true,power::Number=2,keepdeg::Bool=true,rev::Bool=false) where W <: Real
+function truncate(D::Array{W,1}...;m::Integer=0,minm::Integer=1,mag::Float64=0.,cutoff::Real=0.,effZero::Real=defzero,nozeros::Bool=true,power::Number=2,keepdeg::Bool=true,rev::Bool=false) where W <: Number
 
   nQNs = length(D)
   sizeD = 0
@@ -114,13 +114,13 @@ function truncate(D::Array{W,1}...;m::Integer=0,minm::Integer=1,mag::Float64=0.,
     truncerr = 0.
   else
 
-    bigD = Array{W,1}(undef,sizeD)
+    bigD = Array{typeof(1.0),1}(undef,sizeD)
 
     counter = 0
     for q = 1:nQNs
       @inbounds @simd for w = 1:length(D[q])
         counter += 1
-        bigD[counter] = (D[q][w])^power
+        bigD[counter] = abs(D[q][w])^power
       end
     end
     
@@ -150,12 +150,12 @@ function truncate(D::Array{W,1}...;m::Integer=0,minm::Integer=1,mag::Float64=0.,
       @inbounds truncadd = ordered_bigD[p]
       @inbounds while p > pstop && ((truncerr + truncadd < modcutoff) || (nozeros && ordered_bigD[p] < effZero))
         truncerr += truncadd
-        p += incr
+        p -= 1
         truncadd = ordered_bigD[p]
       end
       if keepdeg
-        while p != pstart+incr && isapprox(ordered_bigD[p],ordered_bigD[p-incr])
-          p -= incr
+        while p < sizeD && isapprox(ordered_bigD[p],ordered_bigD[p+1])
+          p += 1
         end
       end
     end
@@ -195,99 +195,6 @@ function truncate(D::Array{W,1}...;m::Integer=0,minm::Integer=1,mag::Float64=0.,
         counts[r] += 1
       end
 
-      #=
-      println()
-
-
-      altcounts = Array{intType,1}(undef,nQNs)
-
-      @inbounds @simd for q = 1:nQNs
-        altcounts[q] = length(qranges[q])
-      end
-
-      sectionorder = sortperm(altcounts,rev=true)
-
-      unfoundsectormax = [true for i = 1:nQNs]
-      z = thism
-
-      rstart = 1
-      rstop = nQNs
-
-      notallfound = nQNs
-      @time while notallfound > 0 && z > 0#for z = thism:-1:1
-
-#        println(unfoundsectormax[sectionorder])
-
-        if !(unfoundsectormax[sectionorder[rstart]])
-          rstart += 1
-        end
-        
-
-        if !(unfoundsectormax[sectionorder[rstop]])
-          rstop -= 1
-        end
-
-
-#println(order[z]," ",qranges)
-
-        index = order[z]
-
-        r = rstart
-        while r <= rstop && !(index in qranges[r])#&& !(qranges[sectionorder[r]][1] <= index <= qranges[sectionorder[r]][end])
-          r += 1
-        end
-
-#        println(r)
-
-        if r <= rstop  && unfoundsectormax[r] #sectionorder[r]]
-          rorder = r #sectionorder[r]
-
-          grabindex = true
-          p = 0
-          while grabindex
-            p += 1
-            grabindex = index != qranges[rorder][p]
-          end
-          altcounts[rorder] = p
-
-#          @time altcounts[rorder] = findfirst(p->order[z]==qranges[rorder][p],1:length(qranges[rorder]))
-          unfoundsectormax[rorder] = false
-
-          notallfound -= 1
-
-        end
-
-        z -= 1
-#        notallfound
-
-      end
-
-#      println(unfoundsectormax)
-
-#      println(altcounts)
-
-@time @inbounds for r = rstart:rstop
-        rorder = sectionorder[r]
-        if unfoundsectormax[rorder]
-          altcounts[rorder] = 0
-        end
-      end
-
-      println(altcounts)
-#println("should be:")
-      println(counts)
-      println(counts-altcounts)
-
-      if sum(counts-altcounts) != 0
-        error("SOMEWHERE")
-      end
-
-#      println(sum(counts-altcounts))
-
-#      println()
-#counts = altcounts
-=#
-
     else
       @inbounds @simd for q = 1:length(D)
         counts[q] = length(D[q])
@@ -326,7 +233,7 @@ and define functions as `LinearAlgebra.svd` to use functions from that package.
 
 """
 function svd(AA::Array{W,G};cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,a::Integer = size(AA,1),b::Integer=size(AA,2),
-              minm::Integer=2,nozeros::Bool=true,power::Number=2,effZero::Real=defzero,keepdeg::Bool=false,inplace::Bool=false,
+              minm::Integer=1,nozeros::Bool=true,power::Number=2,effZero::Real=defzero,keepdeg::Bool=false,inplace::Bool=false,
               decomposer::Function=libsvd) where {W <: Number, G}
 
     U,D,Vt = decomposer(AA,a,b)
@@ -382,7 +289,7 @@ end
 export svd
 
 function svd(AA::tens{W};power::Number=2,cutoff::Float64 = 0.,
-          m::Integer = 0,mag::Float64=0.,minm::Integer=2,nozeros::Bool=true,
+          m::Integer = 0,mag::Float64=0.,minm::Integer=1,nozeros::Bool=true,
           effZero::Number=defzero,keepdeg::Bool=false,decomposer::Function=libsvd,
           a::Integer = size(AA,1),b::Integer=size(AA,2),inplace::Bool=false) where W <: Number
 
@@ -395,7 +302,7 @@ function svd(AA::tens{W};power::Number=2,cutoff::Float64 = 0.,
 end
 
 function svd!(AA::densTensType;power::Number=2,cutoff::Float64 = 0.,
-          m::Integer = 0,mag::Float64=0.,minm::Integer=2,nozeros::Bool=false,
+          m::Integer = 0,mag::Float64=0.,minm::Integer=1,nozeros::Bool=false,
           effZero::Number=defzero,keepdeg::Bool=false,decomposer::Function=libsvd!,
           a::Integer = size(AA,1),b::Integer=size(AA,2))
   return svd(AA,power=power,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,
@@ -722,7 +629,7 @@ Performs a polar decomposition on tensor `A` with grouping `group` (default: [[1
 See also: [`svd`](@ref)
 """
 function polar(AA::TensType,group::Array{Array{W,1},1};
-                right::Bool=true,cutoff::Float64 = 0.,m::Integer = 0,mag::Float64 = 0.,
+                right::Bool=true,cutoff::Float64 = 0.,m::Integer = 0,mag::Float64 = 0.,merge::Bool=true,
                 minm::Integer=1,nozeros::Bool=false,keepdeg::Bool=false) where W <: Integer
 
   U,D,V,truncerr,newmag = svd(AA,group,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,keepdeg=keepdeg)
@@ -731,20 +638,23 @@ function polar(AA::TensType,group::Array{Array{W,1},1};
   ndimV = ndims(V)
   #polar decomposition
   if right
-    DV = contract(D,2,V,1)
-    rightTensor = ccontract(V,1,DV,1)
-    rightTensor = reshape!(rightTensor,vcat([[i for i = 1:ndimV-1]],[[i] for i = ndimV:ndims(rightTensor)]))
-
+#    DV = contract(D,2,V,1)
+    rightTensor = ccontract(V,1,D*V,1)
     leftTensor = contract(U,ndimU,V,1)
-    leftTensor = reshape!(leftTensor,vcat([[i] for i = 1:ndimU-1],[[i for i = ndimU:ndims(leftTensor)]]))
-  else
-    UD = contract(U,ndimU,D,1)
-    leftTensor = contractc(UD,ndimU,U,ndimU)
-    leftTensor = reshape!(leftTensor,vcat([[i] for i = 1:ndimU-1],[[i for i = ndimU:ndims(leftTensor)]]))
 
+#    if ndimV > 2
+      leftTensor = reshape!(leftTensor,[[[i] for i = 1:ndimU-1]...,[i+ndimU-1 for i = 1:ndimV-1]],merge=merge)
+      rightTensor = reshape!(rightTensor,[[i for i = 1:ndimV-1],[[i+ndimV-1] for i = 1:ndimV-1]...],merge=merge)
+#    end
+  else
+#    UD = contract(U,ndimU,D,1)
+    leftTensor = contractc(U*D,ndimU,U,ndimU)
     rightTensor = contract(U,ndimU,V,1)
-    rightTensor = reshape!(rightTensor,vcat([[i for i = 1:ndimV-1]],[[i] for i = ndimV:ndims(rightTensor)]))
+
+    leftTensor = reshape!(leftTensor,[[[i] for i = 1:ndimU-1]...,[i+ndimU-1 for i = 1:ndimU-1]],merge=merge)
+    rightTensor = reshape!(rightTensor,[[i for i = 1:ndimU-1],[[i+ndimU-1] for i = 1:ndimV-1]...],merge=merge)
   end
+
   return leftTensor,rightTensor,D,truncerr,newmag
 end
 export polar
@@ -965,7 +875,7 @@ function svd(QtensA::Qtens{W,Q};a::Integer=size(QtensA,1),b::Integer=size(QtensA
 
     lastind = 0
     @inbounds @simd for q = 1:nQN
-      lastind += length(finalinds[q])
+      lastind += length(m_intervals[q])
     end
 
     @inbounds @simd for w = lastind+1:length(newqindexL)

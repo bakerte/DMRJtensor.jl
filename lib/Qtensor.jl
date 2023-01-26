@@ -1500,19 +1500,140 @@ function findextrablocks(B::Qtens{W,Q},commoninds::Array{NTuple{2,intType},1}) w
   return Bleftover
 end
 
-
-
-
-
-
-
-
-
-
-
 function -(M::Qtens{W,Q}) where {W <: Number, Q <: Qnum}
   return tensorcombination(M,alpha=(W(-1),))
 end
+
+
+
+
+
+
+
+"""
+  orderblocks!(A,Aqind,B,Bqind)
+
+Orders blocks from Qtens `A` (`Aqind` block) and `B` (`Bqind` block) to both match. Will search both the left and right columns of the blocks. Assumes same block structure between the tensors
+"""
+function orderblocks!(A::Qtens{W,Q},Aqind::Integer,B::Qtens{W,Q},Bqind::Integer) where {W <: Number, Q <: Qnum}
+
+#  println(size(A)," ",size(B))
+
+  for w = 1:2
+    Aind = Bind = w
+
+    checksum = 0
+
+    minAB = min(length(A.ind[Aqind][Aind]),length(B.ind[Bqind][Bind]))
+    r = 0
+    @inbounds while r < minAB && checksum == 0
+      r += 1
+      checksum += A.ind[Aqind][Aind][r]-B.ind[Bqind][Bind][r]
+    end
+
+    mulblockA = A.T[Aqind]
+    mulblockB = B.T[Bqind]
+    indsA = A.ind[Aqind][Aind]
+    indsB = B.ind[Bqind][Bind]
+
+    if !(length(indsA) == length(indsB) && checksum == 0)
+#      Lpos = Array{intType,1}(undef,length(A.currblock[Aqind]))
+      blocksizes = ntuple(n->length(A.QnumMat[A.currblock[Aind][n]]),length(A.currblock[Aind]))
+      Lrowcols = Array{intType,1}(undef,size(indsA,2))
+      Rrowcols = Array{intType,1}(undef,size(indsB,2))
+
+      for p = 1:2
+        if p == 1
+          G = Lrowcols
+          K = indsA
+        else
+          G = Rrowcols
+          K = indsB
+        end
+        for x = 1:length(G)
+          z = K[end,x]
+          @inbounds @simd for y = length(blocksizes)-1:-1:1
+            z *= blocksizes[y]
+            z += K[y,x]
+          end
+          G[x] = z+1
+        end
+      end
+
+      equalinds = length(Lrowcols) == length(Rrowcols)
+      if equalinds
+        k = 0
+        while equalinds && w < length(Lrowcols)
+          k += 1
+          equalinds = Lrowcols[k] == Rrowcols[k]
+        end
+      end
+      if !equalinds
+        commoninds = intersect(Lrowcols,Rrowcols)
+        if !issorted(commoninds)
+          sort!(commoninds)
+        end
+        orderL = sortperm(Lrowcols)
+        orderR = sortperm(Rrowcols)
+
+        keepL = Array{intType,1}(undef,length(commoninds))
+        keepR = Array{intType,1}(undef,length(commoninds))
+
+
+        for p = 1:length(commoninds)
+          b = 1
+          @inbounds while b < length(orderR) && Lrowcols[orderL[p]] != Rrowcols[orderR[b]]
+            b += 1
+          end
+          keepL[p] = orderL[p]
+          keepR[p] = orderR[b]
+        end
+
+        if w == 1
+          mulblockA = mulblockA[keepL,:]
+          mulblockB = mulblockB[keepR,:]
+        else
+          mulblockA = mulblockA[:,keepL]
+          mulblockB = mulblockB[:,keepR]
+        end
+
+        A.T[Aqind] = mulblockA
+        B.T[Bqind] = mulblockB
+
+        indsA = indsA[:,keepL]
+        indsB = indsB[:,keepR]
+
+        if w == 1
+          A.ind[Aqind] = (indsA,A.ind[Aqind][2])
+          B.ind[Bqind] = (indsB,B.ind[Bqind][2])
+        else
+          A.ind[Aqind] = (A.ind[Aqind][1],indsA)
+          B.ind[Bqind] = (B.ind[Bqind][1],indsB)
+        end
+      end
+    end
+
+  end
+  nothing
+end
+
+
+"""
+  orderblocks(A,Aqind,Aind,B,Bqind,Bind)
+
+Orders blocks from Qtens `A` (`Aqind` block) and `B` (`Bqind` block) to both match. Will search the indexes of `Aind` and `Bind` (must be values 1 or 2 for left or right sets of indexes)
+"""
+function orderblocks!(A::Qtens{W,Q},B::Qtens{W,Q},ABinds::Array{NTuple{2,intType},1}) where {W <: Number, Q <: Qnum}
+  for w = 1:length(ABinds)
+    orderblocks!(A,ABinds[w][1],B,ABinds[w][2])
+  end
+  nothing
+end
+
+
+
+
+
 
 
 function tensorcombination!(M::Qtens{W,Q}...;alpha::NTuple{N,W}=ntuple(i->eltype(M[1])(1),length(M)),fct::Function=*) where {Q <: Qnum, W <: Number, N}
@@ -1544,8 +1665,12 @@ function tensorcombination!(M::Qtens{W,Q};alpha::NTuple{N,W}=(W(1),),fct::Functi
 end
 
 function tensorcombination!(A::Qtens{W,Q},QtensB::Qtens{W,Q};alpha::NTuple{N,W}=(W(1),W(1)),fct::Function=*) where {Q <: Qnum, W <: Number, N}
+
   B = changeblock(QtensB,A.currblock)
+
   commoninds = matchblocks((false,false),A,B,ind=(1,2),matchQN=A.flux)
+
+  orderblocks!(A,B,commoninds)
 
   @inbounds for q = 1:length(commoninds)
     Aqind = commoninds[q][1]
@@ -1554,6 +1679,7 @@ function tensorcombination!(A::Qtens{W,Q},QtensB::Qtens{W,Q};alpha::NTuple{N,W}=
   end
 
   Bleftover = findextrablocks(B,commoninds)
+
   mult = alpha[2]
   if length(Bleftover) > 0
     AQblocks = length(A.T)
@@ -1581,7 +1707,6 @@ function tensorcombination!(A::Qtens{W,Q},QtensB::Qtens{W,Q};alpha::NTuple{N,W}=
     A.ind = newind
     A.Qblocksum = newQblocksum
   end
-
   return A
 end
 
@@ -2863,7 +2988,11 @@ function showQtens(Qtens::qarray;show::Integer = 4)
     for q = 1:length(Qtens.T)
       maxshow = min(show, length(Qtens.T[q]))
       maxBool = show < length(Qtens.T[q])
-      println("block $q size = ",size(Qtens.T[q]),", ",Qtens.Qblocksum[q],", values = ",Qtens.T[q][1:maxshow], maxBool ? "..." : "")
+      if typeof(Qtens.T[q]) <: LinearAlgebra.Diagonal
+        println("block $q size = ",size(Qtens.T[q]),", ",Qtens.Qblocksum[q],", values  (Diagonal type) = ",[Qtens.T[q][i,i] for i = 1:min(size(Qtens.T[q],1),maxshow)], maxBool ? "..." : "")
+      else
+        println("block $q size = ",size(Qtens.T[q]),", ",Qtens.Qblocksum[q],", values = ",Qtens.T[q][1:maxshow], maxBool ? "..." : "")
+      end
       println("inds: block $q")
       maxshow = min(show, length(Qtens.ind[q][1]))
       maxBool = show < length(Qtens.ind[q][1])

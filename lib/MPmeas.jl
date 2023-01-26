@@ -34,7 +34,7 @@ See also: [`moveR!`](@ref)
     Ltens,D,V,truncerr,sumD = svdfct(Lpsi,[[1,2],[3]],cutoff=cutoff,m=m,minm=minm,mag=mag)
 
     modV = (condition ? getindex!(V,:,1:size(Rpsi,1)) : V)
-    DV = lmul!(D,modV)
+    DV = dmul!(D,modV)
   end
   Rtens = contract(DV,2,Rpsi,1)
   return Ltens,Rtens,D,truncerr
@@ -87,7 +87,7 @@ See also: [`moveL!`](@ref)
   else
     U,D,Rtens,truncerr,sumD = svdfct(Rpsi,[[1],[2,3]],cutoff=cutoff,m=m,minm=minm,mag=mag)
     modU = (condition ? getindex!(U,1:size(Lpsi,3),:) : U)
-    UD = rmul!(modU,D) #contract(modU,(2,),D,(1,))
+    UD = dmul!(modU,D) #contract(modU,(2,),D,(1,))
   end
   Ltens = contract(Lpsi,3,UD,1)
   return Ltens,Rtens,D,truncerr
