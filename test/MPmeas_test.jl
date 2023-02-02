@@ -376,14 +376,23 @@ fulltest &= testfct(testval,"correlations(psi,psi,Sp,Sm)")
 
 println()
 
-En = expect(psi,mpo)
+Qlabel = [test3(2),test3(-2)]
+qpsi,qmpo = MPS(Qlabel,psi,mpo)
+En = dmrg(qpsi,qmpo,sweeps=20,m=45,cutoff=1E-9,silent=true)
 
-lambda = 0.1
+lambda = 0.01
 
 penalty!(mpo,lambda,psi,compress=false)
 shiftedEn = dmrg(psi,mpo,sweeps=20,m=45,cutoff=1E-9,silent=true)
-testval = isapprox(abs(En-shiftedEn),lambda)
-fulltest &= testfct(testval,"penalty!(mpo,Real,mps")
+testval = abs(abs(En-shiftedEn) - lambda) < 1E-8
+fulltest &= testfct(testval,"penalty!(mpo,Real,mps)")
+
+En = expect(qpsi,qmpo)
+
+penalty!(qmpo,lambda,qpsi,compress=false)
+shiftedEn = dmrg(qpsi,qmpo,sweeps=20,m=45,cutoff=1E-9,silent=true)
+testval = abs(abs(En-shiftedEn) - lambda) < 1E-8
+fulltest &= testfct(testval,"penalty!(mpo,Real,mps) [Quantum number types]")
 
 println()
 
