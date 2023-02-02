@@ -110,6 +110,8 @@ end
 
 @inline function compute_alpha(i::intType,alpha::Array{W,1},savepsi::Array{P,1},Lenv::TensType,Renv::TensType,psi::TensType,psiops::TensType...;updatefct::Function=makeHpsi) where {W <: Number, P <: TensType}
 
+  checkHpsi = updatefct(makeArray(Lenv),makeArray(Renv),makeArray(psi),makeArray.(psiops)...)
+
   Hpsi = updatefct(Lenv,Renv,psi,psiops...)
 
   temp = real(dot(psi,Hpsi)) #ccontract(psi,convec,Hpsi,1)
@@ -277,3 +279,4 @@ export lanczos
                                 lastM=lastM,krylov_iterate_fct=krylov_iterate_fct,start=start,constructMfct=constructMfct,
                                 eigfct=libeigen,reorth=reorth)
 end
+
