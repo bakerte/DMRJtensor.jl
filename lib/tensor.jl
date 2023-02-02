@@ -1394,7 +1394,7 @@ function reshape!(M::tens{W}, S::Union{Array{Array{P,1},1},Tuple};merge::Bool=fa
   newsize = ntuple(a->prod(b->size(M,b),S[a]),length(S))
   order = vcat(S...)
   pM = issorted(order) ? M : permutedims!(M,order)
-  return reshape!(M,newsize)
+  return reshape!(pM,newsize)
 end
 export reshape!
 
@@ -1598,6 +1598,7 @@ function permutedims!(P::Array{W,R},A::Union{Array{W,R},tens{W}},iA::NTuple{G,in
 end
 
 function permutedims(A::tens{W},iA::NTuple{G,intType}) where {W <: Number, G}
+
   if issorted(iA)
     out = A
   else

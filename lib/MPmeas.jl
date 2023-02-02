@@ -559,8 +559,7 @@ Applies operator `Op` (any `TensType`) in-place to the MPS `psi` at sites `sites
 function applyOps!(psi::MPS,sites::Array{W,1},Op::TensType;trail::TensType=ones(1,1)) where W <: Integer
   def_trail = ones(1,1)
   @inbounds for i = 1:length(sites)
-    site = sites[i]
-    p = site
+    p = sites[i]
     psi[p] = contract([2,1,3],Op,2,psi[p],2)
     if trail != def_trail
       @inbounds for j = 1:p-1
@@ -1137,8 +1136,9 @@ function penalty!(mpo::MPO,lambda::Float64,psi::MPS;compress::Bool=true)
     else
       term = contractc(temp_psi,4,temp_psi,4)
     end
-    bigrho = permutedims(term,[1,4,5,2,3,6])
-    rho = reshape!(bigrho,size(bigrho,1)*size(bigrho,2),QS,QS,size(bigrho,5)*size(bigrho,6),merge=true)
+
+    rho = reshape!(term,[[1,4],[5],[2],[3,6]],merge=true)
+
     if i == 1
       mpo[i] = joinindex!(4,mpo[i],rho)
     elseif i == length(psi)
@@ -1147,7 +1147,8 @@ function penalty!(mpo::MPO,lambda::Float64,psi::MPS;compress::Bool=true)
       mpo[i] = joinindex!([1,4],mpo[i],rho)
     end
   end
-  return compress ? compressMPO!(mpo) : mpo
+
+  return mpo #compress ? compressMPO!(mpo) : mpo
 end
 export penalty!
 

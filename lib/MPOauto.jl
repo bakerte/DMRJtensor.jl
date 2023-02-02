@@ -879,7 +879,7 @@ const backwardshape = Array{intType,1}[intType[1],intType[2,3,4]]
 compresses MPO (`W`; or several `M`) with SVD compression for `sweeps` sweeps, `cutoff` applied to the SVD, `deltam` target for teh bond dimension compression, and `nozeros` defaulted to true to eliminate all zeros in the SVD
 """
 function compressMPO!(W::MPO,M::MPO...;sweeps::Integer=1000,cutoff::Float64=0.,
-                    deltam::Integer=0,minsweep::Integer=1,nozeros::Bool=false)
+                    deltam::Integer=0,minsweep::Integer=1,nozeros::Bool=true)
   for a = 1:length(M)
     W = add!(W,M[a])
   end

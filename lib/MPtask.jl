@@ -1207,6 +1207,7 @@ function makeqMPS(Qlabels::Array{Array{Q,1},1},mps::MPS,arrows::Array{Bool,1}...
     QnumMat[1] = inv.(storeQnumMat)
     QnumMat[2] = Qlabels[(i-1) % size(Qlabels,1) + 1] 
     storeVal = zeros(Float64,size(mps[i],3))
+
     if i < Ns
       assignflux!(i,mps,QnumMat,storeVal)
     else
@@ -1218,6 +1219,7 @@ function makeqMPS(Qlabels::Array{Array{Q,1},1},mps::MPS,arrows::Array{Bool,1}...
     end
     storeQnumMat = QnumMat[3]
     optblocks = i <= mps.oc ? [[1,2],[3]] : [[1],[2,3]]
+
     QtensVec[i] = Qtens(mps[i],QnumMat,currblock=optblocks)
 
     if size(QtensVec[i].T,1) == 0 && randomize
@@ -1240,6 +1242,7 @@ function makeqMPS(Qlabels::Array{Array{Q,1},1},mps::MPS,arrows::Array{Bool,1}...
     end
   else
     Qnumber = finalMPS[end].QnumMat[3][1]
+
     finalMPS[end].flux,newQnum = -(finalMPS[end].QnumSum[3][Qnumber]),-(finalMPS[end].flux)
     finalMPS[end].QnumSum[3][1] = newQnum
   end

@@ -1142,14 +1142,13 @@ end
 
 function reshape!(Qt::Qtens{W,Q}, newQsize::Union{Array{Array{P,1},1},Tuple};merge::Bool=false) where {W <: Number, Q <: Qnum, P <: intType}
   order = vcat(newQsize...)
+
   if !issorted(order)
     permutedims!(Qt,order)
   end
-  if typeof(newQsize) <: Array{Array{intType,1},1}
-    Qt.size = newQsize
-  else
-    Qt.size = [[newQsize[q][w] for w = 1:length(newQsize[q])] for q = 1:length(newQsize)]    
-  end
+
+  Qt.size = [[newQsize[q][w] for w = 1:length(newQsize[q])] for q = 1:length(newQsize)]
+
   if merge
     outQt = mergereshape!(Qt)
   else
@@ -1288,7 +1287,14 @@ See also: [`reshape!`](@ref)
 """
 function mergereshape!(Qt::Qtens{W,Q};currblock::currblockTypes=equalblocks(Qt)) where {W <: Number, Q <: Qnum}
 
-  Rsize = Qt.size
+  Rsize = [Array{intType,1}(undef,length(Qt.size[w])) for w = 1:length(Qt.size)]
+  counter = 0
+  for w = 1:length(Rsize)
+    for a = 1:length(Rsize[w])
+      counter += 1
+      Rsize[w][a] = counter
+    end
+  end
   newdim = length(Rsize)
 
   newQnumMat = Array{Array{intType,1},1}(undef,newdim)
@@ -1298,7 +1304,7 @@ function mergereshape!(Qt::Qtens{W,Q};currblock::currblockTypes=equalblocks(Qt))
   truesize = basesize(Qt)
 
   @inbounds for a = 1:length(Rsize)
-    if size(Rsize[a],1) > 1
+    if length(Rsize[a]) > 1
 
       sizes = truesize[Rsize[a]]
       thisflux = a == length(Rsize) ? Qt.flux : zeroQN
@@ -1306,7 +1312,6 @@ function mergereshape!(Qt::Qtens{W,Q};currblock::currblockTypes=equalblocks(Qt))
       Linds = Rsize[a]
       vec = Linds
       QNsummary = multi_indexsummary(Qt,Linds)
-
 
       ninds = length(vec)
       pos = makepos(ninds)
@@ -1323,6 +1328,8 @@ function mergereshape!(Qt::Qtens{W,Q};currblock::currblockTypes=equalblocks(Qt))
       newQnumSum[a] = Qt.QnumSum[thisind]
     end
   end
+
+
   Linds = [i for i = 1:Rsize[end][1]-1]
   Rinds = Rsize[end]
 
@@ -1508,7 +1515,7 @@ end
 
 
 
-
+#=
 
 """
   orderblocks!(A,Aqind,B,Bqind)
@@ -1631,7 +1638,7 @@ function orderblocks!(A::Qtens{W,Q},B::Qtens{W,Q},ABinds::Array{NTuple{2,intType
 end
 
 
-
+=#
 
 
 
@@ -1664,18 +1671,119 @@ function tensorcombination!(M::Qtens{W,Q};alpha::NTuple{N,W}=(W(1),),fct::Functi
   return M
 end
 
-function tensorcombination!(A::Qtens{W,Q},QtensB::Qtens{W,Q};alpha::NTuple{N,W}=(W(1),W(1)),fct::Function=*) where {Q <: Qnum, W <: Number, N}
+
+function findvals(Lrows::Array{intType,1},newrows::Array{intType,1})
+  subsetL = Array{intType,1}(undef,length(Lrows))
+  g = 1
+  for c = 1:length(Lrows)
+    val = Lrows[c]
+    while newrows[g] < val
+      g += 1
+    end
+
+    while newrows[g] > val
+      g -= 1
+    end
+    subsetL[c] = g
+  end
+  return subsetL
+end
+
+
+
+function tensorcombination!(A::Qtens{W,Q},QtensB::Qtens{W,Q};alpha::NTuple{2,W}=(W(1),W(1)),fct::Function=*) where {Q <: Qnum, W <: Number}
 
   B = changeblock(QtensB,A.currblock)
 
   commoninds = matchblocks((false,false),A,B,ind=(1,2),matchQN=A.flux)
 
-  orderblocks!(A,B,commoninds)
-
   @inbounds for q = 1:length(commoninds)
     Aqind = commoninds[q][1]
     Bqind = commoninds[q][2]
-    tensorcombination!(A.T[Aqind],B.T[Bqind],alpha=alpha)
+
+    checksum = 0
+    w = 0
+    while w < 2
+      w += 1
+      Aind = Bind = w
+
+      rmax = length(A.ind[Aqind][Aind])
+      checksum += rmax - length(B.ind[Bqind][Bind])
+
+      r = 0
+      @inbounds while r < rmax && checksum == 0
+        r += 1
+        checksum += A.ind[Aqind][Aind][r]-B.ind[Bqind][Bind][r]
+      end
+    end
+
+    if checksum == 0
+      tensorcombination!(A.T[Aqind],B.T[Bqind],alpha=alpha)
+    else      
+      
+      indsAL = A.ind[Aqind][1]
+      indsAR = A.ind[Aqind][2]
+      indsBL = B.ind[Bqind][1]
+      indsBR = B.ind[Bqind][2]
+
+      Lrows = Array{intType,1}(undef,size(indsAL,2))
+      Lcols = Array{intType,1}(undef,size(indsAR,2))
+      Rrows = Array{intType,1}(undef,size(indsBL,2))
+      Rcols = Array{intType,1}(undef,size(indsBR,2))
+
+      rowcolvec = [Lrows,Lcols,Rrows,Rcols]
+      indsvec = [indsAL,indsAR,indsBL,indsBR]
+
+      @inbounds for p = 1:length(rowcolvec)
+        G = rowcolvec[p]
+        K = indsvec[p]
+
+        Aind = (p-1) % 2 + 1
+        blocksizes = ntuple(n->length(A.QnumMat[A.currblock[Aind][n]]),length(A.currblock[Aind]))
+
+        for x = 1:length(G)
+          z = K[end,x]
+          @inbounds @simd for y = length(blocksizes)-1:-1:1
+            z *= blocksizes[y]
+            z += K[y,x]
+          end
+          G[x] = z+1
+        end
+      end
+
+      newrows = sort!(unique(vcat(Lrows,Rrows)))
+      newcols = sort!(unique(vcat(Lcols,Rcols)))
+
+      newmat = zeros(W,length(newrows),length(newcols))
+      newindsL = Array{intType,2}(undef,size(indsAL,1),length(newrows))
+      newindsR = Array{intType,2}(undef,size(indsAR,1),length(newcols))
+
+      subsetL = findvals(Lrows,newrows)
+      subsetR = findvals(Lcols,newcols)
+
+      for y = 1:length(subsetR)
+        @inbounds @simd for x = 1:length(subsetL)
+          newmat[subsetL[x],subsetR[y]] += fct(A.T[Aqind][x,y],alpha[1])
+        end
+      end
+      newindsL[:,subsetL] = indsAL
+      newindsR[:,subsetR] = indsAR
+
+      subsetL = findvals(Rrows,newrows)
+      subsetR = findvals(Rcols,newcols)
+
+      for y = 1:length(subsetR)
+        @inbounds @simd for x = 1:length(subsetL)
+          newmat[subsetL[x],subsetR[y]] += fct(B.T[Bqind][x,y],alpha[2])
+        end
+      end
+      newindsL[:,subsetL] = indsBL
+      newindsR[:,subsetR] = indsBR
+
+      A.T[Aqind] = newmat
+      A.ind[Aqind] = (newindsL,newindsR)
+
+    end
   end
 
   Bleftover = findextrablocks(B,commoninds)
@@ -1967,7 +2075,7 @@ function permutedims!(currQtens::Qtens{W,Q}, vec::Union{NTuple{N,P},Array{P,1}})
   order = Array{intType,1}(undef,totalordersize)
   count = 0
 
-  for i = 1:size(vec, 1)
+  for i = 1:length(vec)
     @inbounds @simd for j = 1:length(Rsize[vec[i]])
       count += 1
       order[count] = Rsize[vec[i]][j]
@@ -2505,30 +2613,21 @@ function joinloop!(A::Qtens{W,Q},B::Qtens{R,Q},commonblocks::Array{NTuple{2,intT
 
     if Arows != Brows 
 
-      newrow = Array{intType,1}(undef,length(Arows)+length(Brows)) #union(Arows,Brows)
-      @inbounds for w = 1:length(Arows)
-        newrow[w] = Arows[w]
-      end
-      @inbounds for w = 1:length(Brows)
-        newrow[w] = Brows[w]
-      end
+      newrow = sort!(unique(vcat(Arows,Brows)))
 
       Anewrows = Array{intType,1}(undef,length(Arows))
-      @inbounds for w = 1:length(Arows)
-        Anewrows[w] = findfirst(w->newrow[w]==Arows[i],1:length(newrow))
+      @inbounds for i = 1:length(Arows)
+        Anewrows[i] = findfirst(w->newrow[w]==Arows[i],1:length(newrow))
       end
       Bnewrows = Array{intType,1}(undef,length(Brows))
-      @inbounds for w = 1:length(Brows)
-        Bnewrows[w] = findfirst(w->newrow[w]==Brows[i],1:length(newrow))
+      @inbounds for i = 1:length(Brows)
+        Bnewrows[i] = findfirst(w->newrow[w]==Brows[i],1:length(newrow))
       end
 
       Ttype = typeof(W(1)*R(1))
       newcolsize = size(A.T[Aqind],2) + size(B.T[Bqind],2)
-      if size(A.T[Aqind],1) + size(B.T[Bqind],1) == length(newrow)
-        newT = Array{Ttype,2}(undef,length(newrow),newcolsize)
-      else
-        newT = zeros(Ttype,length(newrow),newcolsize)
-      end
+
+      newT = zeros(Ttype,length(newrow),newcolsize)
 
       newT[Anewrows,1:size(A.T[Aqind],2)] = A.T[Aqind]
       newT[Bnewrows,size(A.T[Bqind],2)+1:end] = B.T[Bqind]
@@ -2678,15 +2777,31 @@ function joinindex!(bareinds::intvecType,QtensA::Qtens{R,Q},QtensB::Qtens{S,Q};o
   A = changeblock(QtensA,notcommoninds,inds)
   B = changeblock(QtensB,notcommoninds,inds)
 
+
+#  checkflux(A)
+#  checkflux(B)
+
+#  println(A)
+#  println(B)
+
+
   origAsize = Array{intType,1}(undef,length(inds))
   @inbounds @simd for w = 1:length(inds)
     origAsize[w] = length(A.QnumMat[inds[w]])
   end
   commonblocks = matchblocks((false,false),A,B,ind=(2,1),matchQN=A.flux)
 
+#  println("in joinindex! ",origAsize)
+
   Bleftover = findextrablocks(B,commonblocks)
 
+#  checkflux(A)
+
+#  checkflux(B)
+
   joinloop!(A,B,commonblocks,origAsize...)
+
+
 
   Ttype = typeof(eltype(QtensA)(0)*eltype(QtensB)(0))
   newT = Array{Array{Ttype,2},1}(undef,length(A.T)+length(Bleftover))
@@ -2698,13 +2813,23 @@ function joinindex!(bareinds::intvecType,QtensA::Qtens{R,Q},QtensB::Qtens{S,Q};o
   newindexlist[1:length(A.T)] = A.ind
   newQblocksum[1:length(A.T)] = A.Qblocksum
 
+#  checkflux(A)
+#  checkflux(B)
+
   Bextraloop!(inds,A,B,Bleftover,newT,newindexlist,inputsize,newQblocksum)
 
   A.T = newT
   A.ind = newindexlist
   A.Qblocksum = newQblocksum
 
+
+#  checkflux(A)
+
+
   zeroQN = Q()
+
+#  println("fluxes:")
+#  println(A.flux," ",B.flux)
 
   deltaflux = A.flux - B.flux
   @inbounds for w = 1:length(inds)
@@ -2738,7 +2863,12 @@ function joinindex!(bareinds::intvecType,QtensA::Qtens{R,Q},QtensB::Qtens{S,Q};o
     A.QnumSum[index] = newQnumSum
   end
 
+#  checkflux(A)
+#=
   if ordered
+
+    println("in here???")
+
     Asize = size(A)
     Lsizes = Asize[notcommoninds]
     Rsizes = Asize[inds]
@@ -2748,7 +2878,7 @@ function joinindex!(bareinds::intvecType,QtensA::Qtens{R,Q},QtensB::Qtens{S,Q};o
 
     orderloop!(A,Lsizes,Rsizes,Lposes,Rposes)
   end
-
+=#
   return A
 end
 

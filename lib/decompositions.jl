@@ -8,7 +8,7 @@
 # See accompanying license with this program
 # This code is native to the julia programming language (v1.5.4+)
 #
-
+ 
 """
   Module: decompositions
 
@@ -89,7 +89,7 @@ The outputs are the size of the new bond (`newm`), size of the input `D` tensor 
 
 All parameters can be set in `svd` or `eigen` or similar.
 """
-function truncate(D::Array{W,1}...;m::Integer=0,minm::Integer=1,mag::Float64=0.,cutoff::Real=0.,effZero::Real=defzero,nozeros::Bool=true,power::Number=2,keepdeg::Bool=true,rev::Bool=false) where W <: Number
+function truncate(D::Array{W,1}...;m::Integer=0,minm::Integer=2,mag::Float64=0.,cutoff::Real=0.,effZero::Real=defzero,nozeros::Bool=true,power::Number=2,keepdeg::Bool=true,rev::Bool=false) where W <: Number
 
   nQNs = length(D)
   sizeD = 0
@@ -233,7 +233,7 @@ and define functions as `LinearAlgebra.svd` to use functions from that package.
 
 """
 function svd(AA::Array{W,G};cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,a::Integer = size(AA,1),b::Integer=size(AA,2),
-              minm::Integer=1,nozeros::Bool=true,power::Number=2,effZero::Real=defzero,keepdeg::Bool=false,inplace::Bool=false,
+              minm::Integer=2,nozeros::Bool=true,power::Number=2,effZero::Real=defzero,keepdeg::Bool=false,inplace::Bool=false,
               decomposer::Function=libsvd) where {W <: Number, G}
 
     U,D,Vt = decomposer(AA,a,b)
@@ -289,7 +289,7 @@ end
 export svd
 
 function svd(AA::tens{W};power::Number=2,cutoff::Float64 = 0.,
-          m::Integer = 0,mag::Float64=0.,minm::Integer=1,nozeros::Bool=true,
+          m::Integer = 0,mag::Float64=0.,minm::Integer=2,nozeros::Bool=true,
           effZero::Number=defzero,keepdeg::Bool=false,decomposer::Function=libsvd,
           a::Integer = size(AA,1),b::Integer=size(AA,2),inplace::Bool=false) where W <: Number
 
@@ -302,7 +302,7 @@ function svd(AA::tens{W};power::Number=2,cutoff::Float64 = 0.,
 end
 
 function svd!(AA::densTensType;power::Number=2,cutoff::Float64 = 0.,
-          m::Integer = 0,mag::Float64=0.,minm::Integer=1,nozeros::Bool=false,
+          m::Integer = 0,mag::Float64=0.,minm::Integer=2,nozeros::Bool=false,
           effZero::Number=defzero,keepdeg::Bool=false,decomposer::Function=libsvd!,
           a::Integer = size(AA,1),b::Integer=size(AA,2))
   return svd(AA,power=power,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,
@@ -392,7 +392,7 @@ end
 Reshapes `AA` for `svd` and then unreshapes U and V matrices on return; `vecA` is of the form [[1,2],[3,4,5]] and must be length 2 with the elements representing the grouped indices for the left and right sets of the SVD for use in unreshaping later
 """
 function svd(AA::TensType,vecA::Array{Array{W,1},1};a::Integer=findsize(AA,vecA[1]),b::Integer=findsize(AA,vecA[2]),
-            cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,minm::Integer=1,nozeros::Bool=false,
+            cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,minm::Integer=2,nozeros::Bool=false,
             power::Number=2,keepdeg::Bool=false,decomposer::Function=libsvd) where {W <: Integer}
   AB,Lsizes,Rsizes,a,b = getorder(AA,vecA)
 
@@ -404,7 +404,7 @@ function svd(AA::TensType,vecA::Array{Array{W,1},1};a::Integer=findsize(AA,vecA[
 end
 
 function svd!(AA::TensType,vecA::Array{Array{W,1},1};a::Integer=findsize(AA,vecA[1]),b::Integer=findsize(AA,vecA[2]),
-            cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,minm::Integer=1,nozeros::Bool=false,
+            cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,minm::Integer=2,nozeros::Bool=false,
             power::Number=2,keepdeg::Bool=false) where {W <: Integer}
   return svd(AA,vecA,a=a,b=b,power = power,cutoff=cutoff,m=m,mag=mag,minm=minm,
                 nozeros=nozeros,keepdeg=keepdeg,decomposer=libsvd!)
@@ -439,7 +439,7 @@ Eigensolver routine with truncation (output to `D` and `U` just as `LinearAlgebr
 
 See also: [`svd`](@ref)
 """
-function eigen(AA::Array{W,G},B::Array{W,R}...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,a::Integer=size(AA,1),b::Integer=size(AA,2),minm::Integer=1,nozeros::Bool=false,power::Number=1,effZero::Real=defzero,keepdeg::Bool=false,transpose::Bool=false,decomposer::Function=libeigen,rev::Bool=true) where {W <: Number, G, R}
+function eigen(AA::Array{W,G},B::Array{W,R}...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,a::Integer=size(AA,1),b::Integer=size(AA,2),minm::Integer=2,nozeros::Bool=false,power::Number=1,effZero::Real=defzero,keepdeg::Bool=false,transpose::Bool=false,decomposer::Function=libeigen,rev::Bool=true) where {W <: Number, G, R}
 
   Dsq,U = decomposer(AA,a,B...)
 
@@ -486,7 +486,7 @@ function eigen(AA::Array{W,G},B::Array{W,R}...;cutoff::Float64 = 0.,m::Integer =
 end
 export eigen
 
-function eigen(AA::tens{W},B::tens{W}...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,a::Integer=size(AA,1),b::Integer=size(AA,2),minm::Integer=1,nozeros::Bool=false,power::Number=1,effZero::Real=defzero,keepdeg::Bool=false,transpose::Bool=false,decomposer::Function=libeigen,rev::Bool=true) where {W <: Number}
+function eigen(AA::tens{W},B::tens{W}...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,a::Integer=size(AA,1),b::Integer=size(AA,2),minm::Integer=2,nozeros::Bool=false,power::Number=1,effZero::Real=defzero,keepdeg::Bool=false,transpose::Bool=false,decomposer::Function=libeigen,rev::Bool=true) where {W <: Number}
 
   Dsq,U,truncerr,sumD = eigen(AA.T,B...,cutoff=cutoff,m=m,mag=mag,a=a,b=b,minm=minm,nozeros=nozeros,power=power,effZero=effZero,keepdeg=keepdeg,transpose=transpose,decomposer=decomposer,rev=rev)
 
@@ -500,7 +500,7 @@ function eigen(AA::tens{W},B::tens{W}...;cutoff::Float64 = 0.,m::Integer = 0,mag
 end
 
 function eigen!(AA::Union{Array{W,2},tens{W}},B::Array{W,2}...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,
-                minm::Integer=1,nozeros::Bool=false,power::Number=1,effZero::Float64=defzero,keepdeg::Bool=false,a::Integer=size(AA,1),b::Integer=size(AA,2),
+                minm::Integer=2,nozeros::Bool=false,power::Number=1,effZero::Float64=defzero,keepdeg::Bool=false,a::Integer=size(AA,1),b::Integer=size(AA,2),
                 transpose::Bool=false,decomposer::Function=libeigen!,rev::Bool=true) where {W <: Number}
   return eigen(AA,B...,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,power=power,effZero=effZero,a=a,b=b,keepdeg=keepdeg,transpose=transpose,decomposer=decomposer,rev=rev)
 end
@@ -513,7 +513,7 @@ reshapes `AA` for `eigen` and then unreshapes U matrix on return; `vecA` is of t
 """
 function eigen(AA::TensType,vecA::Array{Array{W,1},1},
                 B::TensType...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,
-                minm::Integer=1,nozeros::Bool=false,power::Number=1,effZero::Float64=defzero,keepdeg::Bool=false,a::Integer=size(AA,1),b::Integer=size(AA,2),
+                minm::Integer=2,nozeros::Bool=false,power::Number=1,effZero::Float64=defzero,keepdeg::Bool=false,a::Integer=size(AA,1),b::Integer=size(AA,2),
                 transpose::Bool=false,decomposer::Function=libeigen,rev::Bool=true) where {W <: Number}
   AB,Lsizes,Rsizes,a,b = getorder(AA,vecA)
   D,U,truncerr,newmag = eigen(AB,B...,a=a,b=b,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,keepdeg=keepdeg,transpose=transpose,decomposer=decomposer,rev=rev)
@@ -527,7 +527,7 @@ end
 
 
 function eigen!(AA::TensType,vecA::Array{Array{W,1},1},B::TensType...;cutoff::Float64 = 0.,m::Integer = 0,mag::Float64=0.,
-  minm::Integer=1,nozeros::Bool=false,power::Number=1,effZero::Float64=defzero,keepdeg::Bool=false,a::Integer=size(AA,1),b::Integer=size(AA,2),
+  minm::Integer=2,nozeros::Bool=false,power::Number=1,effZero::Float64=defzero,keepdeg::Bool=false,a::Integer=size(AA,1),b::Integer=size(AA,2),
   transpose::Bool=false,decomposer::Function=libeigen!,rev::Bool=true) where {W <: Number}
   return eigen(AA,vecA,B...,cutoff=cutoff,m=m,mag=mag,a=a,b=b,minm=minm,nozeros=nozeros,power=power,effZero=effZero,keepdeg=keepdeg,transpose=transpose,decomposer=decomposer,rev=rev)
 end
@@ -630,7 +630,7 @@ See also: [`svd`](@ref)
 """
 function polar(AA::TensType,group::Array{Array{W,1},1};
                 right::Bool=true,cutoff::Float64 = 0.,m::Integer = 0,mag::Float64 = 0.,merge::Bool=true,
-                minm::Integer=1,nozeros::Bool=false,keepdeg::Bool=false) where W <: Integer
+                minm::Integer=2,nozeros::Bool=false,keepdeg::Bool=false) where W <: Integer
 
   U,D,V,truncerr,newmag = svd(AA,group,cutoff=cutoff,m=m,mag=mag,minm=minm,nozeros=nozeros,keepdeg=keepdeg)
 
@@ -790,7 +790,7 @@ end
 end
 =#
 function svd(QtensA::Qtens{W,Q};a::Integer=size(QtensA,1),b::Integer=size(QtensA,2),
-              cutoff::Float64 = 0.,m::Integer = 0,minm::Integer=1,nozeros::Bool=true,power::Number=2,leftflux::Bool=false,mag::Float64=0.,
+              cutoff::Float64 = 0.,m::Integer = 0,minm::Integer=2,nozeros::Bool=true,power::Number=2,leftflux::Bool=false,mag::Float64=0.,
               effZero::Real=defzero,keepdeg::Bool=false,decomposer::Function=libsvd) where {W <: Number, Q <: Qnum}
 
   Tsize = QtensA.size
@@ -909,7 +909,7 @@ function svd(QtensA::Qtens{W,Q};a::Integer=size(QtensA,1),b::Integer=size(QtensA
 end
 
 function svd!(QtensA::Qtens{W,Q};a::Integer=size(QtensA,1),b::Integer=size(QtensA,2),
-              cutoff::Float64 = 0.,m::Integer = 0,minm::Integer=1,nozeros::Bool=true,power::Number=2,leftflux::Bool=false,mag::Float64=0.,
+              cutoff::Float64 = 0.,m::Integer = 0,minm::Integer=2,nozeros::Bool=true,power::Number=2,leftflux::Bool=false,mag::Float64=0.,
               effZero::Real=defzero,keepdeg::Bool=false) where {W <: Number, Q <: Qnum}
   return svd(QtensA,a=a,b=b,cutoff=cutoff,m=m,minm=minm,nozeros=nozeros,power=power,
                     leftflux=leftflux,mag=mag,effZero=effZero,keepdeg=keepdeg,decomposer=linsvd!)
@@ -917,7 +917,7 @@ end
 
 
 function eigen!(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,effZero::Real=defzero,
-              minm::Integer=1,nozeros::Bool=false,
+              minm::Integer=2,nozeros::Bool=false,
               power::Number=1,leftflux::Bool=false,mag::Float64=0.,
               decomposer::Function=libeigen!,keepdeg::Bool=false,transpose::Bool=false,rev::Bool=true) where {W <: Number, Q <: Qnum}
 
@@ -1042,7 +1042,7 @@ function eigen!(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,effZero::
 end
 
 function eigen(QtensA::Qtens{W,Q};cutoff::Float64 = 0.,m::Integer = 0,a::Integer=size(QtensA,1),b::Integer=size(QtensA,2),
-                minm::Integer=1,nozeros::Bool=false,
+                minm::Integer=2,nozeros::Bool=false,
                 power::Number=1,leftflux::Bool=false,mag::Float64=0.,effZero::Real=defzero,
                 decomposer::Function=libeigen,keepdeg::Bool=false,transpose::Bool=false,rev::Bool=true) where {W <: Number, Q <: Qnum}
   return eigen!(QtensA,cutoff=cutoff,m=m,minm=minm,nozeros=nozeros,power=power,effZero=effZero,
