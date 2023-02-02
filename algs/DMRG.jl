@@ -173,22 +173,18 @@ function setDMRG(psi::MPS,mpo::MPO,m::Integer,minm::Integer,Lenv::TensType,Renv:
 end
 
 @inline function Lexpand(A::TensType,ops::TensType,HL::TensType,alpha::Float64)
-#  println("Lexpand:")
-  #=@time =#Lenvpsi = contract(HL,(3,),A,(1,))
-  #=@time =#Hpsi = contract((1,3,4,2),Lenvpsi,(2,3),ops,(1,2),alpha=alpha)
-  #=@time =#expAA = reshape!(Hpsi,[[1],[2],[3,4]],merge=true)
-  #=@time =#out = joinindex!(A,expAA,3)
-#  println()
+  Lenvpsi = contract(HL,(3,),A,(1,))
+  Hpsi = contract((1,3,4,2),Lenvpsi,(2,3),ops,(1,2),alpha=alpha)
+  expAA = reshape!(Hpsi,[[1],[2],[3,4]],merge=true)
+  out = joinindex!(A,expAA,3)
   return out
 end
 
 @inline function Rexpand(A::TensType,ops::TensType,HR::TensType,alpha::Float64)
-#  println("Rexpand:")
-  #=@time =#Renvpsi = contract(A,(3,),HR,(1,))
-  #=@time =#Hpsi = contract((3,1,2,4),ops,(2,4),Renvpsi,(2,3),alpha=alpha)
-  #=@time =#expAA = reshape!(Hpsi,[[1,2],[3],[4]],merge=true)
-  #=@time =#out = joinindex!(A,expAA,1)
-#  println()
+  Renvpsi = contract(A,(3,),HR,(1,))
+  Hpsi = contract((3,1,2,4),ops,(2,4),Renvpsi,(2,3),alpha=alpha)
+  expAA = reshape!(Hpsi,[[1,2],[3],[4]],merge=true)
+  out = joinindex!(A,expAA,1)
   return out
 end
 
@@ -211,25 +207,7 @@ function singlesiteOps(mpo::MPO,nsites::Integer)
   return mpo
 end
 =#
-#=
-function twositeOps(mpo::MPO,nsites::Integer)
-  nbonds = length(mpo)-(nsites-1)
-  ops = Array{typeof(mpo[1]),1}(undef,nbonds)
-  #=Threads.@threads=# for i = 1:nbonds
-    ops[i] = contract([1,3,5,6,2,4],mpo[i],ndims(mpo[i]),mpo[i+1],1)
-    if typeof(ops[i]) <: qarray
-      ops[i] = changeblock(ops[i],[1,2,3,4],[5,6])
-    end
-  end
-  W = typeof(mpo)
-  if W <: largeMPO
-    newmpo = largeMPO(ops,label="twompo_")
-  else
-    newmpo = W(ops)
-  end
-  return newmpo
-end
-=#
+
 #=
 function NsiteOps(mpo::MPO,nsites::Integer)
   nbonds = length(mpo)-(nsites-1)
@@ -275,9 +253,9 @@ export Nsite_update
 
 @inline function step3S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                 psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
-#println(n," ",j," ",i," ",iL," ",iR)
+                
   currops = mpo[i]
-  #=@time =#AAvec,outEnergy = lanczos(psi[i],currops,maxiter=params.maxiter,updatefct=singlesite_update,Lenv=Lenv[i],Renv=Renv[i])
+  AAvec,outEnergy = lanczos(psi[i],currops,maxiter=params.maxiter,updatefct=singlesite_update,Lenv=Lenv[i],Renv=Renv[i])
   noise = params.noise
 
   params.energy = outEnergy[1]
@@ -288,17 +266,17 @@ export Nsite_update
   cutoff = params.cutoff
 
   if j > 0
-    #=@time =#tempL = (alpha_condition ? Lexpand(AAvec[1],currops,Lenv[iL],noise) : AAvec[1])
-    #=@time =#psi[iL],psi[iR],D,truncerr = moveR(tempL,psi[iR],cutoff=cutoff,m=maxm,minm=minm,condition=alpha_condition)
+    tempL = (alpha_condition ? Lexpand(AAvec[1],currops,Lenv[iL],noise) : AAvec[1])
+    psi[iL],psi[iR],D,truncerr = moveR(tempL,psi[iR],cutoff=cutoff,m=maxm,minm=minm,condition=alpha_condition)
   else
-    #=@time =#tempR = (alpha_condition ? Rexpand(AAvec[1],currops,Renv[iR],noise) : AAvec[1])
-    #=@time =#psi[iL],psi[iR],D,truncerr = moveL(psi[iL],tempR,cutoff=cutoff,m=maxm,minm=minm,condition=alpha_condition)
+    tempR = (alpha_condition ? Rexpand(AAvec[1],currops,Renv[iR],noise) : AAvec[1])
+    psi[iL],psi[iR],D,truncerr = moveL(psi[iL],tempR,cutoff=cutoff,m=maxm,minm=minm,condition=alpha_condition)
   end
   
-  #=@time =#params.noise = alpha_update(noise,truncerr,params.cutoff,params.lastenergy,params.energy,params.noise_goal,params.noise_incr)
+  params.noise = alpha_update(noise,truncerr,params.cutoff,params.lastenergy,params.energy,params.noise_goal,params.noise_incr)
   params.truncerr = truncerr
   params.biggestm = max(params.biggestm,size(D,1))
-#println()
+
   if !params.efficient
     SvNcheck!(i,j,D,length(psi),params)
   end
@@ -307,8 +285,6 @@ end
 
 @inline function twostep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                   psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
-
-#  println(n," ",j," ",i," ",iL," ",iR)
 
   if j > 0
     psi[iL] = div!(psi[iL],norm(psi[iL]))
@@ -319,25 +295,9 @@ end
   AA,energy = simplelanczos(Lenv[iL],Renv[iR],psi[iL],psi[iR],mpo[iL],mpo[iR])
 
   params.energy = energy
-#  println("E = ",energy)
-
-
-  checkU,checkD,checkV,truncerr = svd(makeArray(AA),[[1,2],[3,4]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
 
   U,D,V,truncerr = svd!(AA,[[1,2],[3,4]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
-#=
-  println()
-  println("ultra check:")
-  println(size(U)," ",size(D)," ",size(V))
-  println(size(checkU)," ",size(checkD)," ",size(checkV))
-  println(norm(makeArray(U)-checkU))
-  println(norm(makeArray(D)-checkD))
-  println(norm(makeArray(V)-checkV))
-  println()
 
-  println("eta = ",truncerr)
-  println(sort([D[i,i] for i = 1:size(D,1)]))
-  =#
   if j < 0
     psi[iL] = contract(U,(3,),D,(1,))
     psi[iR] = V
@@ -345,13 +305,14 @@ end
     psi[iL] = U
     psi[iR] = contract(D,(2,),V,(1,))
   end
+
   params.truncerr = truncerr
   params.biggestm = max(params.biggestm,size(D,1))
 
   if !params.efficient
     SvNcheck!(i,j,D,length(psi),params,alpha=false)
   end
-#  println()
+
   nothing
 end
 
@@ -382,19 +343,10 @@ end
 @inline function step2S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                 psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
 
-#  println(n," ",i," ",j," ",iL," ",iR)
-#  println(params.energy)
-
   if j > 0
     psi[iL] = div!(psi[iL],norm(psi[iL]))
-
-#    println(norm(psi[iL]))
-
   else
     psi[iR] = div!(psi[iR],norm(psi[iR]))
-
-#    println(norm(psi[iR]))
-
   end
 
   AA,energy = simplelanczos(Lenv[iL],Renv[iR],psi[iL],psi[iR],mpo[iL],mpo[iR])
@@ -406,15 +358,11 @@ end
   maxm = params.maxm
   cutoff = params.cutoff
 
-#  println(norm(AA))
-
   if j > 0
     rho = contractc(AA,(3,4),AA,(3,4))
   else
     rho = ccontract(AA,(1,2),AA,(1,2))
   end
-
-#  println(norm(rho))
 
   if params.noise > 0.
     if j > 0
@@ -427,20 +375,7 @@ end
     rho = add!(rho,randrho,params.noise)
   end
 
-#  println(norm(rho))
-  
-#  save_rho = deepcopy(rho)
-  
-#  println("symmetry version:")
   D,U,truncerr,sumD = eigen(rho,[[1,2],[3,4]],cutoff=params.cutoff,m=params.maxm,minm=params.minm,transpose = j < 0)
-
-#  println(norm(D)," ",norm(U))
-
-#  checkflux(D)
-
-#  println(U)
-
-#  checkflux(U)
 
   if j > 0
     psi[iL] = U
@@ -451,12 +386,6 @@ end
     psi[iR] = U
   end
 
-#  println(norm(psi[iL])," ",norm(psi[iR]))
-
-#  checkflux(psi[iL])
-#  checkflux(psi[iR])
-#  println()
-
   params.noise = alpha_update(noise,truncerr,params.cutoff,params.lastenergy,params.energy,params.noise_goal,params.noise_incr)
 
   params.truncerr = truncerr
@@ -465,7 +394,6 @@ end
   if !params.efficient
     SvNcheck!(i,j,D,length(psi),params,rev=true)
   end
-#  println()
   nothing
 end
 
