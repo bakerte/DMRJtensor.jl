@@ -15,11 +15,11 @@ mpo = makeMPO(heisenbergMPO,2,100)
 psi = randMPS(2,100)
 
 #dense version
-dmrg(psi,mpo,sweeps=100,m=45,cutoff=1E-9,method="twosite")
+dmrg(psi,mpo,sweeps=300,m=45,cutoff=1E-9,method="twosite")
 
 #symmetry version
 @makeQNs "spin" U1
 Qlabels = [spin(-2),spin(2)] #2 in units of 1/2 (so, two halves)
 
 qpsi,qmpo = MPS(Qlabels,psi,mpo)
-dmrg(qpsi,qmpo,sweeps=100,m=45,cutoff=1E-9,method="twosite")
+dmrg(qpsi,qmpo,sweeps=300,m=45,cutoff=1E-9,method="twosite")
