@@ -23,12 +23,12 @@ QS = 4
 Cup,Cdn,F,Nup,Ndn,Ndens,O,Id = fermionOps()
 
 psi = MPS(QS,Ns)
-upsites = [i for i = 1:2:Ns]
+upsites = [i for i = 1:Ns]
 Cupdag = Cup'
 applyOps!(psi,upsites,Cupdag,trail=F)
 
 
-dnsites = [i for i = 2:2:Ns]
+dnsites = [i for i = 1:Ns]
 Cdndag = Cdn'
 applyOps!(psi,dnsites,Cdndag,trail=F)
 
