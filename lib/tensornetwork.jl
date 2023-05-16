@@ -116,7 +116,7 @@ using ..MPutil
     for a = 1:size(A.names,1)
       for b = 1:size(B.names,1)
         if A.names[a] == B.names[b]
-          if !pairedvals[a]
+          if pairedvals[a]
             error("Indices not paired on contraction of named tensors (duplicate index name detected)")
           end
           push!(vecA,a)
@@ -548,6 +548,7 @@ using ..MPutil
     return sqrt!(B)
   end
 
+  import ..TENPACK.sqrt!
   """
       sqrt!(A)
 
@@ -690,11 +691,11 @@ using ..MPutil
   """
   function swapname!(A::TNobj,inds::Array{Array{W,1},1}) where W <: Any
     for c = 1:length(inds)
-      x = 0
+      x = 1
       while x < length(A.names) && A.names[x] != inds[c][1]
         x += 1
       end
-      y = 0
+      y = 1
       while y < length(A.names) && A.names[y] != inds[c][2]
         y += 1
       end
