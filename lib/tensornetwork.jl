@@ -548,7 +548,6 @@ using ..MPutil
     return sqrt!(B)
   end
 
-  import ..TENPACK.sqrt!
   """
       sqrt!(A)
 
