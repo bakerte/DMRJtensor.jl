@@ -112,11 +112,16 @@ using ..MPutil
   function contractinds(A::TNobj,B::TNobj)
     vecA = Int64[]
     vecB = Int64[]
+    pairedvals = [false for i = 1:length(A.names)]
     for a = 1:size(A.names,1)
       for b = 1:size(B.names,1)
         if A.names[a] == B.names[b]
+          if !pairedvals[a]
+            error("Indices not paired on contraction of named tensors (duplicate index name detected)")
+          end
           push!(vecA,a)
           push!(vecB,b)
+          pairedvals[a] = true
         end
       end
     end
@@ -279,9 +284,9 @@ using ..MPutil
                   cutoff::Number = 0.,m::Integer = 0,name::String="svdind",rightadd::String="L",
                   leftadd::String="R") where B <: Union{Any,String}
 
-    U,D,V = svd(AA,order,power=power,mag=mag,cutoff=cutoff,m=m,name=name,leftadd=leftadd,rightadd=rightadd)
+    U,D,V,truncerr,mag = svd(AA,order,power=power,mag=mag,cutoff=cutoff,m=m,name=name,leftadd=leftadd,rightadd=rightadd)
     S1 = sqrt(D)
-    return U*S1,S1*V
+    return U*S1,S1*V,truncerr,mag
   end
   export symsvd
 
@@ -333,8 +338,8 @@ using ..MPutil
   See also: [`nameMPS`](@ref)
   """
   function nameMPO(mpo::MPO)
-    TNmpo = Array{TNobj,1}(undef,size(mpo,1))
-    for i = 1:size(mpo,1)
+    TNmpo = Array{TNobj,1}(undef,length(mpo))
+    for i = 1:length(mpo)
       TNmpo[i] = nametens(mpo[i],["l$(i-1)","p$i","d$i","l$i"])
     end
     return network(TNmpo)
@@ -703,6 +708,7 @@ using ..MPutil
   function swapname!(A::TNobj,inds::Array{W,1}) where W <: Any
     swapname!(A,[inds])
   end
+  export swapname!
 
   """
     swapnames!(A,labels)
@@ -720,6 +726,7 @@ using ..MPutil
   function swapnames!(A::TNobj,inds::Array{W,1}) where W <: Any
     swapname!(A,[inds])
   end
+  export swapnames!
   
 
   """
@@ -868,10 +875,10 @@ using ..MPutil
   export sizecost
 
   function bgreedy(TNnet::TNnetwork;nsamples::Integer=length(TNnet.net),costfct::Function=contractcost)
-    numtensors = length(TNnet.net)
-    basetensors = [sizeT(TNnet.net[i]) for i = 1:numtensors]
-    savecontractlist = Int64[]
-    savecost = 99999999999999999999999
+    numtensors = length(TNnet.net) #number of tensors
+    basetensors = [sizeT(TNnet.net[i]) for i = 1:numtensors] #sizes of the tensors
+    savecontractlist = Int64[] #a list of possible ways to contract the network
+    savecost = 99999999999999999999999 #very high cost to contracting the intial steps
     for i = 1:nsamples
       currTensInd = (i-1) % nsamples + 1
       contractlist = [currTensInd]
