@@ -1204,10 +1204,11 @@ function dmul!(X::Qtens{R,Q},Y::Qtens{W,Q}) where {R <: Number, W <: Number, Q <
   #assert diagonal types in one of hte matrices here
   return maincontractor(false,false,X,(ndims(X),),Y,(1,),inplace=true)
 end
-
+#=
 function dmul!(X::Qtens{R,Q},Y::Qtens{W,Q}) where {R <: Number, W <: Number, Q <: Qnum}
   return maincontractor(false,false,X,(ndims(X),),Y,(1,),inplace=true)
 end
+                          =#
 
 function maincontractor(conjA::Bool,conjB::Bool,QtensA::Qtens{W,Q},vecA::Tuple,QtensB::Qtens{R,Q},vecB::Tuple,Z::Qtens{S,Q}...;alpha::Number=W(1),beta::Number=W(1),inplace::Bool=false) where {W <: Number, R <: Number, S <: Number, Q <: Qnum}
   if QtensA === QtensB && ((conjA && W <: Complex) || (conjB && R <: Complex))
