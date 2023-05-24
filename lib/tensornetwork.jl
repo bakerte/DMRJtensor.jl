@@ -80,10 +80,6 @@ using ..MPutil
     return network{W}(Qts)
   end
 
-  function TNnetwork(Qts::Array{W,1}) where W  <: TNobj
-    return network{W}(Qts)
-  end
-
   """
       network(Qts)
 
@@ -116,11 +112,16 @@ using ..MPutil
   function contractinds(A::TNobj,B::TNobj)
     vecA = Int64[]
     vecB = Int64[]
+    pairedvals = [false for i = 1:length(A.names)]
     for a = 1:size(A.names,1)
       for b = 1:size(B.names,1)
         if A.names[a] == B.names[b]
+          if pairedvals[a]
+            error("Indices not paired on contraction of named tensors (duplicate index name detected)")
+          end
           push!(vecA,a)
           push!(vecB,b)
+          pairedvals[a] = true
         end
       end
     end
@@ -283,9 +284,9 @@ using ..MPutil
                   cutoff::Number = 0.,m::Integer = 0,name::String="svdind",rightadd::String="L",
                   leftadd::String="R") where B <: Union{Any,String}
 
-    U,D,V = svd(AA,order,power=power,mag=mag,cutoff=cutoff,m=m,name=name,leftadd=leftadd,rightadd=rightadd)
+    U,D,V,truncerr,mag = svd(AA,order,power=power,mag=mag,cutoff=cutoff,m=m,name=name,leftadd=leftadd,rightadd=rightadd)
     S1 = sqrt(D)
-    return U*S1,S1*V
+    return U*S1,S1*V,truncerr,mag
   end
   export symsvd
 
@@ -547,6 +548,7 @@ using ..MPutil
     return sqrt!(B)
   end
 
+  import ..TENPACK.sqrt!
   """
       sqrt!(A)
 
@@ -689,11 +691,11 @@ using ..MPutil
   """
   function swapname!(A::TNobj,inds::Array{Array{W,1},1}) where W <: Any
     for c = 1:length(inds)
-      x = 0
+      x = 1
       while x < length(A.names) && A.names[x] != inds[c][1]
         x += 1
       end
-      y = 0
+      y = 1
       while y < length(A.names) && A.names[y] != inds[c][2]
         y += 1
       end
@@ -707,6 +709,7 @@ using ..MPutil
   function swapname!(A::TNobj,inds::Array{W,1}) where W <: Any
     swapname!(A,[inds])
   end
+  export swapname!
 
   """
     swapnames!(A,labels)
@@ -724,6 +727,7 @@ using ..MPutil
   function swapnames!(A::TNobj,inds::Array{W,1}) where W <: Any
     swapname!(A,[inds])
   end
+  export swapnames!
   
 
   """
@@ -923,8 +927,19 @@ using ..MPutil
     return savecontractlist
   end
   export bgreedy
-=#
+
 #  import .contractions.contract
+  function contract(Z::network;method::Function=bgreedy)
+    order = method(Z)
+    outTensor = Z[order[1]]*Z[order[2]]
+    for i = 3:length(order)
+      outTensor = outTensor * Z[order[i]]
+    end
+    return outTensor
+  end
+
+=#
+
 
 #=
   function KHP(Qts::network,invec::Array{R,1};nsamples::Integer=sum(p->length(Qts[p].names),invec),costfct::Function=contractcost) where R <: Integer
@@ -1187,17 +1202,6 @@ println(availTens)
   import .contractions.contract
   function contract(Z::network)
   end
-=#
-
-#=
-function contract(Z::network;method::Function=bgreedy)
-  order = method(Z)
-  outTensor = Z[order[1]]*Z[order[2]]
-  for i = 3:length(order)
-    outTensor = outTensor * Z[order[i]]
-  end
-  return outTensor
-end
 =#
 
 
@@ -1745,6 +1749,8 @@ val = parse(Int64, ARGS[1])
 #@btime (T[1]*T[2])*(T[3]*T[4])
 
 =#
+
+
 
 
 
