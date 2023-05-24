@@ -80,6 +80,10 @@ using ..MPutil
     return network{W}(Qts)
   end
 
+  function TNnetwork(Qts::Array{W,1}) where W  <: TNobj
+    return network{W}(Qts)
+  end
+
   """
       network(Qts)
 
@@ -112,16 +116,11 @@ using ..MPutil
   function contractinds(A::TNobj,B::TNobj)
     vecA = Int64[]
     vecB = Int64[]
-    pairedvals = [false for i = 1:length(A.names)]
     for a = 1:size(A.names,1)
       for b = 1:size(B.names,1)
         if A.names[a] == B.names[b]
-          if pairedvals[a]
-            error("Indices not paired on contraction of named tensors (duplicate index name detected)")
-          end
           push!(vecA,a)
           push!(vecB,b)
-          pairedvals[a] = true
         end
       end
     end
@@ -284,9 +283,9 @@ using ..MPutil
                   cutoff::Number = 0.,m::Integer = 0,name::String="svdind",rightadd::String="L",
                   leftadd::String="R") where B <: Union{Any,String}
 
-    U,D,V,truncerr,mag = svd(AA,order,power=power,mag=mag,cutoff=cutoff,m=m,name=name,leftadd=leftadd,rightadd=rightadd)
+    U,D,V = svd(AA,order,power=power,mag=mag,cutoff=cutoff,m=m,name=name,leftadd=leftadd,rightadd=rightadd)
     S1 = sqrt(D)
-    return U*S1,S1*V,truncerr,mag
+    return U*S1,S1*V
   end
   export symsvd
 
@@ -690,11 +689,11 @@ using ..MPutil
   """
   function swapname!(A::TNobj,inds::Array{Array{W,1},1}) where W <: Any
     for c = 1:length(inds)
-      x = 1
+      x = 0
       while x < length(A.names) && A.names[x] != inds[c][1]
         x += 1
       end
-      y = 1
+      y = 0
       while y < length(A.names) && A.names[y] != inds[c][2]
         y += 1
       end
@@ -708,7 +707,6 @@ using ..MPutil
   function swapname!(A::TNobj,inds::Array{W,1}) where W <: Any
     swapname!(A,[inds])
   end
-  export swapname!
 
   """
     swapnames!(A,labels)
@@ -726,7 +724,6 @@ using ..MPutil
   function swapnames!(A::TNobj,inds::Array{W,1}) where W <: Any
     swapname!(A,[inds])
   end
-  export swapnames!
   
 
   """
@@ -873,7 +870,7 @@ using ..MPutil
     return cost
   end
   export sizecost
-
+#=
   function bgreedy(TNnet::TNnetwork;nsamples::Integer=length(TNnet.net),costfct::Function=contractcost)
     numtensors = length(TNnet.net) #number of tensors
     basetensors = [sizeT(TNnet.net[i]) for i = 1:numtensors] #sizes of the tensors
@@ -926,19 +923,8 @@ using ..MPutil
     return savecontractlist
   end
   export bgreedy
-
+=#
 #  import .contractions.contract
-  function contract(Z::network;method::Function=bgreedy)
-    order = method(Z)
-    outTensor = Z[order[1]]*Z[order[2]]
-    for i = 3:length(order)
-      outTensor = outTensor * Z[order[i]]
-    end
-    return outTensor
-  end
-
-
-
 
 #=
   function KHP(Qts::network,invec::Array{R,1};nsamples::Integer=sum(p->length(Qts[p].names),invec),costfct::Function=contractcost) where R <: Integer
@@ -1202,3 +1188,564 @@ println(availTens)
   function contract(Z::network)
   end
 =#
+
+#=
+function contract(Z::network;method::Function=bgreedy)
+  order = method(Z)
+  outTensor = Z[order[1]]*Z[order[2]]
+  for i = 3:length(order)
+    outTensor = outTensor * Z[order[i]]
+  end
+  return outTensor
+end
+=#
+
+
+#       +--------------------------+
+#>------| Code by Kiana Gallagher  |---------<
+#       +--------------------------+
+
+#ContractFunctions.jl
+
+struct Indicies
+	names::Vector{String}
+	dimensions::Vector{intType}
+
+end
+
+
+"""
+to_ascii()
+
+Converts an ascii code of type UInt16 to a string value.
+
+Parameters:
+string: a string to be converted to an ascii value.
+
+Returns:
+A vector sotring the ascii equivalent for each letter of the string given.
+
+"""
+function to_ascii(string::String)::UInt32
+	return Base.codepoint(string)
+
+end
+
+
+"""
+to_string()
+
+Converts a string to an ascii code value.
+
+Parameters:
+ascii_val: a vectory of ascii values to be converted to a string.
+
+Returns:
+The string equivalent of the ascii valus given.
+
+"""
+function to_string(ascii_val::UInt32)::String # this may need to be updated, look for an altnernative
+	return Base.transcode(String, UInt32[ascii_val])
+
+end
+
+
+function remove_tensors(original_network::TNnetwork, to_remove::TNnetwork) #OK
+	updated_network = []
+
+	for tensor in original_network
+		if !(tensor in to_remove)
+			push!(updated_network, tensor)
+		end
+
+	end
+
+	return updated_network
+end
+
+
+function find_common_edges(left_edges::Indicies, right_edges::Indicies)::Indicies #OK
+	common_edges_names = []
+	common_edges_dimensions = []
+
+	for (pos, edge_name) in enumerate(left_edges.names)
+		if edge_name in right_edges.names 
+			push!(common_edges_names, edge_name)
+			push!(common_edges_dimensions, left_edges.dimensions[pos])
+
+		end
+	end
+
+	return Indicies(common_edges_names, common_edges_dimensions)
+
+end
+
+
+function lable_edges(left_edges::Indicies, right_edges::Indicies, common_edges::Indicies)::Indicies #OK
+	all_edge_names = vcat(left_edges.names, right_edges.names)
+	all_edge_dimensions = vcat(left_edges.dimensions, right_edges.dimensions)
+
+	curr_pos = 0
+	num_elements = length(left_edges.names) + length(right_edges.names) - 2*length(common_edges.names)
+	new_tensor_names = Vector{String}(undef, num_elements)
+	new_tensor_dimensions = Vector{Int64}(undef, num_elements)
+
+	for (pos, edge) in enumerate(all_edge_names)
+		if !(edge in common_edges.names)
+			new_tensor_names[curr_pos+=1] =  edge
+			new_tensor_dimensions[curr_pos] =  all_edge_dimensions[pos]
+
+		end
+	end
+
+	return Indicies(new_tensor_names, new_tensor_dimensions)
+
+end
+
+
+function permute(edges::Indicies, common_edges::Vector{String})::intType # Check if it is possible to specify #OK
+	permute_cost = 1
+	position = Vector{intType}(undef, length(common_edges))
+
+	for (pos, edge) in enumerate(common_edges)
+		index = findfirst(==(edge), edges.names)
+		position[pos] = index
+
+	end
+
+	sort!(position)
+
+	if !(length(edges.names) in position) && !(1 in position)
+		for edge_dim in edges.dimensions
+			permute_cost *= edge_dim
+			
+		end
+
+		return permute_cost
+
+	else
+		for pos in range(2, length(common_edges))
+			if (position[pos]-position[pos-1]) != 1
+
+				permute_required = true
+				
+				for edge_dim in edges.dimensions
+					permute_cost *= edge_dim
+			
+				end
+
+				return permute_cost
+
+			end
+		end
+	end
+
+	return 0
+end
+
+
+function cost(edges::Indicies)::Int64 #OK
+	cost = 1
+
+	for edge_dim in edges.dimensions
+	cost *= edge_dim
+
+	end
+
+	return cost
+
+end 
+
+
+function contract_in_order(string_val::String, dictionary::Dict{Char, nametens{tens{Float64}, String}})::nametens{tens{Float64}, String} #OK 
+	match_found = false
+	start_string = 1
+	end_string = 1 
+
+	#Looks like a do-while loop
+
+	m = match(r"[^\(\)]{2}", string_val, end_string)
+
+	if (m != nothing)
+
+		left_tensor = m.match[1]
+
+		right_tensor = m.match[lastindex(m.match)]
+
+		end_string = length(m.match) + m.offset
+
+		contracted = dictionary[left_tensor]*dictionary[right_tensor]
+
+		result = multiply(string_val, m.match, dictionary, contracted)
+
+		match_found = true
+
+	end
+
+	while (match_found)
+		m = match(r"[^\(\)]{2}", string_val, end_string)
+
+		if (m != nothing)
+
+			left_tensor = m.match[1]
+
+			right_tensor = m.match[lastindex(m.match)]
+
+			end_string = length(m.match) + m.offset
+
+			contracted = dictionary[left_tensor]*dictionary[right_tensor]
+
+			result *= multiply(string_val, m.match, dictionary, contracted)
+
+		else
+			match_found = false
+
+		end
+	end
+
+	return result
+end
+
+
+function multiply(string_val::String, last_string, dictionary::Dict{Char, nametens{tens{Float64}, String}}, contracted::nametens{tens{Float64}, String})::nametens{tens{Float64}, String} #OK
+	regex_left = Regex("[^\\(\\)]\\($(last_string)")
+	m_left = match(regex_left, string_val)
+
+	if !(m_left == nothing)
+
+		tensor_key = m_left.match[1]
+
+		new_string = "$(tensor_key)\\($(last_string)\\)"
+		new_contract = dictionary[tensor_key]*contracted
+
+		result = multiply(string_val, new_string, dictionary, new_contract)
+
+
+	elseif (m_left == nothing)
+	    regex_right = Regex("$(last_string)\\)[^\\(\\)]")
+	    m_right = match(regex_right, string_val)
+
+	    if !(m_right == nothing)
+
+			tensor_key = m_right.match[lastindex(m_right.match)]
+
+			new_string = "\\($(last_string)\\)$(tensor_key)"
+			new_contract = contracted*dictionary[tensor_key]
+
+			result = multiply(string_val, new_string, dictionary, new_contract)
+
+		else
+			result = contracted
+
+		end
+	end
+
+	return result
+end
+
+
+#ContractionAlg.jl
+
+struct PseudoTensor
+	name::String
+	edges::Indicies
+	composition::Vector{String}
+	cost::intType
+end
+
+
+"""
+convert_tensor()
+
+The default tensors are converted into PseudoTensor datatypes.
+
+Parameters:
+tensor:
+ascii_val:
+position:
+
+Returns:
+PseudoTensor:
+
+"""
+function convert_tensor(tensor::nametens{tens{Float64}, String}, ascii_val::UInt32)::PseudoTensor #OK 
+
+	# Gives the tensor the next possible name
+	name = to_string(ascii_val)
+
+	# Creating empty lists for stores the details of each index.
+	edge_names = Vector{String}(undef, length(tensor.names))
+	edge_dimensions = Vector{Int64}(undef, length(tensor.names))
+
+	for pos = 1:length(tensor.names)
+		edge_names[pos] = tensor.names[pos]
+		edge_dimensions[pos] = tensor.N.size[pos]
+
+	end
+
+	# The for loop updates the information of the Indicies.
+	# @time for pos in range(1, length(tensor.names))
+	# 	push!(edge_names, tensor.names[pos])
+	# 	push!(edge_dimensions, tensor.N.size[pos])
+
+	# end
+
+	# Stores the details of the Indicies for a tensor.
+	edges = Indicies(edge_names, edge_dimensions)
+
+	# Returns a PseudoTensor struct.
+	return PseudoTensor(name, edges, [name], 0)
+
+end 
+
+
+function combine(left_composition, right_composition)
+	combined = vcat(left_composition, right_composition)
+
+	return unique!(combined)
+
+end
+
+
+"""
+simple_contract()
+
+Contracts two tensors that are of type PseudoTensor.
+
+"""
+function simple_contract(left_tensor::PseudoTensor, right_tensor::PseudoTensor, common_edges::Indicies)::PseudoTensor #GOOD
+	name = "("*left_tensor.name*right_tensor.name*")" # A new name is given to the new tensor # alright
+
+	permute_cost = permute(left_tensor.edges, common_edges.names) + permute(right_tensor.edges, common_edges.names) 
+
+	new_edges = lable_edges(left_tensor.edges, right_tensor.edges, common_edges) #HERE
+	added_cost = cost(new_edges) + cost(common_edges)
+	new_cost = left_tensor.cost + right_tensor.cost + added_cost + permute_cost
+
+	# Updates the composition of the tensors.
+	new_composition = combine(left_tensor.composition, right_tensor.composition)
+	
+	return PseudoTensor(name, new_edges, new_composition, new_cost)
+
+end
+
+
+function find_same(left_comp::Vector{String}, right_comp::Vector{String})::Bool
+
+for tensor in left_comp
+	if tensor in right_comp
+		return true
+
+	end
+
+end
+
+return false
+
+end
+
+
+function expand_table(table::Dict{String, PseudoTensor}, starting_ascii::UInt32, network_size::intType)::Vector{PseudoTensor} #OK
+	final_contractions = PseudoTensor[] # Holds the contractions that contract the whole network together.
+	#queue = Queue{PseudoTensor}() # Initializes an empty queue.
+	queue = PseudoTensor[]
+
+	# Puts all the base case PseudoTensors into a queue.
+	for tensor in values(table)
+		# enqueue!(queue, tensor)
+		push!(queue, tensor)
+
+	end
+
+	while (length(queue) != 0)
+		#left_tensor = dequeue!(queue)
+		left_tensor = pop!(queue)
+
+		# The current left tensor is compared to all the other tensors in the table
+		for right_tensor in values(table)
+			# Will not contract on itself.
+			if (left_tensor == right_tensor) 
+				continue
+
+			# Ensures it will not contract with a tree that already contains the left tensor.
+			elseif find_same(left_tensor.composition, right_tensor.composition) # this is expensive, create a new function
+				continue
+
+			else
+				# Checks if the left and right tensor have an Indicies in common.
+				common_edges = find_common_edges(left_tensor.edges, right_tensor.edges) #this seems fairly effcient
+
+				# If they have an edge in common then it is possible to contract.
+				if (length(common_edges.names) != 0)
+
+					# A new tensor is produced from contracting the left and right tensor.
+					new_tensor = simple_contract(left_tensor, right_tensor, common_edges) #seems decent
+
+					if (length(new_tensor.composition) == network_size)
+						push!(final_contractions, new_tensor) #possible way to turn this into a counting problem... so the array can be of fixed size
+
+					else
+						table[new_tensor.name] = new_tensor
+						push!(queue, new_tensor)
+						# enqueue!(queue, new_tensor)
+
+					end
+				end
+			end
+		end
+	end
+	
+	return final_contractions
+
+end
+
+
+"""
+find_min()
+
+Finds the minimum cost of contracting the network and return the last contraction completed
+for the minimum cost network.
+
+"""
+function find_min(final_product::Vector{PseudoTensor})::PseudoTensor #OK
+	answer = final_product[1]
+	min_val = final_product[1].cost
+
+	for result in final_product
+		if (result.cost<=min_val)
+			if (result.name<answer.name)
+				answer = result
+				min_val = result.cost
+			end
+		end
+	end
+
+	return answer
+
+end
+
+
+"""
+contract()
+
+This function contracts the tensor network given.
+
+"""
+function contract(network::TNnetwork; starting_ascii::UInt32=0x000000A1 #=rand(UInt32)=#, remove = intType[]) #where W <: Number #it does not like typehints with kwargs #GOOD
+	if length(remove) != 0
+		network = remove_tensors(network, remove)
+
+	end
+
+	table::Dict{String, PseudoTensor} = Dict() # A dictionary is used to store the tensors that have been made.
+	base_cases::Dict{Char, nametens{tens{Float64}, String}} = Dict() # Holds the basic tensors and their correpsonding names that have been assigned.
+
+	# Creates a PseudoTensor datatype for each nametens datatype.
+
+  g = length(network)
+	for w = 1:g #tensor in network 
+    tensor = network[w]
+		temp_tensor = convert_tensor(tensor, starting_ascii)
+		
+		table[temp_tensor.name] = temp_tensor
+		base_cases[only(temp_tensor.name)] = tensor
+
+		starting_ascii += 0x00000001
+
+	end
+
+	final_result = expand_table(table, starting_ascii, length(network))
+
+	if length(final_result)==0
+		error("The tensor network given is disjoint")
+
+	end
+
+	best_order = find_min(final_result)
+
+	contracted_result = contract_in_order(best_order.name, base_cases) 
+
+	return contracted_result 
+
+
+end
+
+
+function contract(remove::Array{intType,1},network::TNnetwork; starting_ascii::UInt32=0x000000A1 #=rand(UInt32)=#)
+  return contract(network,starting_ascii=starting_ascii,remove=remove)
+end
+
+function contract(remove::Array{intType,1},network::TNobj...; starting_ascii::UInt32=0x000000A1 #=rand(UInt32)=#)
+  return contract(TNnetwork(network...),starting_ascii=starting_ascii,remove=remove)
+end
+
+function contract(network::TNobj...; starting_ascii::UInt32=0x000000A1 #=rand(UInt32)=#,remove::Array{intType,1}=intType[])
+  return contract(TNnetwork(network...),starting_ascii=starting_ascii,remove=remove)
+end
+
+function contract(remove::Array{intType,1},network::Array{W,1}; starting_ascii::UInt32=0x000000A1 #=rand(UInt32)=#) where W <: TNobj
+  return contract(TNnetwork(network),starting_ascii=starting_ascii,remove=remove)
+end
+
+function contract(network::Array{W,1}; starting_ascii::UInt32=0x000000A1 #=rand(UInt32)=#,remove::Array{intType,1}=intType[]) where W <: TNobj
+  return contract(TNnetwork(network),starting_ascii=starting_ascii,remove=remove)
+end
+
+#=
+function main(val::Int64) #GOOD
+	starting_ascii = 0x000000A1 # This is the first unicode value listed online.
+	A::Vector{nametens{tens{Float64}, String}} = [nametens(tens(rand(1,2,2,1)), ["a$(i-1)", "b$i", "c$(i)", "a$i"]) for i in range(1,val)] # 10 is the max number tested so far
+	#A::Vector{nametens{tens{Float64}, String}} = [nametens(tens(rand(1,2,1)), ["a$(i-1)", "b$i", "a$i"]) for i in range(1,val)]
+
+	# A = nametens(tens(rand(1,2,1)), ["a0", "b1", "a1"])
+	# B = nametens(tens(rand(1,2,1)), ["a1", "b2", "a2"])
+	# C = nametens(tens(rand(1,2,1)), ["a2", "b3", "a3"])
+	# D = nametens(tens(rand(1,2,1)), ["a3", "b4", "a4"])
+	# E = nametens(tens(rand(1,2,1)), ["a4", "b5", "a5"])
+
+	# F = [A,B,C,D,E]
+
+	B::Vector{nametens{tens{Float64}, String}} = []
+
+	middle = 0
+
+	for i in 1:2
+		for j in 1:2
+
+		push!(B, nametens(rand(1,1,2,1,1), ["h"*"$(i)"*"$(j-1)", "h"*"$(i)"*"$(j)", "b$(middle)", "v"*"$(i-1)"*"$(j)", "v"*"$(i)"*"$(j)"]))
+		middle += 1
+
+		end
+	end
+
+	# C = [B[2], B[1], B[4], B[3]]
+
+	# for b in B
+	# 	println(b.names)
+
+	# end
+
+	result = contract(A, starting_ascii)
+
+
+
+	# @time contract(A, starting_ascii)
+	# println()
+
+
+end
+
+val = parse(Int64, ARGS[1])
+#main(val)
+
+@btime main(val)
+
+#@btime contract(T, 0x000000A1)
+
+#@btime (T[1]*T[2])*(T[3]*T[4])
+
+=#
+
+
+
+
