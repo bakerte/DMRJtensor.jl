@@ -85,8 +85,8 @@ using ..MPutil
 
   converts named tensor to a network with a single tensor element
   """
-  function network(Qts::nametens{W,S}...) where W  <: TNobj where S <: Union{Any,String}
-    return network{W,S}([Qts[i] for i = 1:length(Qts)])
+  function network(Qts::W...) where W  <: TNobj where S <: Union{Any,String}
+    return network{W}([Qts[i] for i = 1:length(Qts)])
   end
   export network
 
@@ -548,7 +548,7 @@ using ..MPutil
     return sqrt!(B)
   end
 
-  #import ..TENPACK.sqrt!
+  import ..TENPACK.sqrt!
   """
       sqrt!(A)
 
@@ -1675,24 +1675,24 @@ function contract(network::TNnetwork; starting_ascii::UInt32=0x000000A1 #=rand(U
 end
 
 
-function contract(remove::Array{intType,1},network::TNnetwork; starting_ascii::UInt32=0x000000A1 #=rand(UInt32)=#)
-  return contract(network,starting_ascii=starting_ascii,remove=remove)
+function contract(remove::Array{intType,1},input_network::TNnetwork; starting_ascii::UInt32=0x000000A1 #=rand(UInt32)=#)
+  return contract(input_network,starting_ascii=starting_ascii,remove=remove)
 end
 
-function contract(remove::Array{intType,1},network::TNobj...; starting_ascii::UInt32=0x000000A1 #=rand(UInt32)=#)
-  return contract(TNnetwork(network...),starting_ascii=starting_ascii,remove=remove)
+function contract(remove::Array{intType,1},input_network::TNobj...; starting_ascii::UInt32=0x000000A1 #=rand(UInt32)=#)
+  return contract(network(input_network...),starting_ascii=starting_ascii,remove=remove)
 end
 
-function contract(network::TNobj...; starting_ascii::UInt32=0x000000A1 #=rand(UInt32)=#,remove::Array{intType,1}=intType[])
-  return contract(TNnetwork(network...),starting_ascii=starting_ascii,remove=remove)
+function contract(input_network::TNobj...; starting_ascii::UInt32=0x000000A1 #=rand(UInt32)=#,remove::Array{intType,1}=intType[])
+  return contract(network(input_network...),starting_ascii=starting_ascii,remove=remove)
 end
 
-function contract(remove::Array{intType,1},network::Array{W,1}; starting_ascii::UInt32=0x000000A1 #=rand(UInt32)=#) where W <: TNobj
-  return contract(TNnetwork(network),starting_ascii=starting_ascii,remove=remove)
+function contract(remove::Array{intType,1},input_network::Array{W,1}; starting_ascii::UInt32=0x000000A1 #=rand(UInt32)=#) where W <: TNobj
+  return contract(network(input_network),starting_ascii=starting_ascii,remove=remove)
 end
 
-function contract(network::Array{W,1}; starting_ascii::UInt32=0x000000A1 #=rand(UInt32)=#,remove::Array{intType,1}=intType[]) where W <: TNobj
-  return contract(TNnetwork(network),starting_ascii=starting_ascii,remove=remove)
+function contract(input_network::Array{W,1}; starting_ascii::UInt32=0x000000A1 #=rand(UInt32)=#,remove::Array{intType,1}=intType[]) where W <: TNobj
+  return contract(network(input_network),starting_ascii=starting_ascii,remove=remove)
 end
 
 #=
