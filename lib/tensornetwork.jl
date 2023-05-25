@@ -557,7 +557,7 @@ using ..MPutil
   See also: [`sqrt!`](@ref)
   """
   function sqrt!(A::TNobj;root::Number=0.5)
-    A.N = tensorcombination!(A.N,(root,),fct=^)#sqrt!(A.N,root=root)
+    A.N = tensorcombination!(A.N,alpha=(root,),fct=^)#sqrt!(A.N,root=root)
     return A
   end
 
