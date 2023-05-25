@@ -285,7 +285,7 @@ using ..MPutil
                   leftadd::String="R") where B <: Union{Any,String}
 
     U,D,V,truncerr,mag = svd(AA,order,power=power,mag=mag,cutoff=cutoff,m=m,name=name,leftadd=leftadd,rightadd=rightadd)
-    S1 = sqrt(D)
+    S1 = sqrt!(D)
     return U*S1,S1*V,truncerr,mag
   end
   export symsvd
@@ -543,9 +543,9 @@ using ..MPutil
 
   See also: [`sqrt`](@ref)
   """
-  function sqrt(A::TNobj)
+  function sqrt(A::TNobj;root::Number=0.5)
     B = copy(A)
-    return sqrt!(B)
+    return sqrt!(B,root=root)
   end
 
 #  import ..TENPACK.sqrt!
@@ -556,8 +556,8 @@ using ..MPutil
 
   See also: [`sqrt!`](@ref)
   """
-  function sqrt!(A::TNobj)
-    A.N = sqrt!(A.N)
+  function sqrt!(A::TNobj;root::Number=0.5)
+    A.N = tensorcombination!(A.N,(root,),fct=^)#sqrt!(A.N,root=root)
     return A
   end
 
