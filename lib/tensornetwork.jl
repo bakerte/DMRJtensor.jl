@@ -88,6 +88,15 @@ using ..MPutil
   function network(Qts::W...) where W  <: TNobj where S <: Union{Any,String}
     return network{W}([Qts[i] for i = 1:length(Qts)])
   end
+
+  """
+    network(Qt,i)
+
+  converts named tensor `Qt` to a network with `i` copied elements not shallow copied
+  """
+  function network(Qts::W,n::Integer) where W  <: TNobj where S <: Union{Any,String}
+  return network{W}([copy(Qts) for i = 1:n])
+  end
   export network
 
   import ..Base.getindex
