@@ -85,7 +85,7 @@ using ..MPutil
 
   converts named tensor to a network with a single tensor element
   """
-  function network(Qts::W...) where W  <: TNobj where S <: Union{Any,String}
+  function network(Qts::W...) where W  <: TNobj #where S <: Union{Any,String}
     return network{W}([Qts[i] for i = 1:length(Qts)])
   end
 
@@ -94,7 +94,7 @@ using ..MPutil
 
   converts named tensor `Qt` to a network with `i` copied elements not shallow copied
   """
-  function network(Qts::W,n::Integer) where W  <: TNobj where S <: Union{Any,String}
+  function network(Qts::W,n::Integer) where W  <: TNobj #where S <: Union{Any,String}
   return network{W}([copy(Qts) for i = 1:n])
   end
   export network
@@ -374,6 +374,15 @@ using ..MPutil
   """
   function copy(A::nametens{W,B}) where {W <: Union{qarray,AbstractArray,denstens}, B <: Union{Any,String}}
     return nametens{W,B}(copy(A.N),copy(A.names))
+  end
+
+  """
+    copy(A)
+
+  Returns a copy of network of named tensors `A`
+  """
+  function copy(A::TNnetwork)
+    return network([copy(A.net[i]) for i = 1:length(A)])
   end
 
   import Base.println
@@ -1456,6 +1465,155 @@ function multiply(string_val::String, last_string, dictionary::Dict{Char, namete
 	return result
 end
 
+############
+############
+############
+# END OF Contract_functions.jl
+############
+############
+############
+
+#Greedy.jl
+
+function common_edges(network)
+	shared_edges = Dict()
+
+  Nobjs = length(network)
+
+	for w = 1:Nobjs
+    tensor = network[w]
+		for edge in tensor.names
+			if edge in keys(shared_edges)
+				push!(shared_edges[edge], tensor)
+
+			else
+				shared_edges[edge] = [tensor]
+
+			end
+
+		end
+
+
+	end
+
+	return shared_edges
+end
+
+
+function find_common_edges(left_edges::Indicies, right_edges::Indicies)::Indicies #OK
+	common_edges_names = []
+	common_edges_dimensions = []
+
+	for (pos, edge_name) in enumerate(left_edges.names)
+		if edge_name in right_edges.names 
+			push!(common_edges_names, edge_name)
+			push!(common_edges_dimensions, left_edges.dimensions[pos])
+
+		end
+	end
+
+	return Indicies(common_edges_names, common_edges_dimensions)
+
+end
+
+
+function cost_possible(shared_edges)
+	all_costs = Dict()
+	cost_vals = []
+
+	for tensors in values(shared_edges)
+		for left_tensor in tensors
+			for right_tensor in tensors
+				if !(left_tensor == right_tensor) && (length(tensors) != 1)
+
+#          println(left_tensor.names)
+#          println(left_tensor.N.size)
+
+          leftsize = [left_tensor.N.size[i] for i = 1:length(left_tensor.N.size)]
+          rightsize = [right_tensor.N.size[i] for i = 1:length(right_tensor.N.size)]
+
+					left_details = Indicies(left_tensor.names, leftsize)
+					right_details = Indicies(right_tensor.names, rightsize)
+
+					common_edges = find_common_edges(left_details, right_details)
+
+					permute_cost = permute(left_details, common_edges.names) + permute(right_details, common_edges.names) 
+					cost_tot = (cost(left_details) + cost(right_details))÷cost(common_edges)
+
+					#order = find_order(left_tensor, right_tensor)
+					all_costs[cost_tot] = (tensors = (left_tensor, right_tensor), common = common_edges)
+					push!(cost_vals, cost_tot)
+
+
+				end
+
+			end
+		end
+	end
+
+	return (possible_costs = cost_vals, cost_dict = all_costs)
+
+
+
+end
+
+function greedy(network)
+  return greedy!(copy(network))
+end
+
+function greedy!(thisnetwork)
+
+	shared_edges = common_edges(thisnetwork)
+	cost_details = cost_possible(shared_edges)
+
+	while length(cost_details.possible_costs) != 0
+
+
+		sort!(cost_details.possible_costs) #is it better to sort in place?? to do a comparison when pushing to the dict
+
+		least_expensive = cost_details.cost_dict[cost_details.possible_costs[1]] # do the contraction and repeat the process OR update the current elements
+
+		left_tensor = least_expensive.tensors[1] # the left tensor
+		right_tensor = least_expensive.tensors[2] # the right tensor
+
+		result = left_tensor*right_tensor #expensive
+
+    x = 1
+    while x < length(thisnetwork) && left_tensor != thisnetwork[x]
+      x += 1
+    end
+
+    y = 1
+    while y < length(thisnetwork) && right_tensor != thisnetwork[y]
+      y += 1
+    end
+
+    left_location = x
+    right_location = y
+
+#		left_location = findfirst(==(left_tensor), network)
+#		right_location = findfirst(==(right_tensor), network)
+
+thisnetwork[left_location] = result
+
+    tempfix = thisnetwork.net
+
+		deleteat!(tempfix, right_location)
+    thisnetwork = network(tempfix)
+
+		shared_edges = common_edges(thisnetwork) #expensive
+		cost_details = cost_possible(shared_edges) #expensive
+
+
+end
+
+  return thisnetwork[1]
+end
+
+import ..Base.keys
+function keys(A::TNnetwork)
+  return keys(A.net)
+end
 
 #ContractionAlg.jl
 
@@ -1650,34 +1808,37 @@ function contract(network::TNnetwork; starting_ascii::UInt32=0x000000A1 #=rand(U
 
 	end
 
-	table::Dict{String, PseudoTensor} = Dict() # A dictionary is used to store the tensors that have been made.
-	base_cases::Dict{Char, nametens{tens{Float64}, String}} = Dict() # Holds the basic tensors and their correpsonding names that have been assigned.
+  if true
+    contracted_result = greedy(network)
+  else
+    table::Dict{String, PseudoTensor} = Dict() # A dictionary is used to store the tensors that have been made.
+    base_cases::Dict{Char, nametens{tens{Float64}, String}} = Dict() # Holds the basic tensors and their correpsonding names that have been assigned.
 
-	# Creates a PseudoTensor datatype for each nametens datatype.
+    # Creates a PseudoTensor datatype for each nametens datatype.
 
-  g = length(network)
-	for w = 1:g #tensor in network 
-    tensor = network[w]
-		temp_tensor = convert_tensor(tensor, starting_ascii)
-		
-		table[temp_tensor.name] = temp_tensor
-		base_cases[only(temp_tensor.name)] = tensor
+    g = length(network)
+    for w = 1:g #tensor in network 
+      tensor = network[w]
+      temp_tensor = convert_tensor(tensor, starting_ascii)
+      
+      table[temp_tensor.name] = temp_tensor
+      base_cases[only(temp_tensor.name)] = tensor
 
-		starting_ascii += 0x00000001
+      starting_ascii += 0x00000001
 
-	end
+    end
 
-	final_result = expand_table(table, starting_ascii, length(network))
+    final_result = expand_table(table, starting_ascii, length(network))
 
-	if length(final_result)==0
-		error("The tensor network given is disjoint")
+    if length(final_result)==0
+      error("The tensor network given is disjoint")
 
-	end
+    end
 
-	best_order = find_min(final_result)
+    best_order = find_min(final_result)
 
-	contracted_result = contract_in_order(best_order.name, base_cases) 
-
+    contracted_result = contract_in_order(best_order.name, base_cases) 
+  end
 	return contracted_result 
 
 
