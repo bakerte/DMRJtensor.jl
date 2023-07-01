@@ -182,34 +182,8 @@ end
 function setEnv(dualpsi::MPS,psi::MPS,mpo::MPO,params::TNparams,
                 prevpsi::MPS...;measfct::Function=expect,mover::Function=move!)
 
-#  println()
-#  println("setEnv:")
-#  println()
-
-#  println(params.Lbound)
-#  println(params.Rbound)
-
-#  checkflux(params.Lbound)
-#  checkflux(params.Rbound)
-
-#  println(params.Lenv == [0])
-#  println(params.Renv == [0])
-
   if params.Lenv == [0] && params.Renv == [0]
     params.Lenv,params.Renv = makeEnv(dualpsi,psi,mpo,Lbound=params.Lbound,Rbound=params.Rbound)
-    #=
-  else  
-
-    for a = 1:length(params.Renv)
-      println(a)
-      checkflux(params.Renv[a])
-    end
-
-    for a = 1:length(params.Lenv)
-      println(a)
-      checkflux(params.Lenv[a])
-    end
-    =#
   end
 
   SvN,lastSvN,maxtrunc,biggestm = [0.],[0.],[0.],[0]
@@ -228,7 +202,7 @@ function setEnv(dualpsi::MPS,psi::MPS,mpo::MPO,params::TNparams,
   # setup for the sweeping direction
   if psi.oc == 1
     j = 1
-  elseif psi.oc == Ns #
+  elseif psi.oc == Ns
     j = -1
   else
     j = params.origj ? 1 : -1 #if the oc is away from the edge, j could be externally specified.
@@ -371,7 +345,8 @@ function NsiteOps(mpo::MPO,nsites::Integer)
   return out_mpo
 end
 
-function singlesite_update(Lenv::TensType,Renv::TensType,AA::TensType,ops::TensType)
+function singlesite_update(Lenv::TensType,Renv::TensType,AA::TensType,optup::NTuple{G,P}) where {G, P <: TensType}
+  ops = optup[1]
   LAA = contract(Lenv,(3,),AA,(1,))
   LopsAA = contract(LAA,(2,3),ops,(1,2))
   return contract(LopsAA,(2,4),Renv,(1,2))
@@ -497,7 +472,7 @@ function Nstep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi:
   nothing
 end
 
-function loadvars!(params::TNparams,method::String,minm::Integer,maxm::Integer,sweeps::Integer,cutoff::Float64,silent::Bool,goal::Float64,
+function loadvars!(params::TNparams,method::String,minm::Integer,m::Integer,sweeps::Integer,cutoff::Float64,silent::Bool,goal::Float64,
                   SvNbond::Integer,allSvNbond::Bool,efficient::Bool,cvgE::Bool,maxiter::Integer,fixD::Bool,nsites::Integer,
                   noise::Union{Float64,Array{Float64,1}},noise_decay::Float64,noise_goal::Float64,noise_incr::Float64,saveEnergy::W,halfsweep::Bool,Lbound::TensType,Rbound::TensType,
                   Lenv::Env,Renv::Env,psioc::Integer,origj::Bool,maxshowD::Integer,storeD::Array{Float64,1},exnum::Integer) where W <: Union{R,Array{R,1}} where R <: Number
@@ -505,7 +480,7 @@ function loadvars!(params::TNparams,method::String,minm::Integer,maxm::Integer,s
   if params.load
     params.method = method
     params.minm = minm
-    params.maxm = maxm
+    params.maxm = m
     params.sweeps = sweeps
     params.cutoff = cutoff
     params.silent = silent
@@ -544,7 +519,7 @@ infovals: stores current energy (skips initialization for it), truncation error,
                         largest m value, noise parameter  <---switch to second slot
 """
 function optimize(dualpsi::MPS,psi::MPS,mpo::MPO,beta::Array{P,1},prevpsi::MPS...;params::TNparams=algvars(),
-                  method::String="optimize",maxm::Integer=0,minm::Integer=2,sweeps::Integer=1,
+                  method::String="optimize",m::Integer=0,minm::Integer=2,sweeps::Integer=1,
                   cutoff::Float64=0.,silent::Bool=false,goal::Float64=0.,infovals::Array{Float64,1}=zeros(5),
                   SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,efficient::Bool=false,
                   cvgE::Bool=true,maxiter::Integer=2,exnum::Integer=1,fixD::Bool=false,nsites::Integer=1,
@@ -552,7 +527,7 @@ function optimize(dualpsi::MPS,psi::MPS,mpo::MPO,beta::Array{P,1},prevpsi::MPS..
                   saveEnergy::Array{R,1}=[0],halfsweep::Bool=false,Lbound::TensType=[0],Rbound::TensType=[0],
                   Lenv::Env=[0],Renv::Env=[0],origj::Bool=true,maxshowD::Integer=8,
                   storeD::Array{W,1}=[0.]) where {W <: Number, R <: Number,P <: Number}
-  loadvars!(params,method,minm,maxm,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
+  loadvars!(params,method,minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
             noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)
   return optmps(dualpsi,psi,mpo,beta,prevpsi...,params=params)
 end
@@ -562,7 +537,7 @@ export optimize
 
 
 function Noptimize(dualpsi::MPS,psi::MPS,mpo::MPO,beta::Array{P,1},prevpsi::MPS...;
-                  method::String="optimize",maxm::Integer=0,minm::Integer=2,sweeps::Integer=1,
+                  method::String="optimize",m::Integer=0,minm::Integer=2,sweeps::Integer=1,
                   cutoff::Float64=0.,silent::Bool=false,goal::Float64=0.,infovals::Array{Float64,1}=zeros(5),
                   SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,efficient::Bool=false,
                   cvgE::Bool=true,maxiter::Integer=2,exnum::Integer=1,fixD::Bool=false,nsites::Integer=2,
@@ -570,7 +545,7 @@ function Noptimize(dualpsi::MPS,psi::MPS,mpo::MPO,beta::Array{P,1},prevpsi::MPS.
                   saveEnergy::Array{R,1}=[0],halfsweep::Bool=false,Lbound::TensType=[0],Rbound::TensType=[0],
                   Lenv::Env=[0],Renv::Env=[0],origj::Bool=true,maxshowD::Integer=8,
                   storeD::Array{W,1}=[0.]) where {W <: Number,R <: Number,P <: Number}
-  loadvars!(params,method,minm,maxm,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
+  loadvars!(params,method,minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
             noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)
   return optmps(dualpsi,psi,mpo,beta,prevpsi...,params=params,stepfct=Nstep,#=makeOps=NsiteOps,=#cvgfct=nullcvg)
 end
@@ -593,7 +568,7 @@ function optmps(dualpsi::MPS,psi::MPS,mpo::MPO,beta::Array{P,1},prevpsi::MPS...;
   end
 
   out = Envfct(dualpsi,psi,mpo,params,prevpsi...,measfct=measfct,mover=mover)
-  params.Lenv,params.Renv,params.psiLenv,params.psiRenv,#=SvN,lastSvN,m,maxtrunc,biggestm,Ns,=#Nsteps,#=timer,=#j#=,SvNvec,startoc=# = out
+  params.Lenv,params.Renv,params.psiLenv,params.psiRenv,Nsteps,j = out
 
   #make operators...or identity
 #  ops = makeOps(mpo,params.nsites)

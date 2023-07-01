@@ -31,13 +31,20 @@ using ..optimizeMPS
 @inline function twosite_update(Lenv::TensType,Renv::TensType,tensors::TensType...)
 
   AA = tensors[1]
+  #=
   psiL = tensors[2]
   psiR = tensors[3]
   mpoL = tensors[4]
   mpoR = tensors[5]
+  =#
+  mpoL = tensors[2]
+  mpoR = tensors[3]
 
   ops = contract([1,3,5,6,2,4],mpoL,4,mpoR,1)
-
+#=
+AA = tensors[1]
+ops = tensors[2]
+=#
   Hpsi = contract(ops,(5,6),AA,(2,3))
   LHpsi = contract(Lenv,(2,3),Hpsi,(1,5))
   temp = contract(LHpsi,(5,4),Renv,(1,2))
@@ -45,6 +52,129 @@ using ..optimizeMPS
   return temp
 end
 export twosite_update
+
+
+
+
+
+
+
+
+function make2site(Lenv::TensType,Renv::TensType,psiL::TensType,psiR::TensType,mpoL::TensType,mpoR::TensType)
+  Lpsi = contract(Lenv,3,psiL,1)
+  LHpsi = contract(Lpsi,(2,3),mpoL,(1,2))
+  LHpsipsi = contract(LHpsi,2,psiR,1)
+  LHHpsipsi = contract(LHpsipsi,(3,4),mpoR,(1,2))
+  return contract(LHHpsipsi,(3,5),Renv,(1,2))
+end
+
+
+function simplelanczos(Lenv::TensType,Renv::TensType,psiL::TensType,psiR::TensType,mpoL::TensType,mpoR::TensType;betatest::Float64 = 1E-10)
+  Hpsi = make2site(Lenv,Renv,psiL,psiR,mpoL,mpoR)
+  AA = contract(psiL,3,psiR,1)
+#  AA = div!(AA,norm(AA))
+  alpha1 = real(ccontract(AA,Hpsi))
+
+  psi2 = sub!(Hpsi, AA, alpha1)
+  beta1 = norm(psi2)
+  if beta1 > betatest
+    psi2 = div!(psi2, beta1)
+
+    Hpsi2 = contract(Lenv,3,psi2,1)
+    if true
+      ops = contract(mpoL,4,mpoR,1)
+      Hpsi2 = contract(Hpsi2,[2,3,4],ops,[1,2,4])
+      Hpsi2 = contract(Hpsi2,[2,5],Renv,[1,2])
+    else
+#      println()
+#      println(size(Hpsi2)," ",size(mpoL))
+      Hpsi2 = contract(Hpsi2,(2,3),mpoL,(1,2))
+#      println(size(Hpsi2)," ",size(mpoR))
+      Hpsi2 = contract(Hpsi2,(5,2),mpoR,(1,2))
+#      println(size(Hpsi2)," ",size(Renv))
+      Hpsi2 = contract(Hpsi2,(2,5),Renv,(1,2))
+    end
+
+    alpha2 = real(ccontract(psi2,Hpsi2))
+    M = Float64[alpha1 beta1; beta1 alpha2]
+    D, U = eigen(M)
+    energy = D[1,1]
+    outAA = conj(U[1,1])*AA + conj(U[2,1])*psi2
+  else
+    energy = alpha1
+    outAA = AA
+  end
+  return outAA,energy
+end
+
+
+function makeNsite(Lenv::TensType,Renv::TensType,psivec::MPS,mpovec::MPO,iL::intType,iR::intType) where {W <: TensType}
+
+#  println("start")
+#  println(size(Lenv)," ",size(psivec[iL]))
+
+  Lpsi = contract(Lenv,3,psivec[iL],1)
+
+#  println(size(Lpsi)," ",size(mpovec[iL]))
+
+  LHpsi = contract(Lpsi,(2,3),mpovec[iL],(1,2))
+  for w = 1:iR-iL
+#    println("w = $w")
+#    println(size(LHpsi)," ",size(psivec[iL+w]))
+    LHpsi = contract(LHpsi,w+1,psivec[iL+w],1)
+#    println(size(LHpsi)," ",size(mpovec[iL+w]))
+    LHpsi = contract(LHpsi,(w+1,w+2),mpovec[iL+w],(1,2))
+  end
+  G = iR-iL+1
+#  println("end $G:")
+#  println(size(LHpsi)," ",size(Renv))
+  return contract(LHpsi,(1+G,3+G),Renv,(1,2))
+end
+
+function simplelanczos(Lenv::TensType,Renv::TensType,psivec::MPS,mpovec::MPO,iL::intType,iR::intType;betatest::Float64 = 1E-10) where {W <: TensType}
+  Hpsi = makeNsite(Lenv,Renv,psivec,mpovec,iL,iR)
+  AA = psivec[iL]
+  G = length(psivec)
+  for w = iL+1:iR
+    AA = contract(AA,ndims(AA),psivec[w],1)
+#    println(size(AA))
+  end
+#  AA = div!(AA,norm(AA))
+  alpha1 = real(ccontract(AA,Hpsi))
+
+#  println(size(Hpsi)," ",size(AA))
+
+  psi2 = sub!(Hpsi, AA, alpha1)
+  beta1 = norm(psi2)
+  if beta1 > betatest
+    psi2 = div!(psi2, beta1)
+
+    Hpsi2 = contract(Lenv,3,psi2,1)
+    if true
+      ops = mpovec[iL]
+      for w = iL+1:iR
+        ops = contract(ops,ndims(ops),mpovec[w],1)
+      end
+      Hpsi2 = contract(Hpsi2,[p for p = 2:ndims(Hpsi2)-1],ops,vcat([1],[w for w = 2:2:ndims(Hpsi2)]))
+      Hpsi2 = contract(Hpsi2,[2,ndims(Hpsi2)],Renv,[1,2])
+    else
+    end
+
+    alpha2 = real(ccontract(psi2,Hpsi2))
+    M = Float64[alpha1 beta1; beta1 alpha2]
+    D, U = eigen(M)
+    energy = D[1,1]
+    outAA = conj(U[1,1])*AA + conj(U[2,1])*psi2
+  else
+    energy = alpha1
+    outAA = AA
+  end
+  return outAA,energy
+end
+
+
+
+
 
 import Base.string
 #  import Printf
@@ -203,36 +333,6 @@ const alpha_max = 1.
   return max(min(alpha,alpha_max),1E-42)
 end
 #=
-function singlesiteOps(mpo::MPO,nsites::Integer)
-  return mpo
-end
-=#
-
-#=
-function NsiteOps(mpo::MPO,nsites::Integer)
-  nbonds = length(mpo)-(nsites-1)
-  ops = Array{typeof(mpo[1]),1}(undef,nbonds)
-  for i = 1:nbonds
-
-    ops[i] = contract(mpo[i],4,mpo[i+1],1)
-    for a = 2:nsites-1
-      ops[i] = contract(ops[i],ndims(ops[i]),mpo[i+a],1)
-    end
-    shufflevec = vcat([w for w = 1:2:ndims(ops[i])-1],[ndims(ops[i])],[w for w = 2:2:ndims(ops[i])-1])
-    ops[i] = permutedims(ops[i],shufflevec)
-    if typeof(ops[i]) <: qarray
-      ops[i] = changeblock(ops[i],[w for w = 1:ndims(ops[i])-nsites],[w+(ndims(ops[i])-nsites) for w = 1:nsites])
-    end
-  end
-  W = typeof(mpo)
-  if W <: largeMPO
-    newmpo = largeMPO(ops,label="$(nsites)mpo_")
-  else
-    newmpo = W(ops)
-  end
-  return newmpo
-end
-=#
 @inline function Nsite_update(Lenv::TensType,Renv::TensType,psiops::TensType...)
   AA = psiops[1]
   ops = psiops[2]
@@ -250,6 +350,7 @@ end
   return temp
 end
 export Nsite_update
+=#
 
 @inline function step3S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                 psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
@@ -267,10 +368,10 @@ export Nsite_update
 
   if j > 0
     tempL = (alpha_condition ? Lexpand(AAvec[1],currops,Lenv[iL],noise) : AAvec[1])
-    psi[iL],psi[iR],D,truncerr = moveR(tempL,psi[iR],cutoff=cutoff,m=maxm,minm=minm,condition=alpha_condition)
+    psi[iL],psi[iR],D,truncerr = moveR!(tempL,psi[iR],cutoff=cutoff,m=maxm,minm=minm,condition=alpha_condition)
   else
     tempR = (alpha_condition ? Rexpand(AAvec[1],currops,Renv[iR],noise) : AAvec[1])
-    psi[iL],psi[iR],D,truncerr = moveL(psi[iL],tempR,cutoff=cutoff,m=maxm,minm=minm,condition=alpha_condition)
+    psi[iL],psi[iR],D,truncerr = moveL!(psi[iL],tempR,cutoff=cutoff,m=maxm,minm=minm,condition=alpha_condition)
   end
   
   params.noise = alpha_update(noise,truncerr,params.cutoff,params.lastenergy,params.energy,params.noise_goal,params.noise_incr)
@@ -315,30 +416,6 @@ end
 
   nothing
 end
-
-#=
-function swapflux!(AA::Qtens{W,Q}) where {W <: Number, Q <: Qnum}
-  AA.flux,AA.QnumSum[end][1] = inv(AA.QnumSum[end][1]),inv(AA.flux)
-  newQNs = Array{NTuple{2,Q},1}(undef,length(AA.T))
-  for q = 1:length(AA.T)
-    thisvec = [Q() for w = 1:2]
-    for w = 1:2
-      for a = 1:size(AA.ind[q][1],1)
-        x = AA.currblock[w][a]
-        y = AA.ind[q][w][a,1]+1
-        thisvec[w] += getQnum(x,y,AA)
-      end
-    end
-    newQNs[q] = (thisvec...,)
-  end
-  AA.Qblocksum = newQNs
-  nothing
-end
-
-function swapflux!(AA::densTensType)
-  nothing
-end
-=#
 
 @inline function step2S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                 psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
@@ -401,55 +478,47 @@ end
 #  import ..optimizeMPS.Nstep
 @inline function dmrgNstep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                     psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
-
-  vecTens = [psi[a] for a = iL:iR]
-  AA = vecTens[1]
-  for a = 2:length(vecTens)
-    AA = contract(AA,ndims(AA),vecTens[a],1)
+println("IN HERE?")
+  if j > 0
+    psi[iL] = div!(psi[iL],norm(psi[iL]))
+  else
+    psi[iR] = div!(psi[iR],norm(psi[iR]))
   end
 
-  newAA,outEnergy = lanczos(AA,mpo[iL],maxiter=params.maxiter,updatefct=Nsite_update,Lenv=Lenv[iL],Renv=Renv[iR])
-  params.energy = outEnergy[1]
+  AA,energy = simplelanczos(Lenv[iL],Renv[iR],psi,mpo,iL,iR)
+  params.energy = energy
 
-  AA = newAA[1]
-
-  maxm = params.maxm
-  minm = params.minm
-  cutoff = params.cutoff
-
+  println(energy)
 
   truncerr = 0.
   D = 0
+
   if j > 0
-    for w = iR:-1:iL+1
-      U,D,psi[w],terr = svd(AA,[[i for i = 1:ndims(AA)-2],[ndims(AA)-1,ndims(AA)]],m=maxm,minm=minm,cutoff=cutoff)#,mag=1.)
-      truncerr = max(truncerr,terr)
-      params.biggestm = max(params.biggestm,size(D,1))
-      if w == iL+1
-        psi[iL] = U
-        psi[iL+1] = contract(D,2,psi[w],1)
-        psi.oc = iL+1
-      else
-        AA = contract(U,ndims(U),D,1)
-      end
+    for p = 1:iR-iL-1#iR:-1:iL
+      U,D,psi[iR-p+1],truncerr = svd!(AA,[[w for w = 1:ndims(AA)-2],[ndims(AA)-1,ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
+      AA = U*D
     end
+
+    psi[iL],D,V,truncerr = svd!(AA,[[w for w = 1:ndims(AA)-2],[ndims(AA)-1,ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
+
+    psi[iL+1] = D*V #contract(U,(3,),D,(1,))
+
   else
-    for w = iL:iR-1
-      psi[w],D,V,terr = svd(AA,[[1,2],[i for i = 3:ndims(AA)]],m=maxm,minm=minm,cutoff=cutoff)#,mag=1.)
-      truncerr = max(truncerr,terr)
-      params.biggestm = max(params.biggestm,size(D,1))
-      if w == iR-1
-        psi[iR-1] = contract(psi[w],3,D,1)
-        psi[iR] = V
-        psi.oc = iR-1
-      else
-        AA = contract(D,2,V,1)
-      end
+    for p = 1:iR-iL-1#iR:-1:iL
+      psi[iL+p],D,V,truncerr = svd!(AA,[[1,2],[p for p = 3:ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
+      AA = D*V
     end
+
+    U,D,psi[iR],truncerr = svd!(AA,[[1,2],[p for p = 3:ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
+
+    psi[iR-1] = U*D
   end
+
   params.truncerr = truncerr
+  params.biggestm = max(params.biggestm,size(D,1))
+
   if !params.efficient
-    SvNcheck!(i,j,D,length(psi),params)
+    SvNcheck!(i,j,D,length(psi),params,alpha=false)
   end
   nothing
 end
