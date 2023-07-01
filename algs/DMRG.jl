@@ -108,7 +108,7 @@ function simplelanczos(Lenv::TensType,Renv::TensType,psiL::TensType,psiR::TensTy
 end
 
 
-function makeNsite(Lenv::TensType,Renv::TensType,psivec::MPS,mpovec::MPO,iL::intType,iR::intType) where {W <: TensType}
+function makeNsite(Lenv::TensType,Renv::TensType,psivec::MPS,mpovec::MPO,iL::intType,iR::intType)
 
 #  println("start")
 #  println(size(Lenv)," ",size(psivec[iL]))
@@ -131,7 +131,7 @@ function makeNsite(Lenv::TensType,Renv::TensType,psivec::MPS,mpovec::MPO,iL::int
   return contract(LHpsi,(1+G,3+G),Renv,(1,2))
 end
 
-function simplelanczos(Lenv::TensType,Renv::TensType,psivec::MPS,mpovec::MPO,iL::intType,iR::intType;betatest::Float64 = 1E-10) where {W <: TensType}
+function simplelanczos(Lenv::TensType,Renv::TensType,psivec::MPS,mpovec::MPO,iL::intType,iR::intType;betatest::Float64 = 1E-10)
   Hpsi = makeNsite(Lenv,Renv,psivec,mpovec,iL,iR)
   AA = psivec[iL]
   G = length(psivec)
