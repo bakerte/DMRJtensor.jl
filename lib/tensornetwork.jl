@@ -1495,7 +1495,7 @@ function remove_tensors(original_network::TNnetwork, to_remove::TNnetwork) #OK
 	return updated_network
 end
 
-
+#=
 function find_common_edges(left_edges::Indicies, right_edges::Indicies)::Indicies #OK
 	common_edges_names = []
 	common_edges_dimensions = []
@@ -1511,7 +1511,7 @@ function find_common_edges(left_edges::Indicies, right_edges::Indicies)::Indicie
 	return Indicies(common_edges_names, common_edges_dimensions)
 
 end
-
+=#
 
 function lable_edges(left_edges::Indicies, right_edges::Indicies, common_edges::Indicies)::Indicies #OK
 	all_edge_names = vcat(left_edges.names, right_edges.names)
