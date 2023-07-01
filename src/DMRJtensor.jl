@@ -98,7 +98,7 @@ import .Base.permutedims!
 import .LinearAlgebra.norm
 
 #using TensorPACK
-using ..TensorPACK
+using TensorPACK
 
 #import .TENPACK.TensType
 
