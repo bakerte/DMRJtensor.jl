@@ -197,6 +197,8 @@ const algpath = libdir*"/../algs/"
 include(algpath*"optimizeMPS.jl")
 include(algpath*"DMRG.jl")
 
+include(algpath*"time.jl")
+
 const testpath = libdir*"/../test/"
 include(testpath*"alltest.jl")
 
