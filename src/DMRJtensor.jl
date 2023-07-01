@@ -85,27 +85,97 @@ println()
 
 
 
+import .Base.getindex
+import .Base.setindex!
+import .Base.copy
+import .Base.size
+import .Base.conj
+import .Base.conj!
+import .Base.eltype
+import .Base.lastindex
+import .Base.sum
+import .Base.permutedims!
+import .LinearAlgebra.norm
+
+#using TensorPACK
+using ..TensorPACK
+
+#import .TENPACK.TensType
+
+import ..TensorPACK.undefMat,..TensorPACK.makeArray,..TensorPACK.checkType,..TensorPACK.tensorcombination,..TensorPACK.tensorcombination!
+import ..TensorPACK.makeId
+import ..TensorPACK.permutedims
+
+import ..TensorPACK.invmat!
+
+import ..TensorPACK.reshape!,..TensorPACK.convertTens,..TensorPACK.unreshape!,..TensorPACK.unreshape
+
+import ..TensorPACK.makedens
+import ..TensorPACK.get_denseranges
+
+import ..TensorPACK.sub!,..TensorPACK.add!,..TensorPACK.mult!,..TensorPACK.div!
+import ..TensorPACK.joinindex!
+import ..TensorPACK.getindex!
+import ..TensorPACK.searchindex
+
+import ..TensorPACK.libmult,..TensorPACK.libsvd,..TensorPACK.libsvd!,..TensorPACK.libeigen,..TensorPACK.libeigen!,..TensorPACK.libqr,..TensorPACK.liblq,..TensorPACK.libqr!,..TensorPACK.liblq!
+
+
+
+#contracions
+import ..TensorPACK.contract
+import ..TensorPACK.ccontract
+import ..TensorPACK.contractc
+import ..TensorPACK.ccontractc
+
+
+import ..TensorPACK.dot
+import ..TensorPACK.libmult
+import ..TensorPACK.dmul!
+import ..TensorPACK.diagcontract!
+
+
+import ..TensorPACK.permq
+import ..TensorPACK.willperm
+import ..TensorPACK.prepareT
+import ..TensorPACK.getsizes
+import ..TensorPACK.maincontractor
+
+import ..TensorPACK.trace
+
+#decompositions
+import ..TensorPACK.libsvd
+import ..TensorPACK.libsvd!
+
+
+import ..TensorPACK.libeigen
+import ..TensorPACK.libeigen!
+
+import ..TensorPACK.sqrt!
+
+import ..TensorPACK.libqr
+import ..TensorPACK.libqr!
+
+import ..TensorPACK.liblq
+import ..TensorPACK.liblq!
+
+
+import ..TensorPACK.defzero
+import ..TensorPACK.basedims
+
+
+import ..TensorPACK.truncate,..TensorPACK.svd,..TensorPACK.svd!,..TensorPACK.getorder,..TensorPACK.findsize,..TensorPACK.svdvals,..TensorPACK.eigen,..TensorPACK.eigen!,..TensorPACK.eigvals,..TensorPACK.eigvals!,..TensorPACK.qr,..TensorPACK.qr!,..TensorPACK.lq,..TensorPACK.lq!,..TensorPACK.polar
+
+import Base.*,Base.-,Base./
+import Base.length,Base.adjoint
+
+
+
 
 const DMRjulia = DMRJtensor
 export DMRjulia
 
 libpath = "../lib/"
-
-#Basic tensors
-include(libpath*"tensor.jl")
-
-#Quantum number preserving tensors
-include(libpath*"QN.jl")
-include(libpath*"Qtensor.jl")
-
-#Linear algebra routines
-include(libpath*"libalg.jl")
-
-#Contraction routines
-include(libpath*"contractions.jl")
-
-#Decomposition methods
-include(libpath*"decompositions.jl")
 
 #MPO/MPS
 include(libpath*"MPtask.jl")
@@ -124,9 +194,6 @@ algpath = "../algs/"
 
 include(algpath*"optimizeMPS.jl")
 include(algpath*"DMRG.jl")
-
-#Lanczos methods
-include(algpath*"Krylov.jl")
 
 end
 
