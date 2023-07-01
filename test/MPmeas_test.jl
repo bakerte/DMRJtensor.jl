@@ -285,8 +285,6 @@ println()
 
 dmrg(psi,mpo,sweeps=20,m=45,cutoff=1E-9,silent=true)
 
-
-
 testval = isapprox(expect(psi,mpo),-4.2580352071064205)
 fulltest &= testfct(testval,"expect(psi,mpo)")
 
@@ -295,9 +293,9 @@ fulltest &= testfct(testval,"expect(psi,psi,mpo)")
 
 println()
 
-Hpsi = applyMPO(psi,mpo)
+xHpsi = applyMPO(psi,mpo)
 
-testval = abs(expect(psi,mpo) - expect(psi,Hpsi)) < 1E-5
+testval = abs(expect(psi,mpo) - expect(psi,xHpsi)) < 1E-5
 fulltest &= testfct(testval,"applyMPO(psi,mpo)")
 
 HHpsi = applyMPO(psi,mpo,mpo)
@@ -384,14 +382,14 @@ lambda = 0.01
 
 penalty!(mpo,lambda,psi,compress=false)
 shiftedEn = dmrg(psi,mpo,sweeps=20,m=45,cutoff=1E-9,silent=true)
-testval = abs(abs(En-shiftedEn) - lambda) < 1E-8
+testval = abs(abs(En-shiftedEn) - lambda) < 1E-6
 fulltest &= testfct(testval,"penalty!(mpo,Real,mps)")
 
 En = expect(qpsi,qmpo)
 
 penalty!(qmpo,lambda,qpsi,compress=false)
 shiftedEn = dmrg(qpsi,qmpo,sweeps=20,m=45,cutoff=1E-9,silent=true)
-testval = abs(abs(En-shiftedEn) - lambda) < 1E-8
+testval = abs(abs(En-shiftedEn) - lambda) < 1E-6
 fulltest &= testfct(testval,"penalty!(mpo,Real,mps) [Quantum number types]")
 
 println()

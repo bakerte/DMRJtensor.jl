@@ -14,7 +14,7 @@ QS = cld(hereQS,2)
 Sp,Sm,Sz,Sy,Sx,O,Id = spinOps(s=spinmag)
 base = [Id for i = 1:Ns]
 
-function one(i)
+function xone(i)
   return [Id O O O O;
           Sp/2 O O O O;
           Sm/2 O O O O;
@@ -22,7 +22,7 @@ function one(i)
           O Sm Sp Sz Id]
 end
 
-function two(i)
+function xtwo(i)
   return [Id O O O O O O O;
           Sp/2 O O O O O O O;
           O Id O O O O O O;
@@ -33,7 +33,7 @@ function two(i)
           O Sm Sm Sp Sp Sz Sz Id]
 end
 
-function three(i)
+function xthree(i)
   return [Id O O O O O O O O O O;
           Sp/2 O O O O O O O O O O;
           O Id O O O O O O O O O;
@@ -47,7 +47,7 @@ function three(i)
           O Sm O Sm Sp O Sp Sz O Sz Id]
 end
 
-function four(i)
+function xfour(i)
   return [Id O O O O O O O O O O O O O;
           Sp/2 O O O O O O O O O O O O O;
           O Id O O O O O O O O O O O O;
@@ -64,7 +64,7 @@ function four(i)
           O Sm O O Sm Sp O O Sp Sz O O Sz Id]
 end
 
-mpos = [one,two,three,four]
+mpos = [xone,xtwo,xthree,xfour]
 
 
 testvals = Array{Bool,1}(undef,length(mpos))
@@ -102,7 +102,7 @@ fulltest &= testfct(sum(testvals)==length(testvals),"r-neighbour models")
 
 #println("Rainbow")
 
-function one(i)
+function xone(i)
   return [Id O O O O;
           Sp/2 O O O O;
           Sm/2 O O O O;
@@ -110,7 +110,7 @@ function one(i)
           O Sm Sp Sz Id]
 end
 
-function two(i)
+function xtwo(i)
   return [Id O O O O O O O;
           Sp/2 O O O O O O O;
           O Id O O O O O O;
@@ -121,7 +121,7 @@ function two(i)
           O Sm Sm Sp Sp Sz Sz Id]
 end
 
-function three(i)
+function xthree(i)
   return [Id O O O O O O O O O O;
           Sp/2 O O O O O O O O O O;
           O Id O O O O O O O O O;
@@ -135,7 +135,7 @@ function three(i)
           O Sm Sm Sm Sp Sp Sp Sz Sz Sz Id]
 end
 
-function four(i)
+function xfour(i)
   return [Id O O O O O O O O O O O O O;
           Sp/2 O O O O O O O O O O O O O;
           O Id O O O O O O O O O O O O;
@@ -152,7 +152,7 @@ function four(i)
           O Sm Sm Sm Sm Sp Sp Sp Sp Sz Sz Sz Sz Id]
 end
 
-mpos = [one,two,three,four]
+mpos = [xone,xtwo,xthree,xfour]
 
 for r = 1:length(mpos)
   H = makeMPO(mpos[r],2,Ns)
@@ -189,7 +189,7 @@ lambda = exp(-1/2.)
 
 #println("Exponentials")
 
-function one(i)
+function xone(i)
   return [Id O O O O O;
           Sp/2 O O O O O;
           Sm/2 O O O O O;
@@ -198,7 +198,7 @@ function one(i)
           O Sm Sp Sz Sz Id]
 end
 
-function two(i)
+function xtwo(i)
   return [Id O O O O O O O O;
           Sp/2 O O O O O O O O;
           O Id O O O O O O O;
@@ -210,7 +210,7 @@ function two(i)
           O Sm Sm Sp Sp Sz Sz Sz Id]
 end
 
-function three(i)
+function xthree(i)
   return [Id O O O O O O O O O O O;
           Sp/2 O O O O O O O O O O O;
           O Id O O O O O O O O O O;
@@ -225,7 +225,7 @@ function three(i)
           O Sm O Sm Sp O Sp Sz O Sz Sz Id]
 end
 
-function four(i)
+function xfour(i)
   return [Id O O O O O O O O O O O O O O;
           Sp/2 O O O O O O O O O O O O O O;
           O Id O O O O O O O O O O O O O;
@@ -243,7 +243,7 @@ function four(i)
           O Sm O O Sm Sp O O Sp Sz O O Sz Sz Id]
 end
 
-mpos = [one,two,three,four]
+mpos = [xone,xtwo,xthree,xfour]
 
 
 for r = 1:length(mpos)

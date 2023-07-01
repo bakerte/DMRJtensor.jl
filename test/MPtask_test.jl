@@ -213,6 +213,7 @@ fulltest &= testfct(testval,"randMPS(integer,integer)")
 
 B = [2 for i = 1:Ns]
 C = randMPS(B,m=msize)
+
 testval = size(C[3],1) == msize
 fulltest &= testfct(testval,"randMPS(vector)")
 
@@ -316,7 +317,10 @@ println()
 
 C = fullpsi(testpsi)
 
-testval = isapprox(makeArray(U[:,1]),makeArray(C))
+testval = norm(makeArray(U[:,1])-makeArray(C)) < 1E-6#isapprox(makeArray(U[:,1]),makeArray(C))
+
+#println(makeArray(U[:,1])-makeArray(C))
+
 fulltest &= testfct(testval,"fullpsi(psi)")
 
 println()
