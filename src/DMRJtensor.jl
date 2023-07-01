@@ -175,7 +175,9 @@ import Base.length,Base.adjoint
 const DMRjulia = DMRJtensor
 export DMRjulia
 
-libpath = "../lib/"
+const libdir = @__DIR__
+
+const libpath = libdir*"/../lib/"
 
 #MPO/MPS
 include(libpath*"MPtask.jl")
@@ -190,10 +192,13 @@ include(libpath*"models.jl")
 include(libpath*"tensornetwork.jl")
 
 
-algpath = "../algs/"
+const algpath = libdir*"/../algs/"
 
 include(algpath*"optimizeMPS.jl")
 include(algpath*"DMRG.jl")
+
+const testpath = libdir*"/../test/"
+include(testpath*"alltest.jl")
 
 end
 
