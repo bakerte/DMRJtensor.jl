@@ -27,8 +27,8 @@ export MPOterm
 
 Stores terms of an MPO
 """
-struct mpoterm{W} <: MPOterm where W <: Tuple
-  T::Vector{W}
+struct mpoterm <: MPOterm #where W <: Tuple
+  T::Vector{Any}
 end
 
 """
@@ -137,7 +137,7 @@ end
 
 import .DMRjulia.+
 function +(A::MPOterm,B::MPOterm)
-  return mpoterm([A.T...,B.T...])
+  return mpoterm(Any[A.T...,B.T...])
 end
 
 function +(int::Integer,tup::MPOterm)
@@ -222,13 +222,13 @@ function prepare_autoInfo(opstring::MPOterm)
   return Ns,mpotype,base,Qnumvec,qarrayops,physind
 end
 
-function MPO(opstring::MPOterm,reverse::Bool=true)
+function MPO(opstring::MPOterm,reverse::Bool=true,countreduce::intType=100,sweeps::intType=2)
 
   Ns,mpotype,base,Qnumvec,qarrayops,physinds = prepare_autoInfo(opstring)
 
   mpo = 0
   singlempo = 0
-
+  manympo = 0
 
   singlesite = [1 < length(opstring[w]) < 5 for w = 1:length(opstring)]
   nosingles = findfirst(singlesite)
@@ -281,13 +281,14 @@ function MPO(opstring::MPOterm,reverse::Bool=true)
     end
   end
 
-  regularterms = findall(w->!singlesite[w],1:length(singlesite))
+  regularterms = findall(w->length(opstring[w]) == 5 || length(opstring[w]) == 6 || length(opstring[w]) == 1,1:length(singlesite))
   mpovec = Array{Any,1}(undef,Threads.nthreads())
   value_mpo_vec = Array{Any,1}(undef,Threads.nthreads())
   for i = 1:length(mpovec)
     mpovec[i] = 0
     value_mpo_vec[i] = 0
   end
+
   Threads.@threads for a in regularterms
 
     numthread = Threads.threadid()
@@ -315,13 +316,70 @@ function MPO(opstring::MPOterm,reverse::Bool=true)
 
   mpo += singlempo
 
-  if reverse && typeof(mpo[1]) <: qarray
+
+
+  manysite = [length(opstring[w]) > 6 for w = 1:length(opstring)]
+  manysiteterms = findall(manysite)
+
+  if sum(manysite) > 0
+
+    manyvec = Array{Any,1}(undef,Threads.nthreads())
+    for w = 1:length(manyvec)
+      manyvec[w] = 0
+    end
+
+    counter = zeros(Int64,length(manyvec))
+
+    Threads.@threads for a in manysiteterms
+
+      numthread = Threads.threadid()
+
+      value = opstring[a][1]
+      Opvec = [opstring[a][x] for x = 2:2:length(opstring[a])]
+      posvec = [opstring[a][x] for x = 3:2:length(opstring[a])]
+
+      trailon = length(opstring[a]) % 2 == 0
+      if trailon
+        manyvec[numthread] *= mpoterm(value,Opvec,posvec,base,opstring[a][end])
+      else
+        manyvec[numthread] *= mpoterm(value,Opvec,posvec,base)
+      end
+
+      counter[numthread] += 1
+#=
+      if counter[numthread] % countreduce == 0
+        println()
+        println(numthread," ",size.(manyvec[numthread].H))
+        manyvec[numthread] = compressMPO!(manyvec[numthread])
+        println(numthread," ",size.(manyvec[numthread].H))
+      end
+=#
+    end
+
+    Threads.@threads for w = 1:length(manyvec)
+      if manyvec[w] != 0 && !isapprox(sum(p->norm(manyvec[w][p]),1:length(manyvec[w])),0)
+        manyvec[w] = compressMPO!(manyvec[w],sweeps=sweeps)
+      end
+    end
+
+    for i = 1:length(manyvec)
+      manympo *= manyvec[i]
+    end
+
+    if !isapprox(sum(p->norm(manympo[p]),1:length(manympo)),0)
+      mpo *= compressMPO!(manympo,sweeps=sweeps)
+      compressMPO!(mpo,sweeps=sweeps)
+    end
+  end
+
+
+  if reverse # && typeof(mpo[1]) <: qarray
     for a = 1:length(mpo)
       mpo[a] = permutedims!(mpo[a],[1,3,2,4])
     end
   end
 
-  return mpo
+  return mpo #compressMPO!(mpo)
 end
 
 
@@ -452,49 +510,8 @@ note: deparallelizes after every addition
 
 See also: [`deparallelization`](@ref) [`add!`](@ref)
 """
-
 function +(X::MPO...;nthreads::Integer=Threads.nthreads())
-  checktype = typeof(prod(w->eltype(X[w])(1),1:length(X)))
-  if length(X) > 2
-    sizeparts = cld(length(X),nthreads)
-    startparts = Array{intType,1}(undef,nthreads+1)
-    startparts[1] = 0
-    for i = 1:nthreads-1
-      startparts[i+1] = sizeparts*i
-    end
-    startparts[end] = length(X)
-
-    R = Array{MPO,1}(undef,nthreads)
-
-    Threads.@threads for w = 1:nthreads
-
-      start = startparts[w] + 1
-      stop = startparts[w+1]
-
-      if checktype != eltype(X[start])
-        Z = MPO(checktype,copy(X[start]))
-      else
-        Z = copy(X[start])
-      end
-      for g = start+1:stop
-        add!(Z,X[g])
-      end
-      R[w] = Z
-    end
-    finalMPO = R[1]
-    for w = 2:length(R)
-      add!(finalMPO,R[w])
-    end
-  else
-    if checktype != eltype(X[1])
-      finalMPO = MPO(checktype,copy(X[1]))
-    else
-      finalMPO = copy(X[1])
-    end
-    for w = 2:length(X)
-      add!(finalMPO,X[w])
-    end
-  end
+  finalMPO = *(X...,nthreads=nthreads,fct=add!)
   return finalMPO
 end
 
@@ -543,6 +560,109 @@ note: deparallelizes after every addition
 See also: [`deparallelization`](@ref) [`+`](@ref)
 """
 function add!(A::MPO,B::MPO;finiteBC::Bool=true)
+  mult!(A,B)
+  return deparallelize!(A)
+end
+
+"""
+  A + B
+
+functionality for adding (similar to direct sum) of MPOs together; uses joinindex function to make a combined MPO
+
+note: deparallelizes after every addition
+
+See also: [`deparallelization`](@ref) [`add!`](@ref)
+"""
+function *(X::MPO...;nthreads::Integer=Threads.nthreads(),fct::Function=mult!)
+  checktype = typeof(prod(w->eltype(X[w])(1),1:length(X)))
+  if length(X) > 2
+    sizeparts = cld(length(X),nthreads)
+    startparts = Array{intType,1}(undef,nthreads+1)
+    startparts[1] = 0
+    for i = 1:nthreads-1
+      startparts[i+1] = sizeparts*i
+    end
+    startparts[end] = length(X)
+
+    R = Array{MPO,1}(undef,nthreads)
+
+    Threads.@threads for w = 1:nthreads
+
+      start = startparts[w] + 1
+      stop = startparts[w+1]
+
+      if checktype != eltype(X[start])
+        Z = MPO(checktype,copy(X[start]))
+      else
+        Z = copy(X[start])
+      end
+      for g = start+1:stop
+        fct(Z,X[g])
+      end
+      R[w] = Z
+    end
+    finalMPO = R[1]
+    for w = 2:length(R)
+      fct(finalMPO,R[w])
+    end
+  else
+    if checktype != eltype(X[1])
+      finalMPO = MPO(checktype,copy(X[1]))
+    else
+      finalMPO = copy(X[1])
+    end
+    for w = 2:length(X)
+      fct(finalMPO,X[w])
+    end
+  end
+  return finalMPO
+end
+
+#=
+function +(X::MPO...;nthreads::Integer=Threads.nthreads())
+
+  sizeparts = cld(length(X),nthreads)
+  startparts = Array{intType,1}(undef,nthreads+1)
+  startparts[1] = 0
+  for i = 1:nthreads-1
+    startparts[i+1] = sizeparts*i
+  end
+  startparts[end] = length(X)
+
+  Z = Array{MPO,1}(undef,nthreads)
+
+  #=Threads.@threads =#for w = 1:nthreads
+
+    checktype = typeof(prod(w->eltype(X[w])(1),startparts[w]+1:startparts[w+1]))
+    if checktype != eltype(X[startparts[w]+1])
+      C = MPO(checktype,copy(X[startparts[w]+1]))
+    else
+      C = copy(X[startparts[w]+1])
+    end
+    for k = startparts[w]+2:startparts[w+1]
+      add!(C,X[k])
+    end
+    Z[w] = C
+  end
+  R = Z[1]
+  for w = 2:nthreads
+    R += Z[w]
+  end
+  return R
+end
+=#
+
+#  import .QN.add!
+"""
+  mult!(A,B)
+
+functionality for adding (similar to direct sum) of MPOs together and replacing `A`; uses joinindex function to make a combined MPO
+
+note: Does not compress the bond dimension (recommend to use compressMPO! afterwards)
+
+See also: [`compressMPO!`](@ref) [`*`](@ref)
+"""
+function mult!(A::MPO,B::MPO;finiteBC::Bool=true)
   Ns = length(A)
   if finiteBC
     A[1] = joinindex!(4,A[1],B[1])
@@ -555,9 +675,8 @@ function add!(A::MPO,B::MPO;finiteBC::Bool=true)
       A[a] = joinindex!([1,4],A[a],B[a])
     end
   end
-  return deparallelize!(A)
+  return A
 end
-
 
 """
   H + c
@@ -570,6 +689,14 @@ function +(H::MPO,c::Number;pos::Integer=1)
 end
 
 function +(c::Number,H::MPO;pos::Integer=1)
+  return +(H,c,pos=pos)
+end
+
+function *(c::Number,H::MPO;pos::Integer=1)
+  return +(H,c,pos=pos)
+end
+
+function *(H::MPO,c::Number;pos::Integer=1)
   return +(H,c,pos=pos)
 end
 
@@ -878,7 +1005,7 @@ const backwardshape = Array{intType,1}[intType[1],intType[2,3,4]]
 
 compresses MPO (`W`; or several `M`) with SVD compression for `sweeps` sweeps, `cutoff` applied to the SVD, `deltam` target for teh bond dimension compression, and `nozeros` defaulted to true to eliminate all zeros in the SVD
 """
-function compressMPO!(W::MPO,M::MPO...;sweeps::Integer=1000,cutoff::Float64=0.,
+function compressMPO!(W::MPO,M::MPO...;sweeps::Integer=100,cutoff::Float64=0.,
                     deltam::Integer=0,minsweep::Integer=1,nozeros::Bool=true)
   for a = 1:length(M)
     W = add!(W,M[a])
@@ -913,6 +1040,10 @@ function compressMPO!(W::MPO,M::MPO...;sweeps::Integer=1000,cutoff::Float64=0.,
     lastmdiff = copy(thismdiff)
   end
   return W
+end
+
+function compressMPO!(w::Number)
+  return w
 end
 
 """

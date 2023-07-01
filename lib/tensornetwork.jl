@@ -19,829 +19,1039 @@ using ..contractions
 using ..decompositions
 using ..MPutil
 =#
-  abstract type TNobj end
-  export TNobj
+abstract type TNobj end
+export TNobj
 
-  abstract type TNnetwork end
-  export TNnetwork
+abstract type TNnetwork end
+export TNnetwork
 
-  """
-      nametens{W,B}
+"""
+    nametens{W,B}
 
-  named tensor with tensor of type `W` and type of names `B`
+named tensor with tensor of type `W` and type of names `B`
 
-  # Fields:
-  + `N::W`: Tensor stored
-  + `names::Array{B,1}`: names of all indices
-  """
-  mutable struct nametens{W,B} <: TNobj where {W <: TensType, B <: Union{Any,String}}
-    N::W
-    names::Array{B,1}
-  end
+# Fields:
++ `N::W`: Tensor stored
++ `names::Array{B,1}`: names of all indices
+"""
+mutable struct nametens{W,B} <: TNobj where {W <: TensType, B <: Union{Any,String}}
+  N::W
+  names::Array{B,1}
+end
 
-  """
-      nametens(Qt,namez)
+"""
+    nametens(Qt,namez)
 
-  constructor for named tensor from a tensor `Qt` and vector of index names `namez`
-  """
-  function nametens(Qt::TensType,namez::Array{B,1};regTens::Bool=false)::TNobj where B <: Union{Any,String}
-    newQt = !regTens && typeof(Qt) <: AbstractArray ? tens(Qt) : Qt
-    return nametens{typeof(newQt),B}(newQt,namez)
-  end
+constructor for named tensor from a tensor `Qt` and vector of index names `namez`
+"""
+function nametens(Qt::TensType,namez::Array{B,1};regTens::Bool=false)::TNobj where B <: Union{Any,String}
+  newQt = !regTens && typeof(Qt) <: AbstractArray ? tens(Qt) : Qt
+  return nametens{typeof(newQt),B}(newQt,namez)
+end
 
-  """
-      nametens(Qt,string)
+"""
+    nametens(Qt,string)
 
-  constructor for named tensor from a tensor `Qt` and vector of index names `string` where an integer is added onto `string` to make the full name of the index
-  """
-  function nametens(Qt::T,namez::String;regTens::Bool=false)::TNobj where T <: TensType
-    return nametens(Qt,[namez*"$i" for i = 1:basedims(Qt)])
-  end
-  export nametens
+constructor for named tensor from a tensor `Qt` and vector of index names `string` where an integer is added onto `string` to make the full name of the index
+"""
+function nametens(Qt::T,namez::String;regTens::Bool=false)::TNobj where T <: TensType
+  return nametens(Qt,[namez*"$i" for i = 1:basedims(Qt)],regTens=regTens)
+end
+export nametens
 
-  """
-      network{N,W}
 
-  Generates a network of TNobjs that stores more than one named tensor
 
-  # Fields:
-  + `net::NTuple{N,W}`: A network of named tensors
-  """
-  mutable struct network{W} <: TNnetwork where W  <: TNobj
-    net::Array{W,1}
-  end
+"""
+  directedtens{W,B}
 
-  """
-      network(Qts)
+named tensor with named tensor of type `W` and vector of Booleans `B`. Creates a directed graph for use in MERA computations
 
-  constructor to generates a network of TNobjs that stores a vector of named tensors `Qts`
-  """
-  function network(Qts::Array{W,1}) where W  <: TNobj
-    return network{W}(Qts)
-  end
+# Fields:
++ `T::W`: named tensor stored
++ `names::Array{B,1}`: arrows of all indices
 
-  """
-      network(Qts)
+See also: [`nametens`](@ref)
+"""
+mutable struct directedtens{W,B} <: TNobj where {W <: nametens, B <: Bool}
+  T::W
+  arrows::Array{B,1}
+  conj::Bool
+end
 
-  converts named tensor to a network with a single tensor element
-  """
-  function network(Qts::W...) where W  <: TNobj #where S <: Union{Any,String}
-    return network{W}([Qts[i] for i = 1:length(Qts)])
-  end
 
-  """
-    network(Qt,i)
 
-  converts named tensor `Qt` to a network with `i` copied elements not shallow copied
-  """
-  function network(Qts::W,n::Integer) where W  <: TNobj #where S <: Union{Any,String}
-  return network{W}([copy(Qts) for i = 1:n])
-  end
-  export network
+"""
+  directedtens(Qt,vecbools)
 
-  import ..Base.getindex
-  function getindex(Qts::TNnetwork,i::Integer)
-    return Qts.net[i]
-  end
+constructor for named tensor `Qt` and vector of directed arrows `vecbools`
+"""
+function directedtens(Qt::nametens{W,B},vecbools::Array{Bool,1};conj::Bool=false) where {W <: TensType, B <: Union{Any,String}}
+  return directedtens(Qt,vecbools,conj)
+end
 
-  function getindex(Qts::TNobj,i::Integer)
-    return Qts.N[i]
-  end
+"""
+  directedtens(Qt,namez)
 
-  import ..Base.setindex!
-  function setindex!(Qts::TNnetwork,newTens::TNobj,i::Integer)
-    return Qts.net[i] = newTens
-  end
+constructor for named tensor from a tensor `Qt` and vector of index names `namez`
+"""
+function directedtens(Qt::TensType,namez::Array{B,1},vecbools::Array{Bool,1};regTens::Bool=false,conj::Bool=false)::TNobj where B <: Union{Any,String}
+  return directedtens(nametens(newQt,namez,regtens=regtens),vecbools,conj=conj)
+end
 
-  import ..Base.length
-  function length(Qts::TNnetwork)
-    return length(Qts.net)
-  end
+"""
+  directedtens(Qt,string)
 
-  function contractinds(A::TNobj,B::TNobj)
-    vecA = Int64[]
-    vecB = Int64[]
-    pairedvals = [false for i = 1:length(A.names)]
-    for a = 1:size(A.names,1)
-      for b = 1:size(B.names,1)
-        if A.names[a] == B.names[b]
-          if pairedvals[a]
-            error("Indices not paired on contraction of named tensors (duplicate index name detected)")
-          end
-          push!(vecA,a)
-          push!(vecB,b)
-          pairedvals[a] = true
-        end
+constructor for named tensor from a tensor `Qt` and vector of index names `string` where an integer is added onto `string` to make the full name of the index
+"""
+function directedtens(Qt::T,namez::String;regTens::Bool=false)::TNobj where T <: TensType
+  return directedtens(nametens(Qt,namez,regtens=regtens),vecbools,conj=conj)
+end
+export directedtens
+
+"""
+    network{N,W}
+
+Generates a network of TNobjs that stores more than one named tensor
+
+# Fields:
++ `net::NTuple{N,W}`: A network of named tensors
+"""
+mutable struct network{W} <: TNnetwork where W  <: TNobj
+  net::Array{W,1}
+end
+
+"""
+    network(Qts)
+
+constructor to generates a network of TNobjs that stores a vector of named tensors `Qts`
+"""
+function network(Qts::Array{W,1}) where W  <: TNobj
+  return network{W}(Qts)
+end
+
+"""
+    network(Qts)
+
+converts named tensor to a network with a single tensor element
+"""
+function network(Qts::W...) where W  <: TNobj #where S <: Union{Any,String}
+  return network{W}([Qts[i] for i = 1:length(Qts)])
+end
+
+"""
+  network(Qt,i)
+
+converts named tensor `Qt` to a network with `i` copied elements not shallow copied
+"""
+function network(Qts::W,n::Integer) where W  <: TNobj #where S <: Union{Any,String}
+return network{W}([copy(Qts) for i = 1:n])
+end
+export network
+
+import ..Base.getindex
+function getindex(Qts::TNnetwork,i::Integer)
+  return Qts.net[i]
+end
+
+function getindex(Qts::nametens,i::Integer)
+  return Qts.N[i]
+end
+
+function getindex(Qts::directedtens,i::Integer)
+  return getindex(Qts.T,i)
+end
+
+import ..Base.setindex!
+function setindex!(Qts::TNnetwork,newTens::TNobj,i::Integer)
+  return Qts.net[i] = newTens
+end
+
+import ..Base.length
+function length(Qts::TNnetwork)
+  return length(Qts.net)
+end
+
+function contractinds(A::nametens,B::nametens;check::Bool=false)
+  pairs = Matrix{Bool}(undef,length(A.names),length(B.names))
+  counter = 0
+  for b = 1:size(pairs,2)
+    for a = b:size(pairs,1)
+      if A.names[a] == B.names[b]
+        counter += 1
+        pairs[a,b] = true
+        pairs[b,a] = true
+      else
+        pairs[a,b] = false
+        pairs[b,a] = false
       end
     end
-    return vecA,vecB
+
+    if check
+      checkcounter = 0
+      @inbounds @simd for x = b:size(pairs,1)
+        checkcounter += pairs[x,b]
+      end
+      if checkcounter > 1
+        error("Indices not paired on contraction of named tensors (duplicate index name detected)")
+      end
+    end
   end
+
+  vecA = Array{intType,1}(undef,counter)
+  vecB = Array{intType,1}(undef,counter)
+
+  newcounter = 0
+  b = 0
+  while newcounter < counter
+    b += 1
+    a = b-1
+    search_bool = true
+    for a = b:size(pairs,1)
+      if pairs[a,b]
+        newcounter += 1
+        vecA[newcounter] = a
+        vecB[newcounter] = b
+        search_bool = false
+      end
+    end
+  end
+
+  return vecA,vecB,pairs
+end
+
+function contractinds(A::directedtens,B::directedtens)
+  return contractinds(A.T,B.T)
+end
 
 #  import ..Qtensor.*
-  """
-      *(A,B...)
+"""
+    *(A,B...)
 
-  Contracts `A` and any number of `B` along common indices; simple algorithm at present for the order
-  """
-  function *(A::TNobj,B::TNobj)
-    vecA,vecB = contractinds(A,B)
+Contracts `A` and any number of `B` along common indices; simple algorithm at present for the order
+"""
+function *(A::nametens,B::nametens)
+  vecA,vecB,pairs = contractinds(A,B)
 
-    retindsA = setdiff([i for i = 1:ndims(A)],vecA)
-    retindsB = setdiff([i for i = 1:ndims(B)],vecB)
-
-    newnames = setdiff(A.names,B.names)
-    newnames = vcat(A.names[retindsA],B.names[retindsB])
-    newTens = contract(A.N,vecA,B.N,vecB)
-
-    return nametens(newTens,newnames)
-  end
-
-  function *(R::TNobj...)
-    out = *(R[1],R[2])
-    @simd for b = 3:length(R)
-      out = *(out,R[b])
+  xnewnames = 0
+  ynewnames = 0
+  for y = 1:size(pairs,2)
+    counter = 0
+  #  x = y
+  #  while x < size(pairs,1) && counter == 0
+  #    x += 1
+    @inbounds @simd for x = y:size(pairs,1)
+      counter += pairs[x,y]
     end
-    return out
+    if counter == 0
+      xnewnames += 1
+    end
+
+
+    counter = 0
+    x = 0
+  #  while x < y && counter == 0
+  #    x += 1
+    @inbounds @simd for x = 1:y
+      counter += pairs[x,y]
+    end
+    if counter == 0
+      ynewnames += 1
+    end
   end
 
+  newnames = Array{String,1}(undef,xnewnames+ynewnames)
 
-  function sum(R::TNobj)
-    return sum(R.N)
+  name_counter = 0
+  y = 0
+  while name_counter < xnewnames
+    y += 1
+    counter = 0
+    @inbounds @simd for x = y:size(pairs,1)
+      counter += pairs[x,y]
+    end
+    if counter == 0
+      name_counter += 1
+      newnames[name_counter] = A.names[y]
+    end
   end
 
-  """
-      *(a,b)
-
-  concatenates string `a` with integer `b` after converting integer to a string
-  """
-  function *(a::String,b::Integer)
-    return a*string(b)
+  y = 0
+  while name_counter < xnewnames + ynewnames
+    y += 1
+    counter = 0
+    @inbounds @simd for x = 1:y
+      counter += pairs[x,y]
+    end
+    if counter == 0
+      name_counter += 1
+      newnames[name_counter] = B.names[y]
+    end
   end
 
-  import Base.permutedims
-  """
-      permtuedims(A,order)
+  newTens = contract(A.N,vecA,B.N,vecB)
 
-  Permutes named tensor `A` according to `order` (ex: [[1,2],[3,4]] or [["a","b"],["c","d"]])
+  return nametens(newTens,newnames)
+end
 
-  See also: [`permutedims!`](@ref)
-  """
-  function permutedims(A::TNobj,order::Array{W,1}) where W <: Union{String,Integer}
-    B = copy(A)
-    return permutedims!(B,order)
+function *(A::directedtens,B::directedtens)
+  C = A.T * B.T
+  newarrows = vcat(A.arrows[retindsA],B.arrows[retindsB])
+  return directedtens(C,newarrows,false)
+end
+
+function *(R::TNobj...)
+  out = *(R[1],R[2])
+  @simd for b = 3:length(R)
+    out = *(out,R[b])
   end
+  return out
+end
 
-  #differentiate between case for integers (above but wrong code) and for labels
-  #get "not labels" for set diff of the labels we know and don't know
+
+function sum(R::TNobj)
+  return sum(R.N)
+end
+
+"""
+    *(a,b)
+
+concatenates string `a` with integer `b` after converting integer to a string
+"""
+function *(a::String,b::Integer)
+  return a*string(b)
+end
+
+import Base.permutedims
+"""
+    permtuedims(A,order)
+
+Permutes named tensor `A` according to `order` (ex: [[1,2],[3,4]] or [["a","b"],["c","d"]])
+
+See also: [`permutedims!`](@ref)
+"""
+function permutedims(A::TNobj,order::Array{W,1}) where W <: Union{String,Integer}
+  B = copy(A)
+  return permutedims!(B,order)
+end
+
+#differentiate between case for integers (above but wrong code) and for labels
+#get "not labels" for set diff of the labels we know and don't know
 #  import ..Qtensor.permutedims!
-  """
-      permtuedims!(A,order)
+"""
+    permtuedims!(A,order)
 
-  Permutes named tensor `A` according to `order` (ex: [[1,2],[3,4]] or [["a","b"],["c","d"]])
+Permutes named tensor `A` according to `order` (ex: [[1,2],[3,4]] or [["a","b"],["c","d"]])
 
-  See also: [`permutedims`](@ref)
-  """
-  function permutedims!(A::TNobj,order::Array{W,1}) where W <: String
-    newnumberorder = Int64[]
-    for i = 1:size(order,1)
-      for j = 1:size(A.names,1)
-        if order[i] == A.names[j]
-          push!(newnumberorder,j)
-          continue
-        end
+See also: [`permutedims`](@ref)
+"""
+function permutedims!(A::TNobj,order::Array{W,1}) where W <: String
+  newnumberorder = intType[]
+  for i = 1:size(order,1)
+    for j = 1:size(A.names,1)
+      if order[i] == A.names[j]
+        push!(newnumberorder,j)
+        continue
       end
     end
-    return permutedims!(A,newnumberorder)
   end
+  return permutedims!(A,newnumberorder)
+end
 
-  function permutedims!(A::TNobj,order::Array{W,1}) where W <: Integer
-    A.N = permutedims!(A.N,order)
-    A.names = A.names[order]
+function permutedims!(B::TNobj,order::Array{W,1}) where W <: Integer
+
+  A = typeof(B) <: nametens ? B : B.T
+
+  A.N = permutedims!(A.N,order)
+  A.names = A.names[order]
 #    A.arrows = A.arrows[order]
-    return A
+
+  if typeof(B) <: directedtens
+    B.T = A
   end
 
-  """
-      matchnames(AA,order,q)
+  return B
+end
 
-  Matches `order` (a length 2 vector of vectors of strings for indices) to the indices in `AA` for the left (right) with `q`=1 (2)
-  """
-  function matchnames(AA::TNobj,order::Array{B,1}) where B <: Union{Any,String}
-    vect = Array{intType,1}(undef,length(order))
-    for a = 1:length(order)
-      condition = true
-      w = 0
-      while condition && w < length(AA.names)
-        w += 1
-        if order[a] == AA.names[w]
-          vect[a] = w
-          condition = false
-        end
+"""
+    matchnames(AA,order,q)
+
+Matches `order` (a length 2 vector of vectors of strings for indices) to the indices in `AA` for the left (right) with `q`=1 (2)
+"""
+function matchnames(AA::nametens,order::Array{B,1}) where B <: Union{Any,String}
+  vect = Array{intType,1}(undef,length(order))
+  for a = 1:length(order)
+    condition = true
+    w = 0
+    while condition && w < length(AA.names)
+      w += 1
+      if order[a] == AA.names[w]
+        vect[a] = w
+        condition = false
       end
     end
-    return vect
   end
+  return vect
+end
 #=
-  """
-      findinds(AA,order)
+"""
+    findinds(AA,order)
 
-  prepares return indices and tensor `AA` for decomposition
-  """
-  function findinds(AA::TNobj,order::Array{Array{B,1},1}) where B <: Union{Any,String}
-    left = matchnames(AA,order,1)
-    right = matchnames(AA,order,2)
-    return left,right
-  end
+prepares return indices and tensor `AA` for decomposition
+"""
+function findinds(AA::TNobj,order::Array{Array{B,1},1}) where B <: Union{Any,String}
+  left = matchnames(AA,order,1)
+  right = matchnames(AA,order,2)
+  return left,right
+end
 =#
 #  import ..decompositions.svd
-  """
-      svd(A,order[,mag=,cutoff=,m=,name=,leftadd=,rightadd=])
+"""
+    svd(A,order[,mag=,cutoff=,m=,name=,leftadd=,rightadd=])
 
-  Generates SVD of named tensor `A` according to `order`; same output as regular SVD but with named tensors
+Generates SVD of named tensor `A` according to `order`; same output as regular SVD but with named tensors
 
-  # Naming created index:
-  + the index to the left of `D` is `vcat(name,leftadd)`
-  """
-  function svd(AA::TNobj,order::Array{Array{B,1},1};mag::Number = 0.,cutoff::Number = 0.,
-                m::Integer = 0,power::Integer=2,name::String="svdind",leftadd::String="L",
-                rightadd::String="R",nozeros::Bool=false) where B <: Union{Any,String}
+# Naming created index:
++ the index to the left of `D` is `vcat(name,leftadd)`
+"""
+function svd(AA::nametens,order::Array{Array{B,1},1};mag::Number = 0.,cutoff::Number = 0.,
+              m::Integer = 0,power::Integer=2,name::String="svdind",leftadd::String="L",
+              rightadd::String="R",nozeros::Bool=false) where B <: Union{Any,String}
 
-    left = matchnames(AA,order[1])
-    right = matchnames(AA,order[2])
+  left = matchnames(AA,order[1])
+  right = matchnames(AA,order[2])
 
-    neworder = Array{intType,1}[left,right]
-    leftname = name * leftadd
-    rightname = name * rightadd
+  neworder = Array{intType,1}[left,right]
+  leftname = name * leftadd
+  rightname = name * rightadd
 
-    U,D,V,truncerr,newmag = svd(AA.N,neworder,power=power,mag=mag,cutoff=cutoff,m=m,nozeros=nozeros)
+  U,D,V,truncerr,newmag = svd(AA.N,neworder,power=power,mag=mag,cutoff=cutoff,m=m,nozeros=nozeros)
 
-    TNobjU = nametens(U,vcat(AA.names[left],[leftname]))
-    TNobjD = nametens(D,[leftname,rightname])
-    TNobjV = nametens(V,vcat([rightname],AA.names[right]))
+  TNobjU = nametens(U,vcat(AA.names[left],[leftname]))
+  TNobjD = nametens(D,[leftname,rightname])
+  TNobjV = nametens(V,vcat([rightname],AA.names[right]))
 
-    return TNobjU,TNobjD,TNobjV,truncerr,newmag
-  end
+  return TNobjU,TNobjD,TNobjV,truncerr,newmag
+end
 
-  """
-      symsvd(A,order[,mag=,cutoff=,m=,name=,leftadd=,rightadd=])
+"""
+    symsvd(A,order[,mag=,cutoff=,m=,name=,leftadd=,rightadd=])
 
-  Takes `svd` of `A` according to `order` and returns U*sqrt(D),sqrt(D)*V
+Takes `svd` of `A` according to `order` and returns U*sqrt(D),sqrt(D)*V
 
-  See also: [`svd`](@ref)
-  """
-  function symsvd(AA::TNobj,order::Array{Array{B,1},1};mag::Number = 0.,power::Integer=2,
-                  cutoff::Number = 0.,m::Integer = 0,name::String="svdind",rightadd::String="L",
-                  leftadd::String="R") where B <: Union{Any,String}
+See also: [`svd`](@ref)
+"""
+function symsvd(AA::TNobj,order::Array{Array{B,1},1};mag::Number = 0.,power::Integer=2,
+                cutoff::Number = 0.,m::Integer = 0,name::String="svdind",rightadd::String="L",
+                leftadd::String="R") where B <: Union{Any,String}
 
-    U,D,V,truncerr,mag = svd(AA,order,power=power,mag=mag,cutoff=cutoff,m=m,name=name,leftadd=leftadd,rightadd=rightadd)
-    S1 = sqrt!(D)
-    return U*S1,S1*V,truncerr,mag
-  end
-  export symsvd
+  U,D,V,truncerr,mag = svd(AA,order,power=power,mag=mag,cutoff=cutoff,m=m,name=name,leftadd=leftadd,rightadd=rightadd)
+  S1 = sqrt!(D)
+  return U*S1,S1*V,truncerr,mag
+end
+export symsvd
 
 #  import ..decompositions.eigen
-  """
-      eigen(A,order[,mag=,cutoff=,m=,name=,leftadd=])
+"""
+    eigen(A,order[,mag=,cutoff=,m=,name=,leftadd=])
 
-  Generates eigenvalue decomposition of named tensor `A` according to `order`; same output as regular eigenvalue but with named tensors
+Generates eigenvalue decomposition of named tensor `A` according to `order`; same output as regular eigenvalue but with named tensors
 
-  # Naming created index:
-  + the index to the left of `D` is `vcat(name,leftadd)`
-  """
-  function eigen(AA::TNobj,order::Array{Array{B,1},1};mag::Number = 0.,cutoff::Number = 0.,
-                  m::Integer = 0,name::String="eigind",leftadd::String="L") where B <: Union{Any,String}
+# Naming created index:
++ the index to the left of `D` is `vcat(name,leftadd)`
+"""
+function eigen(AA::nametens,order::Array{Array{B,1},1};mag::Number = 0.,cutoff::Number = 0.,
+                m::Integer = 0,name::String="eigind",leftadd::String="L") where B <: Union{Any,String}
 
-    left = matchnames(AA,order[1])
-    right = matchnames(AA,order[2])
-    neworder = [left,right]
-    leftname = name*leftadd
+  left = matchnames(AA,order[1])
+  right = matchnames(AA,order[2])
+  neworder = [left,right]
+  leftname = name*leftadd
 
-    D,U,truncerr,newmag = eigen(AA.N,order,mag=mag,cutoff=cutoff,m=m)
+  D,U,truncerr,newmag = eigen(AA.N,order,mag=mag,cutoff=cutoff,m=m)
 
-    TNobjD = nametens(D,[leftname,rightname])
-    TNobjU = nametens(U,vcat(AA.names[left],[leftname]))
-    return TNobjD,TNobjU,truncerr,newmag
+  TNobjD = nametens(D,[leftname,rightname])
+  TNobjU = nametens(U,vcat(AA.names[left],[leftname]))
+  return TNobjD,TNobjU,truncerr,newmag
+end
+
+"""
+    nameMPS(A)
+
+Assigns names to MPS `A`
+
+See also: [`nameMPO`](@ref)
+"""
+function nameMPS(psi::MPS)
+  TNmps = Array{TNobj,1}(undef,length(psi))
+  for i = 1:length(TNmps)
+    TNmps[i] = nametens(psi[i],["l$(i-1)","p$i","l$i"])
   end
+  return network(TNmps)
+end
+export nameMPS
 
-  """
-      nameMPS(A)
+"""
+    nameMPO(A)
 
-  Assigns names to MPS `A`
+Assigns names to MPO `A`
 
-  See also: [`nameMPO`](@ref)
-  """
-  function nameMPS(psi::MPS)
-    TNmps = Array{TNobj,1}(undef,length(psi))
-    for i = 1:length(TNmps)
-      TNmps[i] = nametens(psi[i],["l$(i-1)","p$i","l$i"])
-    end
-    return network(TNmps)
+See also: [`nameMPS`](@ref)
+"""
+function nameMPO(mpo::MPO)
+  TNmpo = Array{TNobj,1}(undef,length(mpo))
+  for i = 1:length(mpo)
+    TNmpo[i] = nametens(mpo[i],["l$(i-1)","p$i","d$i","l$i"])
   end
-  export nameMPS
+  return network(TNmpo)
+end
+export nameMPO
 
-  """
-      nameMPO(A)
+"""
+    conj(A)
 
-  Assigns names to MPO `A`
+Conjugates named MPS `A`
 
-  See also: [`nameMPS`](@ref)
-  """
-  function nameMPO(mpo::MPO)
-    TNmpo = Array{TNobj,1}(undef,length(mpo))
-    for i = 1:length(mpo)
-      TNmpo[i] = nametens(mpo[i],["l$(i-1)","p$i","d$i","l$i"])
-    end
-    return network(TNmpo)
-  end
-  export nameMPO
+See also: [`conj!`](@ref)
+"""
+function conj(A::TNnetwork)
+  return network([conj(A.net[i]) for i = 1:length(A)])
+end
 
-  """
-      conj(A)
-
-  Conjugates named MPS `A`
-
-  See also: [`conj!`](@ref)
-  """
-  function conj(A::TNnetwork)
-    return network([conj(A.net[i]) for i = 1:length(A)])
-  end
-
-  import Base.copy
-  """
-      copy(A)
-
-  Returns a copy of named tensor `A`
-  """
-  function copy(A::nametens{W,B}) where {W <: Union{qarray,AbstractArray,denstens}, B <: Union{Any,String}}
-    return nametens{W,B}(copy(A.N),copy(A.names))
-  end
-
-  """
+import Base.copy
+"""
     copy(A)
 
-  Returns a copy of network of named tensors `A`
-  """
-  function copy(A::TNnetwork)
-    return network([copy(A.net[i]) for i = 1:length(A)])
-  end
+Returns a copy of named tensor `A`
+"""
+function copy(A::nametens{W,B}) where {W <: Union{qarray,AbstractArray,denstens}, B <: Union{Any,String}}
+  return nametens{W,B}(copy(A.N),copy(A.names))
+end
 
-  import Base.println
-  """
-      println(A[,show=])
+"""
+  copy(A)
 
-  Prints named tensor `A`
+Returns a copy of network of named tensors `A`
+"""
+function copy(A::TNnetwork)
+  return network([copy(A.net[i]) for i = 1:length(A)])
+end
 
-  # Outputs:
-  + `size`: size of `A`
-  + `index names`: current names on `A`
-  + `arrowss`: fluxes for each index on `A`
-  + `elements`: elements of `A` if reshaped into a vector (out to `show`)
-  """
-  function println(A::TNobj;show::Integer=10)
+import Base.println
+"""
+    println(A[,show=])
 
-    println("size = ",size(A))
-    println("index names = ",A.names)
-    if typeof(A.N) <: denstens ||  typeof(A.N) <: qarray
-      temp = length(A.N.T)
-      maxshow = min(show,temp)
-      println("elements = ",A.N.T[1:maxshow])
+Prints named tensor `A`
+
+# Outputs:
++ `size`: size of `A`
++ `index names`: current names on `A`
++ `arrowss`: fluxes for each index on `A`
++ `elements`: elements of `A` if reshaped into a vector (out to `show`)
+"""
+function println(A::TNobj;show::Integer=10)
+
+  println("size = ",size(A))
+  println("index names = ",A.names)
+  if typeof(A.N) <: denstens ||  typeof(A.N) <: qarray
+    temp = length(A.N.T)
+    maxshow = min(show,temp)
+    println("elements = ",A.N.T[1:maxshow])
+  else
+    rAA = reshape(A.N,prod(size(A)))
+    temp = length(rAA)
+    maxshow = min(show,temp)
+    if length(rAA) > maxshow
+      println("elements = ",rAA[1:maxshow],"...")
     else
-      rAA = reshape(A.N,prod(size(A)))
-      temp = length(rAA)
-      maxshow = min(show,temp)
-      if length(rAA) > maxshow
-        println("elements = ",rAA[1:maxshow],"...")
-      else
-        println("elements = ",rAA[1:maxshow])
-      end
+      println("elements = ",rAA[1:maxshow])
     end
-    println()
-    nothing
   end
+  println()
+  nothing
+end
 
-  import Base.size
-  """
-      size(A[,w=])
+import Base.size
+"""
+    size(A[,w=])
 
-  Gives the size of named tensor `A` where `w` is an integer or an index label
-  """
-  function size(A::TNobj)
-    return size(A.N)
+Gives the size of named tensor `A` where `w` is an integer or an index label
+"""
+function size(A::TNobj)
+  return size(A.N)
+end
+
+function size(A::TNobj,w::Integer)
+  return size(A.N,w)
+end
+
+function size(A::TNobj,w::String)
+  condition = true
+  p = 0
+  while condition && p < ndims(A)
+    p += 1
+    condition = A.names[p] != w
   end
+  return size(A.N,w)
+end
 
-  function size(A::TNobj,w::Integer)
-    return size(A.N,w)
+"""
+    norm(A)
+
+Gives the norm of named tensor `A`
+"""
+function norm(A::TNobj)
+  return norm(A.N)
+end
+
+"""
+    div!(A,num)
+
+Gives the division of named tensor `A` by number `num`
+
+See also: [`/`](@ref)
+"""
+function div!(A::TNobj,num::Number)
+  A.N = div!(A.N,num)
+  return A
+end
+
+"""
+    /(A,num)
+
+Gives the division of named tensor `A` by number `num`
+
+See also: [`div!`](@ref)
+"""
+function /(A::TNobj,num::Number)
+  return div!(copy(A),num)
+end
+
+"""
+    mult!(A,num)
+
+Gives the multiplication of named tensor `A` by number `num`
+
+See also: [`*`](@ref)
+"""
+function mult!(A::TNobj,num::Number)
+  A.N = mult!(A.N,num)
+  return A
+end
+
+"""
+    *(A,num)
+
+Gives the multiplication of named tensor `A` by number `num` (commutative)
+
+See also: [`mult!`](@ref)
+"""
+function *(A::TNobj,num::Number)
+  return mult!(copy(A),num)
+end
+
+function *(num::Number,A::TNobj)
+  return A*num
+end
+
+function add!(A::TNobj,B::TNobj)
+  reorder = matchnames(A,B.names)
+  if !issorted(reorder)
+    C = permutedims(B,reorder)
+  else
+    C = B
   end
+  A.N = add!(A.N,C.N)
+  return A
+end
 
-  function size(A::TNobj,w::String)
-    condition = true
-    p = 0
-    while condition && p < ndims(A)
-      p += 1
-      condition = A.names[p] != w
-    end
-    return size(A.N,w)
+"""
+    +(A,B)
+
+Adds tensors `A` and `B`
+
+See also: [`add!`](@ref)
+"""
+function +(A::TNobj,B::TNobj)
+  return add!(copy(A),B)
+end
+
+"""
+    sub!(A,B)
+
+Subtracts tensor `A` from `B` (changes `A`)
+
+See also: [`-`](@ref)
+"""
+function sub!(A::TNobj,B::TNobj)
+  reorder = matchnames(A,B.names)
+  if !issorted(reorder)
+    C = permutedims(B,reorder)
+  else
+    C = B
   end
+  A.N = sub!(A.N,C.N)
+  return A
+end
 
-  """
-      norm(A)
+"""
+    -(A,B)
 
-  Gives the norm of named tensor `A`
-  """
-  function norm(A::TNobj)
-    return norm(A.N)
-  end
+Subtracts tensor `A` from `B`
 
-  """
-      div!(A,num)
+See also: [`sub!`](@ref)
+"""
+function -(A::TNobj,B::TNobj)
+  return sub!(copy(A),B)
+end
 
-  Gives the division of named tensor `A` by number `num`
+import Base.sqrt
+"""
+    sqrt(A)
 
-  See also: [`/`](@ref)
-  """
-  function div!(A::TNobj,num::Number)
-    A.N = div!(A.N,num)
-    return A
-  end
+Takes the square root of named tensor `A`
 
-  """
-      /(A,num)
-
-  Gives the division of named tensor `A` by number `num`
-
-  See also: [`div!`](@ref)
-  """
-  function /(A::TNobj,num::Number)
-    return div!(copy(A),num)
-  end
-
-  """
-      mult!(A,num)
-
-  Gives the multiplication of named tensor `A` by number `num`
-
-  See also: [`*`](@ref)
-  """
-  function mult!(A::TNobj,num::Number)
-    A.N = mult!(A.N,num)
-    return A
-  end
-
-  """
-      *(A,num)
-
-  Gives the multiplication of named tensor `A` by number `num` (commutative)
-
-  See also: [`mult!`](@ref)
-  """
-  function *(A::TNobj,num::Number)
-    return mult!(copy(A),num)
-  end
-
-  function *(num::Number,A::TNobj)
-    return A*num
-  end
-
-  function add!(A::TNobj,B::TNobj)
-    reorder = matchnames(A,B.names)
-    if !issorted(reorder)
-      C = permutedims(B,reorder)
-    else
-      C = B
-    end
-    A.N = add!(A.N,C.N)
-    return A
-  end
-
-  """
-      +(A,B)
-
-  Adds tensors `A` and `B`
-
-  See also: [`add!`](@ref)
-  """
-  function +(A::TNobj,B::TNobj)
-    return add!(copy(A),B)
-  end
-
-  """
-      sub!(A,B)
-
-  Subtracts tensor `A` from `B` (changes `A`)
-
-  See also: [`-`](@ref)
-  """
-  function sub!(A::TNobj,B::TNobj)
-    reorder = matchnames(A,B.names)
-    if !issorted(reorder)
-      C = permutedims(B,reorder)
-    else
-      C = B
-    end
-    A.N = sub!(A.N,C.N)
-    return A
-  end
-
-  """
-      -(A,B)
-
-  Subtracts tensor `A` from `B`
-
-  See also: [`sub!`](@ref)
-  """
-  function -(A::TNobj,B::TNobj)
-    return sub!(copy(A),B)
-  end
-
-  import Base.sqrt
-  """
-      sqrt(A)
-
-  Takes the square root of named tensor `A`
-
-  See also: [`sqrt`](@ref)
-  """
-  function sqrt(A::TNobj;root::Number=0.5)
-    B = copy(A)
-    return sqrt!(B,root=root)
-  end
+See also: [`sqrt`](@ref)
+"""
+function sqrt(A::TNobj;root::Number=0.5)
+  B = copy(A)
+  return sqrt!(B,root=root)
+end
 
 #  import ..TENPACK.sqrt!
-  """
-      sqrt!(A)
+"""
+    sqrt!(A)
 
-  Takes the square root of named tensor `A`
+Takes the square root of named tensor `A`
 
-  See also: [`sqrt!`](@ref)
-  """
-  function sqrt!(A::TNobj;root::Number=0.5)
-    A.N = tensorcombination!(A.N,alpha=(root,),fct=^)#sqrt!(A.N,root=root)
-    return A
+See also: [`sqrt!`](@ref)
+"""
+function sqrt!(A::TNobj;root::Number=0.5)
+  A.N = tensorcombination!(A.N,alpha=(root,),fct=^)#sqrt!(A.N,root=root)
+  return A
+end
+
+import Base.ndims
+"""
+    ndims(A)
+
+Returns the number of indices of named tensor `A`
+"""
+function ndims(A::nametens)
+  return length(A.names)
+end
+
+function ndims(A::directedtens)
+  return length(A.arrows)
+end
+
+"""
+    conj!(A)
+
+Conjugates named tensor `A` in-place
+
+See also: [`conj`](@ref)
+"""
+function conj!(A::nametens)
+  conj!(A.N)
+  nothing
+end
+
+
+function conj!(A::directedtens)
+  @inbounds @simd for w = 1:ndims(A)
+    A.arrows[w] = !A.arrows[w]
   end
+  A.conj = !A.conj
+  nothing
+end
 
-  import Base.ndims
-  """
-      ndims(A)
+import LinearAlgebra.conj
+"""
+    conj(A)
 
-  Returns the number of indices of named tensor `A`
-  """
-  function ndims(A::TNobj)
-    return length(A.names)
-  end
+Conjugates named tensor `A`
 
-  """
-      conj!(A)
+See also: [`conj!`](@ref)
+"""
+function conj(A::TNobj)::TNobj
+  B = copy(A)
+  conj!(B)
+  return B
+end
 
-  Conjugates named tensor `A` in-place
+"""
+    trace(A)
 
-  See also: [`conj`](@ref)
-  """
-  function conj!(A::TNobj)
-    conj!(A.N)
-    nothing
-  end
-
-  import LinearAlgebra.conj
-  """
-      conj(A)
-
-  Conjugates named tensor `A`
-
-  See also: [`conj!`](@ref)
-  """
-  function conj(A::TNobj)::TNobj
-    B = copy(A)
-    conj!(B)
-    return B
-  end
-
-  """
-      trace(A)
-
-  Computes the trace of named tensor `A` over indices with 1) the same name and 2) opposite arrowss
-  """
-  function trace(A::TNobj)
-    vect = Array{intType,1}[]
-    for w = 1:length(A.names)
-      condition = true
-      z = w+1
-      while condition && z < length(A.names)
-        z += 1
-        if A.names[w] == A.names[z]
-          push!(vect,[w,z])
-          condition = false
-        end
+Computes the trace of named tensor `A` over indices with 1) the same name and 2) opposite arrowss
+"""
+function trace(B::TNobj)
+  A = typeof(B) <: nametens ? B : B.T
+  vect = Array{intType,1}[]
+  for w = 1:length(A.names)
+    condition = true
+    z = w+1
+    while condition && z < length(A.names)
+      z += 1
+      if A.names[w] == A.names[z]
+        push!(vect,[w,z])
+        condition = false
       end
+    end
+  end
+  return trace(A.N,vect)
+end
+
+"""
+    trace(A,inds)
+
+Computes the trace of named tensor `A` with specified `inds` (integers, symbols, or strings--ex: [[1,2],[3,4],[5,6]])
+"""
+function trace(A::nametens,inds::Array{Array{W,1},1}) where W <: Union{Any,Integer}
+  if W <: Integer
+    return trace(A.N,inds)
+  else
+    vect = Array{intType,1}[zeros(intType,2) for i = 1:length(inds)]
+    for w = 1:length(A.names)
+      matchindex!(A,vect,inds,w,1)
+      matchindex!(A,vect,inds,w,2)
     end
     return trace(A.N,vect)
   end
+end
 
-  """
-      trace(A,inds)
+function trace(A::directedtens,inds::Array{Array{W,1},1}) where W <: Union{Any,Integer}
+  B = trace(A.T,inds)
+  newinds = vcat(inds...)
+  leftoverinds = setdiff([i for i = 1:ndims(A)],newinds)
+  newarrows = A.arrows[leftoverinds]
+  return directedtens(B,newarrows,A.conj)
+end
 
-  Computes the trace of named tensor `A` with specified `inds` (integers, symbols, or strings--ex: [[1,2],[3,4],[5,6]])
-  """
-  function trace(A::TNobj,inds::Array{Array{W,1},1}) where W <: Union{Any,Integer}
-    if W <: Integer
-      return trace(A.N,inds)
-    else
-      vect = Array{intType,1}[zeros(intType,2) for i = 1:length(inds)]
-      for w = 1:length(A.names)
-        matchindex!(A,vect,inds,w,1)
-        matchindex!(A,vect,inds,w,2)
-      end
-      return trace(A.N,vect)
-    end
-  end
+"""
+    trace(A,inds)
 
-  """
-      trace(A,inds)
+Computes the trace of named tensor `A` with specified `inds` (integers, symbols, or strings--ex: [1,2])
+"""
+function trace(A::TNobj,inds::Array{W,1}) where W <: Union{Any,Integer}
+  return trace(A,[inds])
+end
 
-  Computes the trace of named tensor `A` with specified `inds` (integers, symbols, or strings--ex: [1,2])
-  """
-  function trace(A::TNobj,inds::Array{W,1}) where W <: Union{Any,Integer}
-    return trace(A,[inds])
-  end
+"""
+    matchindex!(A,vect,inds,w,q)
 
-  """
-      matchindex!(A,vect,inds,w,q)
+takes index names from `vect` over indices `inds` (position `w`, index `q`, ex: inds[w][q]) and converts into an integer; both `vect` and `index` are of the form Array{Array{?,1},1}
 
-  takes index names from `vect` over indices `inds` (position `w`, index `q`, ex: inds[w][q]) and converts into an integer; both `vect` and `index` are of the form Array{Array{?,1},1}
+See also: [`trace`](@ref)
+"""
+function matchindex!(A::nametens,vect::Array{Array{P,1},1},inds::Array{Array{W,1},1},w::Integer,q::Integer) where {W <: Union{Any,Integer}, P <: Integer}
+  convInds!(A,inds,vect)
+  nothing
+end
 
-  See also: [`trace`](@ref)
-  """
-  function matchindex!(A::TNobj,vect::Array{Array{P,1},1},inds::Array{Array{W,1},1},w::Integer,q::Integer) where {W <: Union{Any,Integer}, P <: Integer}
+"""
     convInds!(A,inds,vect)
-    nothing
+
+converts named indices in `A` to integers; finds only indices specified in `inds` and returns `vect` with integers; does nothing if its only integers
+"""
+function convInds!(A::nametens,inds::Array{Array{W,1},1},vect::Array{Array{P,1},1}) where {W <: Union{Any,Integer}, P <: Integer}
+  if W <: Integer
+    return inds
   end
-
-  """
-      convInds!(A,inds,vect)
-
-  converts named indices in `A` to integers; finds only indices specified in `inds` and returns `vect` with integers; does nothing if its only integers
-  """
-  function convInds!(A::TNobj,inds::Array{Array{W,1},1},vect::Array{Array{P,1},1}) where {W <: Union{Any,Integer}, P <: Integer}
-    if W <: Integer
-      return inds
-    end
-    for a = 1:length(vect)
-      for b = 1:length(vect[a])
-        saveind = b > 1 ? vect[a][b-1] : 0
-        for c = 1:length(A.names)
-          if inds[a][b] == A.names[c] && saveind != c
-            vect[a][b] = c
-            saveind = c
-          end
+  for a = 1:length(vect)
+    for b = 1:length(vect[a])
+      saveind = b > 1 ? vect[a][b-1] : 0
+      for c = 1:length(A.names)
+        if inds[a][b] == A.names[c] && saveind != c
+          vect[a][b] = c
+          saveind = c
         end
       end
     end
-    return vect
   end
+  return vect
+end
 
-  """
-    swapname!(A,labels)
+"""
+  swapname!(A,labels)
 
-  Finds elements in `labels` (must be length 2) and interchanges the name. For example, `swapname!(A,["a","c"])` will find the label `"a"` and `"c"` and interchange them. A chain of swaps can also be requested (i.e., `swapname!(A,[["a","c"],["b","d"]])`)
+Finds elements in `labels` (must be length 2) and interchanges the name. For example, `swapname!(A,["a","c"])` will find the label `"a"` and `"c"` and interchange them. A chain of swaps can also be requested (i.e., `swapname!(A,[["a","c"],["b","d"]])`)
 
-  Works as a pseudo-permute in many cases. Will not permute if the names are not found.
+Works as a pseudo-permute in many cases. Will not permute if the names are not found.
 
-  See also: [`swapnames!`](@ref)
-  """
-  function swapname!(A::TNobj,inds::Array{Array{W,1},1}) where W <: Any
-    for c = 1:length(inds)
-      x = 1
-      while x < length(A.names) && A.names[x] != inds[c][1]
-        x += 1
-      end
-      y = 1
-      while y < length(A.names) && A.names[y] != inds[c][2]
-        y += 1
-      end
-      if inds[c] == [A.names[x],A.names[y]]
-        A.names[x],A.names[y] = A.names[y],A.names[x]
-      end
+See also: [`swapnames!`](@ref)
+"""
+function swapname!(A::nametens,inds::Array{Array{W,1},1}) where W <: Any
+  for c = 1:length(inds)
+    x = 1
+    while x < length(A.names) && A.names[x] != inds[c][1]
+      x += 1
     end
-    nothing
+    y = 1
+    while y < length(A.names) && A.names[y] != inds[c][2]
+      y += 1
+    end
+    if inds[c] == [A.names[x],A.names[y]]
+      A.names[x],A.names[y] = A.names[y],A.names[x]
+    end
   end
+  nothing
+end
 
-  function swapname!(A::TNobj,inds::Array{W,1}) where W <: Any
-    swapname!(A,[inds])
-  end
-  export swapname!
+function swapname!(A::nametens,inds::Array{W,1}) where W <: Any
+  swapname!(A,[inds])
+end
+export swapname!
 
-  """
-    swapnames!(A,labels)
+"""
+  swapnames!(A,labels)
 
-  Finds elements in `labels` (must be length 2) and interchanges the name. For example, `swapname!(A,["a","c"])` will find the label `"a"` and `"c"` and interchange them. A chain of swaps can also be requested (i.e., `swapname!(A,[["a","c"],["b","d"]])`)
+Finds elements in `labels` (must be length 2) and interchanges the name. For example, `swapname!(A,["a","c"])` will find the label `"a"` and `"c"` and interchange them. A chain of swaps can also be requested (i.e., `swapname!(A,[["a","c"],["b","d"]])`)
 
-  Works as a pseudo-permute in many cases. Will not permute if the names are not found.
+Works as a pseudo-permute in many cases. Will not permute if the names are not found.
 
-  See also: [`swapname!`](@ref)
-  """
-  function swapnames!(A::TNobj,inds::Array{Array{W,1},1}) where W <: Any
-    swapname!(A,inds)
-  end
+See also: [`swapname!`](@ref)
+"""
+function swapnames!(A::nametens,inds::Array{Array{W,1},1}) where W <: Any
+  swapname!(A,inds)
+end
 
-  function swapnames!(A::TNobj,inds::Array{W,1}) where W <: Any
-    swapname!(A,[inds])
-  end
-  export swapnames!
-  
+function swapnames!(A::nametens,inds::Array{W,1}) where W <: Any
+  swapname!(A,[inds])
+end
+export swapnames!
 
-  """
-      rename!(A,inds)
 
-  replaces named indices in `A` with indices in `inds`; either format [string,[string,arrow]] or [string,string] or [string,[string]] is accepted for `inds`
-  """
-  function rename!(A::TNobj,inds::Array{Array{W,1},1}) where W <: Any
-    for a = 1:length(inds)
-      condition = true
-      b = 0
-      while condition && b < length(A.names)
-        b += 1
-        if A.names[b] == inds[a][1]
-          if typeof(inds[a][2]) <: Array
-            A.names[b] = inds[a][2][1]
-          else
-            A.names[b] = inds[a][2]
-          end
+"""
+    rename!(A,inds)
+
+replaces named indices in `A` with indices in `inds`; either format [string,[string,arrow]] or [string,string] or [string,[string]] is accepted for `inds`
+"""
+function rename!(A::nametens,inds::Array{Array{W,1},1}) where W <: Any
+  for a = 1:length(inds)
+    condition = true
+    b = 0
+    while condition && b < length(A.names)
+      b += 1
+      if A.names[b] == inds[a][1]
+        if typeof(inds[a][2]) <: Array
+          A.names[b] = inds[a][2][1]
+        else
+          A.names[b] = inds[a][2]
         end
       end
     end
-    nothing
   end
-  #=            one = ["s1",["i1",false]]
-            two = ["s2",["i2",false]]
-            three = ["s3",["i3",true]]
-            four = ["s4",["i4",true]]
-            rename!(A1,[one,two,three,four])=#
+  nothing
+end
+#=            one = ["s1",["i1",false]]
+          two = ["s2",["i2",false]]
+          three = ["s3",["i3",true]]
+          four = ["s4",["i4",true]]
+          rename!(A1,[one,two,three,four])=#
 
-  """
-      rename!(A,currvar,newvar[,arrows])
+"""
+    rename!(A,currvar,newvar[,arrows])
 
-  replaces a string `currvar` in named indices of `A` with `newvar`; can also set arrows if needed
-  """
-  function rename!(A::TNobj,currvar::String,newvar::String)
-    for a = 1:length(A.names)
-      loc = findfirst(currvar,A.names[a])
-      if !(typeof(loc) <: Nothing)
-        first = loc[1] == 1 ? "" : A.names[a][1:loc[1]-1]
-        last = loc[end] == length(A.names[a]) ? "" : A.names[a][loc[end]+1]
-        newstring = first * newvar * last
-        A.names[a] = newstring
-      end
+replaces a string `currvar` in named indices of `A` with `newvar`; can also set arrows if needed
+"""
+function rename!(A::nametens,currvar::String,newvar::String)
+  for a = 1:length(A.names)
+    loc = findfirst(currvar,A.names[a])
+    if !(typeof(loc) <: Nothing)
+      first = loc[1] == 1 ? "" : A.names[a][1:loc[1]-1]
+      last = loc[end] == length(A.names[a]) ? "" : A.names[a][loc[end]+1]
+      newstring = first * newvar * last
+      A.names[a] = newstring
     end
-    nothing
   end
-  export rename!
+  nothing
+end
+export rename!
 
-  function rename(A::TNobj,inds::Array{Array{W,1},1}) where W <: Any
-    B = copy(A)
-    rename!(B,inds)
-    return B
+function rename(A::nametens,inds::Array{Array{W,1},1}) where W <: Any
+  B = copy(A)
+  rename!(B,inds)
+  return B
+end
+export rename
+
+function addindex!(X::nametens,Y::nametens)
+  if typeof(X.N) <: denstens || typeof(X.N) <: qarray
+    X.N.size = (size(X.N)...,1)
+  else
+      error("trying to convert an array to the wrong type...switch to using the denstens class")
   end
-  export rename
-
-  function addindex!(X::TNobj,Y::TNobj)
-    if typeof(X.N) <: denstens || typeof(X.N) <: qarray
-      X.N.size = (size(X.N)...,1)
-    else
-        error("trying to convert an array to the wrong type...switch to using the denstens class")
-    end
-    if typeof(Y.N) <: denstens || typeof(Y.N) <: qarray
-      Y.N.size = (size(Y.N)...,1)
-    elseif typeof(Y.N) <: AbstractArray
-        error("trying to convert an array to the wrong type...switch to using the denstens class")
-    end
-    push!(X.names,"extra_ones")
-    push!(Y.names,"extra_ones")
-    nothing
+  if typeof(Y.N) <: denstens || typeof(Y.N) <: qarray
+    Y.N.size = (size(Y.N)...,1)
+  elseif typeof(Y.N) <: AbstractArray
+      error("trying to convert an array to the wrong type...switch to using the denstens class")
   end
-  export addindex!
+  push!(X.names,"extra_ones")
+  push!(Y.names,"extra_ones")
+  nothing
+end
+export addindex!
 
-  function addindex(X::TNobj,Y::TNobj)
-    A = copy(X)
-    B = copy(Y)
-    addindex!(A,B)
-    return A,B
-  end
-  export addindex
+function addindex(X::nametens,Y::nametens)
+  A = copy(X)
+  B = copy(Y)
+  addindex!(A,B)
+  return A,B
+end
+export addindex
 
-  function joinTens(X::TNobj,Y::TNobj)
-    A,B = addindex(X,Y)
-    return A*B
-  end
-  export joinTens
+function joinTens(X::nametens,Y::nametens)
+  A,B = addindex(X,Y)
+  return A*B
+end
+export joinTens
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ #
+ # Kiana
+ # 
 
   mutable struct sizeT{W,B} <: TNobj where {W <: Integer,B <: Union{Any,String}}
     size::Array{W,1}
     names::Array{B,1}
   end
 
-  function sizeT(Qt::nametens{W,B})::TNobj where {W <: Union{qarray,AbstractArray,denstens}, B <: Union{Any,String}}
+  function sizeT(Qt::nametens{W,B}) where {W <: Union{qarray,AbstractArray,denstens}, B <: Union{Any,String}}
     return sizeT{Int64,B}(size(Qt),Qt.names)
   end
 
@@ -1594,7 +1804,7 @@ function greedy!(thisnetwork)
 #		left_location = findfirst(==(left_tensor), network)
 #		right_location = findfirst(==(right_tensor), network)
 
-thisnetwork[left_location] = result
+    thisnetwork[left_location] = result
 
     tempfix = thisnetwork.net
 

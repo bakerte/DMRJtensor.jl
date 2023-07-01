@@ -23,6 +23,7 @@ See also: [`moveR!`](@ref)
 """
 @inline function moveR!(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
                 fast::Bool=false,qrfct::Function=qr!,svdfct::Function=svd!)
+
   if (min(size(Lpsi,1)*size(Lpsi,2),size(Lpsi,3)) <= m || m == 0) && !isapprox(cutoff,0.) && fast
     Ltens,modV = qrfct(Lpsi,[[1,2],[3]])
 
@@ -78,6 +79,7 @@ See also: [`moveL!`](@ref)
 """
 @inline function moveL!(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
                 fast::Bool=false,lqfct::Function=lq!,svdfct::Function=svd!)
+
   if (min(size(Rpsi,1),size(Rpsi,2)*size(Rpsi,3)) <= m || m == 0) && !isapprox(cutoff,0.) && fast
     modU,Rtens = lqfct(Rpsi,[[1],[2,3]])
 
@@ -116,7 +118,7 @@ See also: [`moveL`](@ref)
 @inline function moveL!(psi::MPS;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,
                   mag::Number=0.)
   iR = psi.oc
-  psi[iR-1],psi[iR],D,truncerr = moveL(psi[iR-1],psi[iR],cutoff=cutoff,m=m,minm=minm,condition=condition,mag=mag)
+  psi[iR-1],psi[iR],D,truncerr = moveL!(psi[iR-1],psi[iR],cutoff=cutoff,m=m,minm=minm,condition=condition,mag=mag)
   psi.oc -= 1
   return D,truncerr
 end
@@ -129,7 +131,7 @@ movement function to move `psi` to a new site, `newoc` with `Lfct` and `Rfct`, w
 
 See also: [`move!`](@ref) [`move`](@ref)
 """
-@inline function movecenter!(psi::MPS,pos::Integer;cutoff::Float64=1E-14,m::Integer=0,minm::Integer=0,Lfct::Function=moveR,Rfct::Function=moveL)
+@inline function movecenter!(psi::MPS,pos::Integer;cutoff::Float64=1E-12,m::Integer=0,minm::Integer=0,Lfct::Function=moveR,Rfct::Function=moveL)
   if m == 0
     m = maximum([maximum(size(psi[i])) for i = 1:length(psi)])
   end
@@ -156,7 +158,7 @@ in-place move orthgononality center of `psi` to a new site, `newoc`, with a maxi
 
 See also: [`move`](@ref)
 """
-@inline function move!(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=1E-14,minm::Integer=0)
+@inline function move!(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=0.,minm::Integer=0)
   movecenter!(mps,pos,cutoff=cutoff,m=m,minm=minm)
   nothing
 end
@@ -169,7 +171,7 @@ same as `move!` but makes a copy of `psi`
 
 See also: [`move!`](@ref)
 """
-@inline function move(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=1E-14,minm::Integer=0)
+@inline function move(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=1E-12,minm::Integer=0)
   newmps = copy(mps)
   movecenter!(newmps,pos,cutoff=cutoff,m=m,minm=minm)
   return newmps
@@ -970,7 +972,7 @@ function correlation(dualpsi::MPS, psi::MPS, inputoperators...;
   move!(psi,1)
   move!(dualpsi,1)
 
-  istrail = length(trail) != 0
+  istrail = trail != ()
   if istrail
     if typeof(trail) <: Tuple || ndims(trail) == 1
       subtrail = [trail[(w-1) % length(inputoperators) + 1] for w = 1:length(inputoperators)]
@@ -1153,9 +1155,9 @@ end
 export penalty!
 
 """
-    penalty!(mpo,lambda,psi[,compress=])
+    penalty(mpo,lambda,psi[,compress=])
 
-Same as `penalty!` but makes a copy of `mpo`
+Same as `penalty` but makes a copy of `mpo`
 
 See also: [`penalty!`](@ref)
   """
