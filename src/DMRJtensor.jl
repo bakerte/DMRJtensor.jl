@@ -188,9 +188,6 @@ include(libpath*"MPOauto.jl")
 #basic models (Hubbard, Heisenberg, t-J)
 include(libpath*"models.jl")
 
-#General tensor networks
-include(libpath*"tensornetwork.jl")
-
 
 const algpath = libdir*"/../algs/"
 
