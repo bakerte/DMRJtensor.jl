@@ -121,6 +121,38 @@ struct environment{W} <: regEnv where W <: TensType
 end
 
 """
+    nameMPS(A)
+
+Assigns names to MPS `A`
+
+See also: [`nameMPO`](@ref)
+"""
+function nameMPS(psi::MPS)
+  TNmps = Array{TNobj,1}(undef,length(psi))
+  for i = 1:length(TNmps)
+    TNmps[i] = nametens(psi[i],["l$(i-1)","p$i","l$i"])
+  end
+  return network(TNmps)
+end
+export nameMPS
+
+"""
+    nameMPO(A)
+
+Assigns names to MPO `A`
+
+See also: [`nameMPS`](@ref)
+"""
+function nameMPO(mpo::MPO)
+  TNmpo = Array{TNobj,1}(undef,length(mpo))
+  for i = 1:length(mpo)
+    TNmpo[i] = nametens(mpo[i],["l$(i-1)","p$i","d$i","l$i"])
+  end
+  return network(TNmpo)
+end
+export nameMPO
+
+"""
   psi = MPS(A[,regtens=false,oc=1])
 
 Constructs `psi` for MPS with tensors `A` (Array of tensors or MPS) with orthogonality center `oc`. `regtens` avoids conversion to `denstens` type (defaulted to perform the conversion for efficiency)
