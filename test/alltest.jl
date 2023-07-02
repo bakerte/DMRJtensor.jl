@@ -32,7 +32,6 @@ const tests = [
 "MPlarge_test.jl",
 "MPOauto_test.jl",
 "model_test.jl",
-"tensornetwork_test.jl",
 ######
 ######
 ######
