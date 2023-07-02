@@ -835,6 +835,7 @@ Computes the trace of named tensor `A` with specified `inds` (integers, symbols,
 function trace(A::TNobj,inds::Array{W,1}) where W <: Union{Any,Integer}
   return trace(A,[inds])
 end
+export trace
 
 """
     matchindex!(A,vect,inds,w,q)
