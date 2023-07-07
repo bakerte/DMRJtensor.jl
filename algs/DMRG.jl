@@ -397,7 +397,7 @@ end
 
   params.energy = energy
 
-  U,D,V,truncerr = svd!(AA,[[1,2],[3,4]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
+  U,D,V,truncerr = svd(AA,[[1,2],[3,4]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
 
   if j < 0
     psi[iL] = contract(U,(3,),D,(1,))
@@ -495,21 +495,21 @@ println("IN HERE?")
 
   if j > 0
     for p = 1:iR-iL-1#iR:-1:iL
-      U,D,psi[iR-p+1],truncerr = svd!(AA,[[w for w = 1:ndims(AA)-2],[ndims(AA)-1,ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
+      U,D,psi[iR-p+1],truncerr = svd(AA,[[w for w = 1:ndims(AA)-2],[ndims(AA)-1,ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
       AA = U*D
     end
 
-    psi[iL],D,V,truncerr = svd!(AA,[[w for w = 1:ndims(AA)-2],[ndims(AA)-1,ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
+    psi[iL],D,V,truncerr = svd(AA,[[w for w = 1:ndims(AA)-2],[ndims(AA)-1,ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
 
     psi[iL+1] = D*V #contract(U,(3,),D,(1,))
 
   else
     for p = 1:iR-iL-1#iR:-1:iL
-      psi[iL+p],D,V,truncerr = svd!(AA,[[1,2],[p for p = 3:ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
+      psi[iL+p],D,V,truncerr = svd(AA,[[1,2],[p for p = 3:ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
       AA = D*V
     end
 
-    U,D,psi[iR],truncerr = svd!(AA,[[1,2],[p for p = 3:ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
+    U,D,psi[iR],truncerr = svd(AA,[[1,2],[p for p = 3:ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
 
     psi[iR-1] = U*D
   end
