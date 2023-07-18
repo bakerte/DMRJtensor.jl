@@ -1,11 +1,11 @@
 name = "DMRJtensor"
 uuid = "5b179a51-5399-4802-8f6e-f7014fc12e6f"
 authors = ["Thomas E. Baker"]
-version = "0.9.27"
+version = "0.9.28"
 
 [compat]
 julia = "1.8.3"
-TensorPACK = "0.2.6"
+TensorPACK = "0.2.7"
 
 [deps]
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
