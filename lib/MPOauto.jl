@@ -289,7 +289,7 @@ function MPO(opstring::MPOterm,reverse::Bool=true,countreduce::intType=100,sweep
     value_mpo_vec[i] = 0
   end
 
-  Threads.@threads for a in regularterms
+  Threads.@threads :static for a in regularterms
 
     numthread = Threads.threadid()
 
@@ -330,7 +330,7 @@ function MPO(opstring::MPOterm,reverse::Bool=true,countreduce::intType=100,sweep
 
     counter = zeros(Int64,length(manyvec))
 
-    Threads.@threads for a in manysiteterms
+    Threads.@threads :static for a in manysiteterms
 
       numthread = Threads.threadid()
 
@@ -356,7 +356,7 @@ function MPO(opstring::MPOterm,reverse::Bool=true,countreduce::intType=100,sweep
 =#
     end
 
-    Threads.@threads for w = 1:length(manyvec)
+    Threads.@threads :static for w = 1:length(manyvec)
       if manyvec[w] != 0 && !isapprox(sum(p->norm(manyvec[w][p]),1:length(manyvec[w])),0)
         manyvec[w] = compressMPO!(manyvec[w],sweeps=sweeps)
       end
@@ -586,7 +586,7 @@ function *(X::MPO...;nthreads::Integer=Threads.nthreads(),fct::Function=mult!)
 
     R = Array{MPO,1}(undef,nthreads)
 
-    Threads.@threads for w = 1:nthreads
+    Threads.@threads :static for w = 1:nthreads
 
       start = startparts[w] + 1
       stop = startparts[w+1]
