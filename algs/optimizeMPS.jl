@@ -61,6 +61,8 @@ mutable struct algvars{W <: Number,Q <: Qnum} <: TNparams
   shift::Bool
   fixD::Bool
 
+  double::Bool
+
   startoc::Integer
   origj::Bool
 
@@ -107,7 +109,7 @@ function params(params::algvars{W,Q}) where {W <: Number, Q <: Qnum}
 end
 =#
 function algvars(params::algvars{W,Q}) where {W <: Number, Q <: Qnum}
-  return algvars{W,Q}(params.load,params.method,params.parallel_method,params.nsites,params.minm,params.maxm,params.cutoff,params.sweeps,params.halfsweep,params.maxiter,params.mincr,params.cvgE,params.goal,params.startnoise,params.noise,params.noise_goal,params.noise_decay,params.noise_incr,params.exnum,params.cushion,params.shift,params.fixD,params.startoc,params.origj,params.maxshowD,params.storeD,params.saveEnergy,params.energy,params.lastenergy,params.entropy,params.lastentropy,params.truncerr,params.maxtrunc,params.biggestm,params.savebiggestm,params.SvNbond,params.allSvNbond,params.Lbound,params.Rbound,params.Lenv,params.Renv,params.psiLenv,params.psiRenv,params.sparematrix,params.saveQ,params.efficient,params.silent,params.qselect,params.partitions)
+  return algvars{W,Q}(params.load,params.method,params.parallel_method,params.nsites,params.minm,params.maxm,params.cutoff,params.sweeps,params.halfsweep,params.maxiter,params.mincr,params.cvgE,params.goal,params.startnoise,params.noise,params.noise_goal,params.noise_decay,params.noise_incr,params.exnum,params.cushion,params.shift,params.fixD,params.double,params.startoc,params.origj,params.maxshowD,params.storeD,params.saveEnergy,params.energy,params.lastenergy,params.entropy,params.lastentropy,params.truncerr,params.maxtrunc,params.biggestm,params.savebiggestm,params.SvNbond,params.allSvNbond,params.Lbound,params.Rbound,params.Lenv,params.Renv,params.psiLenv,params.psiRenv,params.sparematrix,params.saveQ,params.efficient,params.silent,params.qselect,params.partitions)
 end
 
 import Base.println
@@ -234,7 +236,7 @@ function setEnv(dualpsi::MPS,psi::MPS,mpo::MPO,params::TNparams,
   psiLenv = Array{prevpsitype,1}[Array{prevpsitype,1}(undef,Ns) for a = 1:length(prevpsi)]
   psiRenv = Array{prevpsitype,1}[Array{prevpsitype,1}(undef,Ns) for a = 1:length(prevpsi)]
   if length(prevpsi) > 0
-    for b = 1:length(beta)
+    for b = 1:length(prevpsi)
       mover(prevpsi[b],psi.oc)
       x,y = makePsiEnv(dualpsi,prevpsi[b])
       for w = 1:prevpsi[b].oc
@@ -379,6 +381,8 @@ function algvars(Q::DataType) #where Qn <: Qnum
                       0, #cushion
                       false, #shift
                       false, #fixD
+
+                      false, #double
 
                       1, #startoc
                       true, #origj
@@ -622,15 +626,15 @@ function optmps(dualpsi::MPS,psi::MPS,mpo::MPO,beta::Array{P,1},prevpsi::MPS...;
 
         ##reverse direction if we hit the edge
         if psi.oc == Ns - (range-1) && j > 0
-          boundarymover(psi,Ns,params.Lenv,params.Renv,mpo)
+#          boundarymover(psi,Ns,params.Lenv,params.Renv,mpo)
           j *= -1
         elseif psi.oc == 1 + (range-1) && j < 0
-          boundarymover(psi,1,params.Lenv,params.Renv,mpo)
+#          boundarymover(psi,1,params.Lenv,params.Renv,mpo)
           j *= -1
         end
-        for b = 1:length(prevpsi)
-          boundarymover(prevpsi[b],psi.oc,params.psiLenv[b],params.psiRenv[b])
-        end
+#        for b = 1:length(prevpsi)
+#          boundarymover(prevpsi[b],psi.oc,params.psiLenv[b],params.psiRenv[b])
+#        end
       end
       if !params.silent
         timer += time()
@@ -653,7 +657,7 @@ end
 export optmps
 
 function makePsiEnv(dualpsi::MPS,psi::MPS)
-  Ns = size(psi,1)
+  Ns = length(psi)
   if typeof(psi[1]) <: qarray
     thistype = qarray
   elseif typeof(psi[1]) <: denstens

@@ -9,6 +9,20 @@
 # This code is native to the julia programming language (v1.1.1+)
 #
 
+#=
+module mpstime
+#using ..shuffle
+using ..tensor
+using ..Qtensor
+using ..Qtask
+using ..MPutil
+using ..QN
+using ..Opt
+using ..contractions
+using ..decompositions
+=#
+
+
 
 function twositeOps(mpo::MPO,nsites::Integer)
   nbonds = length(mpo)-(nsites-1)
@@ -658,7 +672,7 @@ end
                     makeOps=twositeOps,SvNfct=SvNcheck!,cvgfct=standardcvg=#)
   end
   export tdvp
-
+=#
 
   function globalkrylov(psi::MPS,mpo::MPO;nextpsi::MPS=copy(psi),nlevels::intType=1)
     retType = typeof(eltype(psi)(1)*eltype(mpo)(1)*eltype(nextpsi)(1))
@@ -688,5 +702,534 @@ end
     return alpha,beta,psivec
   end
   export globalkrylov
-=#
+
 #end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function XOC_update(Lenv::TensType,Renv::TensType,psiops::TensType...)
+  D = psiops[1]
+  LenvD = contract(Lenv,3,D,1)
+  return contract([1,3,2],LenvD,(2,3),Renv,(2,1))
+end
+
+function blockkrylovTimeEvol(psiops::TensType...;prefactor::Number=1,lanczosfct::Function=blocklanczos,maxiter::Integer=2,updatefct::Function=XOC_update,Lenv::TensType=eltype(psiops[1])[0],Renv::TensType=Lenv)
+  alpha,beta,psivec,p = lanczosfct(psiops...,updatefct=updatefct,maxiter=maxiter,Lenv=Lenv,Renv=Renv)
+
+  LanczosH = makeM(alpha,beta,p)
+  expH = exp(LanczosH,prefactor)
+
+
+  nex = size(psiops[1],ndims(psiops[1]))
+  D,U,gs_psi = diagonalizeM(LanczosH,nex,psivec)#,qselect = qselect)
+#  retpsi = contract(newpsi, ndims(newpsi), U, 1)
+
+
+
+truncexpH = expH[:,1:nex]
+
+retpsi = contract(psivec,ndims(psivec),truncexpH,1)
+
+  return retpsi,[D[i,i] for i = 1:size(D,1)]
+end
+export blockkrylovTimeEvol
+
+function block_tdvp(psi::MPS,mpo::MPO;maxm::Integer=maximum([size(psi[w],3) for w = 1:length(psi)]),minm::Integer=2,cutoff::Real=0.,origj::Bool=true,maxiter::Integer=2,prefactor::Number=1.)
+
+  timestep = prefactor/length(psi)
+  
+  dualpsi = psi
+#      if Lenv == [0] && Renv == [0]
+  Lenv,Renv = makeEnv(dualpsi,psi,mpo)
+#      end
+
+  Ns = length(psi)
+  if psi.oc == 1
+    j = 1
+  elseif psi.oc == Ns #
+    j = -1
+  else
+    j = origj ? 1 : -1 #if the oc is away from the edge, j could be externally specified.
+  end
+
+  range = 1
+
+  Nsteps = (Ns-1)
+  for n = 1:Nsteps
+
+    i = psi.oc
+
+    if j > 0
+      iL,iR = i,i+1
+    else
+      iL,iR = i-1,i
+    end
+
+#    norm!(psi[i])
+    if j > 0
+
+      newpsi,En = blockkrylovTimeEvol(psi[i],mpo[i],prefactor=timestep,maxiter=maxiter,updatefct=ex3S_update,Lenv=Lenv[i],Renv=Renv[i])
+      newpsi,D,V = normalization!(newpsi,size(newpsi),((1,2,3),(4,)))
+
+      psi[i],D,V = svd(newpsi,[[1,2],[3,4]],m=maxm,minm=minm,cutoff=cutoff)
+      DV = contract(D,2,V,1)
+
+      Lenv[iR] = Lupdate(Lenv[iL],dualpsi[iL],psi[iL],mpo[iL])
+      DV,D,V = normalization!(DV,size(DV),((1,2),(3,)))
+      nextDV,En = blockkrylovTimeEvol(DV,prefactor=timestep,maxiter=maxiter,updatefct=XOC_update,Lenv=Lenv[iR],Renv=Renv[iL])
+
+      psi[iR] = contract([1,3,4,2],nextDV,2,psi[iR],1)
+      psi[iR],D,V = normalization!(psi[iR],size(psi[iR]),((1,2,3),(4,)))
+
+    else
+
+      newpsi,En = blockkrylovTimeEvol(psi[i],mpo[i],prefactor=timestep,maxiter=maxiter,updatefct=ex3S_update,Lenv=Lenv[i],Renv=Renv[i])
+      newpsi,D,V = normalization!(newpsi,size(newpsi),((1,2,3),(4,)))
+
+      U,D,psi[i] = svd(newpsi,[[1,4],[2,3]],m=maxm,minm=minm,cutoff=cutoff)
+      UD = contract([1,3,2],U,3,D,1)
+
+      Renv[iL] = Rupdate(Renv[iR],dualpsi[iR],psi[iR],mpo[iR])
+      UD,D,V = normalization!(UD,size(UD),((1,2),(3,)))
+      nextUD,En = blockkrylovTimeEvol(UD,prefactor=timestep,maxiter=maxiter,updatefct=XOC_update,Lenv=Lenv[iR],Renv=Renv[iL])
+
+      psi[iL] = contract(psi[iL],3,nextUD,1)
+      psi[iL],D,V = normalization!(psi[iL],size(psi[iL]),((1,2,3),(4,)))
+
+    end
+  
+#        params.truncerr = truncerr
+#        params.biggestm = max(params.biggestm,size(D,1))
+
+    psi.oc += j
+
+    if psi.oc == Ns - (range-1) && j > 0
+      j *= -1
+    elseif psi.oc == 1 + (range-1) && j < 0
+      j *= -1
+    end
+  end
+
+  nothing
+end
+export block_tdvp
+
+
+
+function XOC_update_exfull(Lenv::TensType,Renv::TensType,psiops::TensType...)
+  D = psiops[1]
+  LenvD = contract(Lenv,3,D,1)
+  return contract([1,3,2],LenvD,(2,3),Renv,(2,1))
+end
+
+function exblockkrylovTimeEvol(psiops::TensType...;prefactor::Number=1,lanczosfct::Function=blocklanczos,maxiter::Integer=2,updatefct::Function=XOC_update_exfull,Lenv::TensType=eltype(psiops[1])[0],Renv::TensType=Lenv)
+  Hpsi = updatefct(Lenv,Renv,psiops...)
+  contuple = ntuple(i->i,ndims(psiops[1])-1)
+  LanczosH = ccontract(psiops[1],contuple,Hpsi,contuple)
+
+  expH = exp(LanczosH,prefactor)
+
+
+  nex = size(psiops[1],ndims(psiops[1]))
+  D,U,gs_psi = diagonalizeM(LanczosH,nex,psiops[1])#,qselect = qselect)
+
+  retpsi = contract(psiops[1],ndims(psiops[1]),expH,1)
+
+  return retpsi,[D[i,i] for i = 1:size(D,1)]
+end
+export exblockkrylovTimeEvol
+
+function block_tdvp_exfull(psi::MPS,mpo::MPO;maxm::Integer=maximum([size(psi[w],3) for w = 1:length(psi)]),minm::Integer=2,cutoff::Real=0.,origj::Bool=true,maxiter::Integer=2,prefactor::Number=1.)
+
+  timestep = prefactor/length(psi)
+  
+  dualpsi = psi
+#      if Lenv == [0] && Renv == [0]
+  Lenv,Renv = makeEnv(dualpsi,psi,mpo)
+#      end
+
+  Ns = length(psi)
+  if psi.oc == 1
+    j = 1
+  elseif psi.oc == Ns #
+    j = -1
+  else
+    j = origj ? 1 : -1 #if the oc is away from the edge, j could be externally specified.
+  end
+
+  range = 1
+
+  Nsteps = (Ns-1)
+  for n = 1:Nsteps
+
+    i = psi.oc
+
+    if j > 0
+      iL,iR = i,i+1
+    else
+      iL,iR = i-1,i
+    end
+
+#    norm!(psi[i])
+    if j > 0
+
+      newpsi,En = exblockkrylovTimeEvol(psi[i],mpo[i],prefactor=timestep,maxiter=maxiter,updatefct=ex3S_update,Lenv=Lenv[i],Renv=Renv[i])
+      newpsi,D,V = normalization!(newpsi,size(newpsi),((1,2,3),(4,)))
+
+      psi[i],D,V = svd(newpsi,[[1,2],[3,4]],m=maxm,minm=minm,cutoff=cutoff)
+      DV = contract(D,2,V,1)
+
+      Lenv[iR] = Lupdate(Lenv[iL],dualpsi[iL],psi[iL],mpo[iL])
+      DV,D,V = normalization!(DV,size(DV),((1,2),(3,)))
+      nextDV,En = exblockkrylovTimeEvol(DV,prefactor=timestep,maxiter=maxiter,updatefct=XOC_update_exfull,Lenv=Lenv[iR],Renv=Renv[iL])
+
+      psi[iR] = contract([1,3,4,2],nextDV,2,psi[iR],1)
+      psi[iR],D,V = normalization!(psi[iR],size(psi[iR]),((1,2,3),(4,)))
+
+    else
+
+      newpsi,En = exblockkrylovTimeEvol(psi[i],mpo[i],prefactor=timestep,maxiter=maxiter,updatefct=ex3S_update,Lenv=Lenv[i],Renv=Renv[i])
+      newpsi,D,V = normalization!(newpsi,size(newpsi),((1,2,3),(4,)))
+
+      U,D,psi[i] = svd(newpsi,[[1,4],[2,3]],m=maxm,minm=minm,cutoff=cutoff)
+      UD = contract([1,3,2],U,3,D,1)
+
+      Renv[iL] = Rupdate(Renv[iR],dualpsi[iR],psi[iR],mpo[iR])
+      UD,D,V = normalization!(UD,size(UD),((1,2),(3,)))
+      nextUD,En = exblockkrylovTimeEvol(UD,prefactor=timestep,maxiter=maxiter,updatefct=XOC_update_exfull,Lenv=Lenv[iR],Renv=Renv[iL])
+
+      psi[iL] = contract(psi[iL],3,nextUD,1)
+      psi[iL],D,V = normalization!(psi[iL],size(psi[iL]),((1,2,3),(4,)))
+
+    end
+  
+#        params.truncerr = truncerr
+#        params.biggestm = max(params.biggestm,size(D,1))
+
+    psi.oc += j
+
+    if psi.oc == Ns - (range-1) && j > 0
+      j *= -1
+    elseif psi.oc == 1 + (range-1) && j < 0
+      j *= -1
+    end
+  end
+
+  nothing
+end
+export block_tdvp_exfull
+
+
+
+
+
+
+
+
+
+#=
+
+function exblockkrylovTimeEvol(psiops::TensType...;prefactor::Number=1,lanczosfct::Function=blocklanczos,maxiter::Integer=2,updatefct::Function=XOC_update,Lenv::TensType=eltype(psiops[1])[0],Renv::TensType=Lenv)
+
+  Hpsi = ex3S_update(Lenv,Renv,psiops[1],psiops[2])
+  LanczosH = ccontract(psiops[1],(1,2,3),Hpsi,(1,2,3))
+
+  expH = exp(LanczosH,prefactor)
+
+
+  nex = size(psiops[1],ndims(psiops[1]))
+  D,U,gs_psi = diagonalizeM(LanczosH,nex,psiops[1])#,qselect = qselect)
+
+  
+  truncexpH = expH
+  retpsi = contract(psiops[1],ndims(psiops[1]),truncexpH,1)
+
+  return retpsi,[D[i,i] for i = 1:size(D,1)]
+end
+export exblockkrylovTimeEvol
+=#
+function block_tdvp_exbasis(psi::MPS,mpo::MPO;maxm::Integer=maximum([size(psi[w],3) for w = 1:length(psi)]),minm::Integer=2,cutoff::Real=0.,origj::Bool=true,maxiter::Integer=2,prefactor::Number=1.)
+
+  timestep = prefactor/length(psi)*2
+  
+  dualpsi = psi
+#      if Lenv == [0] && Renv == [0]
+  Lenv,Renv = makeEnv(dualpsi,psi,mpo)
+#      end
+
+  Ns = length(psi)
+  if psi.oc == 1
+    j = 1
+  elseif psi.oc == Ns #
+    j = -1
+  else
+    j = origj ? 1 : -1 #if the oc is away from the edge, j could be externally specified.
+  end
+
+  range = 1
+
+  Nsteps = (Ns-1)
+  for n = 1:Nsteps
+
+    i = psi.oc
+
+    if j > 0
+      iL,iR = i,i+1
+    else
+      iL,iR = i-1,i
+    end
+
+#    norm!(psi[i])
+    if j > 0
+
+      newpsi,En = exblockkrylovTimeEvol(psi[i],mpo[i],prefactor=timestep,maxiter=maxiter,updatefct=ex3S_update,Lenv=Lenv[i],Renv=Renv[i])
+      newpsi,D,V = normalization!(newpsi,size(newpsi),((1,2,3),(4,)))
+
+      psi[iL],D,V = svd(newpsi,[[1,2],[3,4]],m=maxm,minm=minm,cutoff=cutoff)
+      DV = contract(D,2,V,1)
+      psi[iR] = contract([1,3,4,2],DV,2,psi[iR],1)
+
+      Lenv[iR] = Lupdate(Lenv[iL],dualpsi[iL],psi[iL],mpo[iL])
+
+    else
+
+      newpsi,En = exblockkrylovTimeEvol(psi[i],mpo[i],prefactor=timestep,maxiter=maxiter,updatefct=ex3S_update,Lenv=Lenv[i],Renv=Renv[i])
+      newpsi,D,V = normalization!(newpsi,size(newpsi),((1,2,3),(4,)))
+
+      U,D,psi[iR] = svd(newpsi,[[1,4],[2,3]],m=maxm,minm=minm,cutoff=cutoff)
+      UD = contract([1,3,2],U,3,D,1)
+      psi[iL] = contract(psi[iL],3,UD,1)
+
+      Renv[iL] = Rupdate(Renv[iR],dualpsi[iR],psi[iR],mpo[iR])
+
+    end
+
+    psi.oc += j
+
+    if psi.oc == Ns - (range-1) && j > 0
+      j *= -1
+    elseif psi.oc == 1 + (range-1) && j < 0
+      j *= -1
+    end
+  end
+
+  nothing
+end
+export block_tdvp_exbasis
+
+
+
+function block_tdvp_exLR(psi::MPS,mpo::MPO;maxm::Integer=maximum([size(psi[w],3) for w = 1:length(psi)]),minm::Integer=2,cutoff::Real=0.,origj::Bool=true,maxiter::Integer=2,prefactor::Number=1.)
+
+  timestep = prefactor/length(psi)*2
+  
+  dualpsi = psi
+#      if Lenv == [0] && Renv == [0]
+  Lenv,Renv = makeEnv(dualpsi,psi,mpo)
+#      end
+
+  Ns = length(psi)
+  if psi.oc == 1
+    j = 1
+  elseif psi.oc == Ns #
+    j = -1
+  else
+    j = origj ? 1 : -1 #if the oc is away from the edge, j could be externally specified.
+  end
+
+  range = 1
+
+  Nsteps = (Ns-1)
+  for n = 1:Nsteps
+
+    i = psi.oc
+
+    if j > 0
+      iL,iR = i,i+1
+    else
+      iL,iR = i-1,i
+    end
+
+#    norm!(psi[i])
+    if j > 0
+
+      UL,DL,VL = svd(psi[i],[[1,2],[3]])
+      Lpsi = contract(UL,3,contract(DL,2,VL,1),1)
+
+      UR,DR,VR = svd(psi[i],[[1],[2,3]])
+      Rpsi = contract(contract(UR,2,DR,1),VR,1)
+
+      psi[i] = Lpsi + Rpsi #tensorcombination!(Lpsi,Rpsi,alpha=(1/sqrt(2),1/sqrt(2)))
+      psi[i],D,V = normalization!(psi[i],size(psi[i]),((1,2,3),(4,)))
+
+      newpsi,En = exblockkrylovTimeEvol(psi[i],mpo[i],prefactor=timestep,maxiter=maxiter,updatefct=ex3S_update,Lenv=Lenv[i],Renv=Renv[i])
+      newpsi,D,V = normalization!(newpsi,size(newpsi),((1,2,3),(4,)))
+
+      psi[iL],D,V = svd(newpsi,[[1,2],[3,4]],m=maxm,minm=minm,cutoff=cutoff)
+      DV = contract(D,2,V,1)
+      psi[iR] = contract([1,3,4,2],DV,2,psi[iR],1)
+
+      Lenv[iR] = Lupdate(Lenv[iL],dualpsi[iL],psi[iL],mpo[iL])
+
+    else
+
+      newpsi,En = exblockkrylovTimeEvol(psi[i],mpo[i],prefactor=timestep,maxiter=maxiter,updatefct=ex3S_update,Lenv=Lenv[i],Renv=Renv[i])
+      newpsi,D,V = normalization!(newpsi,size(newpsi),((1,2,3),(4,)))
+
+      U,D,psi[iR] = svd(newpsi,[[1,4],[2,3]],m=maxm,minm=minm,cutoff=cutoff)
+      UD = contract([1,3,2],U,3,D,1)
+      psi[iL] = contract(psi[iL],3,UD,1)
+
+      Renv[iL] = Rupdate(Renv[iR],dualpsi[iR],psi[iR],mpo[iR])
+
+    end
+
+    psi.oc += j
+
+    if psi.oc == Ns - (range-1) && j > 0
+      j *= -1
+    elseif psi.oc == 1 + (range-1) && j < 0
+      j *= -1
+    end
+  end
+
+  nothing
+end
+export block_tdvp_exLR
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function XOC_update_noOC(Lenv::TensType,Renv::TensType,psiops::TensType...)
+  D = psiops[1]
+  LenvD = contract(Lenv,3,D,1)
+  return contract([1,3,2],LenvD,(2,3),Renv,(2,1))
+end
+
+function blockkrylovTimeEvol_noOC(psiops::TensType...;prefactor::Number=1,lanczosfct::Function=blocklanczos,maxiter::Integer=2,updatefct::Function=XOC_update,Lenv::TensType=eltype(psiops[1])[0],Renv::TensType=Lenv)
+  alpha,beta,psivec,p = lanczosfct(psiops...,updatefct=updatefct,maxiter=maxiter,Lenv=Lenv,Renv=Renv)
+
+  LanczosH = makeM(alpha,beta,p)
+  expH = exp(LanczosH,prefactor)
+
+
+  nex = size(psiops[1],ndims(psiops[1]))
+  D,U,gs_psi = diagonalizeM(LanczosH,nex,psivec)#,qselect = qselect)
+#  retpsi = contract(newpsi, ndims(newpsi), U, 1)
+
+
+
+truncexpH = expH[:,1:nex]
+
+retpsi = contract(psivec,ndims(psivec),truncexpH,1)
+
+  return retpsi,[D[i,i] for i = 1:size(D,1)]
+end
+export blockkrylovTimeEvol_noOC
+
+function block_tdvp_noOC(psi::MPS,mpo::MPO;maxm::Integer=maximum([size(psi[w],3) for w = 1:length(psi)]),minm::Integer=2,cutoff::Real=0.,origj::Bool=true,maxiter::Integer=2,prefactor::Number=1.)
+
+  timestep = prefactor/length(psi)*2
+  
+  dualpsi = psi
+#      if Lenv == [0] && Renv == [0]
+  Lenv,Renv = makeEnv(dualpsi,psi,mpo)
+#      end
+
+  Ns = length(psi)
+  if psi.oc == 1
+    j = 1
+  elseif psi.oc == Ns #
+    j = -1
+  else
+    j = origj ? 1 : -1 #if the oc is away from the edge, j could be externally specified.
+  end
+
+  range = 1
+
+  Nsteps = (Ns-1)
+  for n = 1:Nsteps
+
+    i = psi.oc
+
+    if j > 0
+      iL,iR = i,i+1
+    else
+      iL,iR = i-1,i
+    end
+
+#    norm!(psi[i])
+    if j > 0
+
+      newpsi,En = blockkrylovTimeEvol_noOC(psi[i],mpo[i],prefactor=timestep,maxiter=maxiter,updatefct=ex3S_update,Lenv=Lenv[i],Renv=Renv[i])
+      newpsi,D,V = normalization!(newpsi,size(newpsi),((1,2,3),(4,)))
+
+      psi[iL],D,V = svd(newpsi,[[1,2],[3,4]],m=maxm,minm=minm,cutoff=cutoff)
+      DV = contract(D,2,V,1)
+      psi[iR] = contract([1,3,4,2],DV,2,psi[iR],1)
+
+      Lenv[iR] = Lupdate(Lenv[iL],dualpsi[iL],psi[iL],mpo[iL])
+
+    else
+
+      newpsi,En = blockkrylovTimeEvol_noOC(psi[i],mpo[i],prefactor=timestep,maxiter=maxiter,updatefct=ex3S_update,Lenv=Lenv[i],Renv=Renv[i])
+      newpsi,D,V = normalization!(newpsi,size(newpsi),((1,2,3),(4,)))
+
+      U,D,psi[iR] = svd(newpsi,[[1,4],[2,3]],m=maxm,minm=minm,cutoff=cutoff)
+      UD = contract([1,3,2],U,3,D,1)
+      psi[iL] = contract(psi[iL],3,UD,1)
+
+      Renv[iL] = Rupdate(Renv[iR],dualpsi[iR],psi[iR],mpo[iR])
+
+    end
+  
+#        params.truncerr = truncerr
+#        params.biggestm = max(params.biggestm,size(D,1))
+
+    psi.oc += j
+
+    if psi.oc == Ns - (range-1) && j > 0
+      j *= -1
+    elseif psi.oc == 1 + (range-1) && j < 0
+      j *= -1
+    end
+  end
+
+  nothing
+end
+export block_tdvp_noOC
+

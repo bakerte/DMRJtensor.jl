@@ -72,7 +72,7 @@ end
 function simplelanczos(Lenv::TensType,Renv::TensType,psiL::TensType,psiR::TensType,mpoL::TensType,mpoR::TensType;betatest::Float64 = 1E-10)
   Hpsi = make2site(Lenv,Renv,psiL,psiR,mpoL,mpoR)
   AA = contract(psiL,3,psiR,1)
-#  AA = div!(AA,norm(AA))
+  AA = div!(AA,norm(AA))
   alpha1 = real(ccontract(AA,Hpsi))
 
   psi2 = sub!(Hpsi, AA, alpha1)
@@ -387,16 +387,26 @@ end
 @inline function twostep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                   psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
 
-  if j > 0
+#=                  if j > 0
     psi[iL] = div!(psi[iL],norm(psi[iL]))
   else
     psi[iR] = div!(psi[iR],norm(psi[iR]))
   end
+  =#
 
   AA,energy = simplelanczos(Lenv[iL],Renv[iR],psi[iL],psi[iR],mpo[iL],mpo[iR])
 
   params.energy = energy
 
+  #svd! throws error v1.9.1
+  #=
+
+include("/Users/bakerte/DMRjulia/DMRjulia.jl")
+
+psi = MPS(tens{Float64}[tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0])])
+mpo = makeMPO(heisenbergMPO,2,100)
+dmrg(psi,mpo,cutoff=1E-9,sweeps=300,m=100,method="twosite",silent=true,goal=1E-8)
+  =#
   U,D,V,truncerr = svd(AA,[[1,2],[3,4]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
 
   if j < 0
@@ -478,7 +488,7 @@ end
 #  import ..optimizeMPS.Nstep
 @inline function dmrgNstep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                     psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
-println("IN HERE?")
+#println("IN HERE?")
   if j > 0
     psi[iL] = div!(psi[iL],norm(psi[iL]))
   else
@@ -488,28 +498,28 @@ println("IN HERE?")
   AA,energy = simplelanczos(Lenv[iL],Renv[iR],psi,mpo,iL,iR)
   params.energy = energy
 
-  println(energy)
+#  println(energy)
 
   truncerr = 0.
   D = 0
 
   if j > 0
     for p = 1:iR-iL-1#iR:-1:iL
-      U,D,psi[iR-p+1],truncerr = svd(AA,[[w for w = 1:ndims(AA)-2],[ndims(AA)-1,ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
+      U,D,psi[iR-p+1],truncerr = svd!(AA,[[w for w = 1:ndims(AA)-2],[ndims(AA)-1,ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
       AA = U*D
     end
 
-    psi[iL],D,V,truncerr = svd(AA,[[w for w = 1:ndims(AA)-2],[ndims(AA)-1,ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
+    psi[iL],D,V,truncerr = svd!(AA,[[w for w = 1:ndims(AA)-2],[ndims(AA)-1,ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
 
     psi[iL+1] = D*V #contract(U,(3,),D,(1,))
 
   else
     for p = 1:iR-iL-1#iR:-1:iL
-      psi[iL+p],D,V,truncerr = svd(AA,[[1,2],[p for p = 3:ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
+      psi[iL+p],D,V,truncerr = svd!(AA,[[1,2],[p for p = 3:ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
       AA = D*V
     end
 
-    U,D,psi[iR],truncerr = svd(AA,[[1,2],[p for p = 3:ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
+    U,D,psi[iR],truncerr = svd!(AA,[[1,2],[p for p = 3:ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
 
     psi[iR-1] = U*D
   end
