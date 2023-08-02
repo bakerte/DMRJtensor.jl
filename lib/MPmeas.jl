@@ -22,7 +22,7 @@ moves `psi`'s orthogonality center right one space, with a maximum bond dimenion
 See also: [`moveR!`](@ref)
 """
 @inline function moveR!(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
-                fast::Bool=false,qrfct::Function=qr!,svdfct::Function=svd!)
+                fast::Bool=false,qrfct::Function=qr!,svdfct::Function=svd)
 
   if (min(size(Lpsi,1)*size(Lpsi,2),size(Lpsi,3)) <= m || m == 0) && !isapprox(cutoff,0.) && fast
     Ltens,modV = qrfct(Lpsi,[[1,2],[3]])
@@ -49,7 +49,7 @@ moves `psi`'s orthogonality center right one space, with a maximum bond dimenion
 See also: [`moveR!`](@ref)
 """
 @inline function moveR(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
-                fast::Bool=false,qrfct::Function=qr!,svdfct::Function=svd!)
+                fast::Bool=false,qrfct::Function=qr!,svdfct::Function=svd)
   return moveR!(Lpsi,Rpsi,cutoff=cutoff,m=m,minm=minm,condition=condition,mag=mag,qrfct=qr,svdfct=svd)
 end
 export moveR
@@ -78,7 +78,7 @@ moves `psi`'s orthogonality center left one space, with a maximum bond dimenion 
 See also: [`moveL!`](@ref)
 """
 @inline function moveL!(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
-                fast::Bool=false,lqfct::Function=lq!,svdfct::Function=svd!)
+                fast::Bool=false,lqfct::Function=lq!,svdfct::Function=svd)
 
   if (min(size(Rpsi,1),size(Rpsi,2)*size(Rpsi,3)) <= m || m == 0) && !isapprox(cutoff,0.) && fast
     modU,Rtens = lqfct(Rpsi,[[1],[2,3]])
@@ -362,13 +362,13 @@ end
 
 Generates environment tensors for a MPS (`psi` and its dual `dualpsi`) with boundaries `Lbound` and `Rbound`
 """
-function makeEnv(dualpsi::MPS,psi::MPS,mpo::MPO...;Lbound::TensType=defaultBoundary(psi[1]),Rbound::TensType=defaultBoundary(psi[1]))
+function makeEnv(dualpsi::MPS,psi::MPS,mpo::MPO...;Lbound::TensType=defaultBoundary(psi[1]),Rbound::TensType=defaultBoundary(psi[1]),Llabel::String="Lenv_",Rlabel::String="Renv_")
   Ns = length(psi)
   numtype = elnumtype(dualpsi,psi,mpo...)
   C = psi[1]
 
   if typeof(psi) <: largeMPS || typeof(mpo) <: largeMPO
-    Lenv,Renv = largeEnv(numtype,Ns)
+    Lenv,Renv = largeEnv(numtype,Ns,Llabel=Llabel,Rlabel=Rlabel)
   else
     Lenv = environment(psi)
     Renv = environment(psi)
