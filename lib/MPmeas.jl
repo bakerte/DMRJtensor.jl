@@ -21,7 +21,7 @@ moves `psi`'s orthogonality center right one space, with a maximum bond dimenion
 
 See also: [`moveR!`](@ref)
 """
-@inline function moveR!(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
+ function moveR!(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
                 fast::Bool=false,qrfct::Function=qr!,svdfct::Function=svd)
 
   if (min(size(Lpsi,1)*size(Lpsi,2),size(Lpsi,3)) <= m || m == 0) && !isapprox(cutoff,0.) && fast
@@ -48,7 +48,7 @@ moves `psi`'s orthogonality center right one space, with a maximum bond dimenion
 
 See also: [`moveR!`](@ref)
 """
-@inline function moveR(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
+ function moveR(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
                 fast::Bool=false,qrfct::Function=qr!,svdfct::Function=svd)
   return moveR!(Lpsi,Rpsi,cutoff=cutoff,m=m,minm=minm,condition=condition,mag=mag,qrfct=qr,svdfct=svd)
 end
@@ -61,7 +61,7 @@ acts in-place to move `psi`'s orthogonality center right one space, with a maxim
 
 See also: [`moveR`](@ref)
 """
-@inline function moveR!(psi::MPS;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,
+ function moveR!(psi::MPS;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,
                   mag::Number=0.)
   iL = psi.oc
   psi[iL],psi[iL+1],D,truncerr = moveR!(psi[iL],psi[iL+1],cutoff=cutoff,m=m,minm=minm,condition=condition,mag=mag)
@@ -77,7 +77,7 @@ moves `psi`'s orthogonality center left one space, with a maximum bond dimenion 
 
 See also: [`moveL!`](@ref)
 """
-@inline function moveL!(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
+ function moveL!(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
                 fast::Bool=false,lqfct::Function=lq!,svdfct::Function=svd)
 
   if (min(size(Rpsi,1),size(Rpsi,2)*size(Rpsi,3)) <= m || m == 0) && !isapprox(cutoff,0.) && fast
@@ -102,7 +102,7 @@ moves `psi`'s orthogonality center left one space, with a maximum bond dimenion 
 
 See also: [`moveL!`](@ref)
 """
-@inline function moveL(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
+ function moveL(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
   fast::Bool=false,lqfct::Function=lq,svdfct::Function=svd)
   return moveL!(Lpsi,Rpsi,cutoff=cutoff,m=m,minm=minm,condition=condition,mag=mag,lqfct=lq,svdfct=svd)
 end
@@ -115,7 +115,7 @@ acts in-place to move `psi`'s orthogonality center left one space, with a maximu
 
 See also: [`moveL`](@ref)
 """
-@inline function moveL!(psi::MPS;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,
+ function moveL!(psi::MPS;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,
                   mag::Number=0.)
   iR = psi.oc
   psi[iR-1],psi[iR],D,truncerr = moveL!(psi[iR-1],psi[iR],cutoff=cutoff,m=m,minm=minm,condition=condition,mag=mag)
@@ -131,7 +131,7 @@ movement function to move `psi` to a new site, `newoc` with `Lfct` and `Rfct`, w
 
 See also: [`move!`](@ref) [`move`](@ref)
 """
-@inline function movecenter!(psi::MPS,pos::Integer;cutoff::Float64=1E-12,m::Integer=0,minm::Integer=0,Lfct::Function=moveR,Rfct::Function=moveL)
+ function movecenter!(psi::MPS,pos::Integer;cutoff::Float64=1E-12,m::Integer=0,minm::Integer=0,Lfct::Function=moveR,Rfct::Function=moveL)
   if m == 0
     m = maximum([maximum(size(psi[i])) for i = 1:length(psi)])
   end
@@ -158,7 +158,7 @@ in-place move orthgononality center of `psi` to a new site, `newoc`, with a maxi
 
 See also: [`move`](@ref)
 """
-@inline function move!(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=0.,minm::Integer=0)
+ function move!(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=0.,minm::Integer=0)
   movecenter!(mps,pos,cutoff=cutoff,m=m,minm=minm)
   nothing
 end
@@ -171,7 +171,7 @@ same as `move!` but makes a copy of `psi`
 
 See also: [`move!`](@ref)
 """
-@inline function move(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=1E-12,minm::Integer=0)
+ function move(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=1E-12,minm::Integer=0)
   newmps = copy(mps)
   movecenter!(newmps,pos,cutoff=cutoff,m=m,minm=minm)
   return newmps
@@ -400,7 +400,7 @@ export makeEnv
 
 Updates left environment tensor `Lenv` with dual MPS `dualpsi`, MPS `psi`, and MPO `mpo`
 """
-@inline function  Lupdate(Lenv::TensType,dualpsi::TensType,psi::TensType,mpo::TensType...)
+ function  Lupdate(Lenv::TensType,dualpsi::TensType,psi::TensType,mpo::TensType...)
   nMPOs = length(mpo)
   nLsize = nMPOs+2
   tempLenv = contractc(Lenv,1,dualpsi,1)
@@ -416,7 +416,7 @@ export Lupdate
 
 Updates right environment tensor `Renv` with dual MPS `dualpsi`, MPS `psi`, and MPO `mpo`
 """
-@inline function  Rupdate(Renv::TensType,dualpsi::TensType,psi::TensType,mpo::TensType...)
+ function  Rupdate(Renv::TensType,dualpsi::TensType,psi::TensType,mpo::TensType...)
   nMPOs = length(mpo)
   nLsize = nMPOs+2
   nRsize = nLsize+1
@@ -433,7 +433,7 @@ export Rupdate
 
 Updates left environment's (`Lenv`) `i`+1 site from info on the site `i` based on dual MPS (`dualpsi`), MPS (`psi), and MPO (`mpo`)
 """
-@inline function Lupdate!(i::Integer,Lenv::Env,dualpsi::MPS,psi::MPS,mpo::MPO...)
+ function Lupdate!(i::Integer,Lenv::Env,dualpsi::MPS,psi::MPS,mpo::MPO...)
   Lenv[i+1] = Lupdate(Lenv[i],dualpsi[i],psi[i],[mpo[a][i] for a = 1:length(mpo)]...)
   nothing
 end
@@ -443,7 +443,7 @@ end
 
 Updates left environment's (`Lenv`) `i`+1 site from info on the site `i` based on MPS (`psi) and MPO (`mpo`)
 """
-@inline function Lupdate!(i::Integer,Lenv::Env,psi::MPS,mpo::MPO...)
+ function Lupdate!(i::Integer,Lenv::Env,psi::MPS,mpo::MPO...)
   Lupdate!(i,Lenv,psi,psi,mpo...)
 end
 export Lupdate!
@@ -453,7 +453,7 @@ export Lupdate!
 
 Updates right environment's (`Renv`) `i`-1 site from info on the site `i` based on dual MPS (`dualpsi`), MPS (`psi), and MPO (`mpo`)
 """
-@inline function Rupdate!(i::Integer,Renv::Env,dualpsi::MPS,psi::MPS,mpo::MPO...)
+ function Rupdate!(i::Integer,Renv::Env,dualpsi::MPS,psi::MPS,mpo::MPO...)
   Renv[i-1] = Rupdate(Renv[i],dualpsi[i],psi[i],[mpo[a][i] for a = 1:length(mpo)]...)
   nothing
 end
@@ -463,7 +463,7 @@ end
 
 Updates right environment's (`Renv`) `i`-1 site from info on the site `i` based on MPS (`psi) and MPO (`mpo`)
 """
-@inline function Rupdate!(i::Integer,Renv::Env,psi::MPS,mpo::MPO...)
+ function Rupdate!(i::Integer,Renv::Env,psi::MPS,mpo::MPO...)
   Rupdate!(i,Renv,psi,psi,mpo...)
 end
 export Rupdate!
@@ -475,7 +475,7 @@ Move orthogonality center of `psi` to site `i` and updates left and right enviro
 
 See also: [`move!`](@ref)
 """
-@inline function boundaryMove!(psi::MPS,i::Integer,Lenv::Env,Renv::Env,mpo::MPO...;mover::Function=move!)
+ function boundaryMove!(psi::MPS,i::Integer,Lenv::Env,Renv::Env,mpo::MPO...;mover::Function=move!)
   origoc = psi.oc
   if origoc < i
     mover(psi,i)
@@ -498,7 +498,7 @@ Move orthogonality center of `psi` and `dualpsi` to site `i` and updates left an
 
 See also: [`move!`](@ref)
 """
-@inline function boundaryMove!(dualpsi::MPS,psi::MPS,i::Integer,Lenv::Env,Renv::Env,mpo::MPO...;mover::Function=move!)
+ function boundaryMove!(dualpsi::MPS,psi::MPS,i::Integer,Lenv::Env,Renv::Env,mpo::MPO...;mover::Function=move!)
   origoc = psi.oc
   if origoc < i
     mover(psi,i)
@@ -524,7 +524,7 @@ Copies `psi` and moves orthogonality center of `psi` and `dualpsi` to site `i` a
 
 See also: [`move!`](@ref)
 """
-@inline function boundaryMove(dualpsi::MPS,psi::MPS,i::Integer,Lenv::Env,Renv::Env,mpo::MPO...)
+ function boundaryMove(dualpsi::MPS,psi::MPS,i::Integer,Lenv::Env,Renv::Env,mpo::MPO...)
   newpsi = copy(psi)
   newdualpsi = copy(dualpsi)
   newLenv = copy(Lenv)
@@ -540,7 +540,7 @@ Copies `psi` and moves orthogonality center of `psi` to site `i` and updates lef
 
 See also: [`move!`](@ref)
 """
-@inline function boundaryMove(psi::MPS,i::Integer,Lenv::Env,Renv::Env,mpo::MPO...)
+ function boundaryMove(psi::MPS,i::Integer,Lenv::Env,Renv::Env,mpo::MPO...)
   newpsi = copy(psi)
   newLenv = copy(Lenv)
   newRenv = copy(Renv)
@@ -895,7 +895,7 @@ export localizeOp
 
 Increments elements of input vector `pos` by one step (last element first) with sizes of a tensor `sizes` such that `pos`.  For use in `correlation` function.
 """
-@inline function operator_in_order!(pos::Array{G,1},sizes::intvecType) where G <: Integer
+ function operator_in_order!(pos::Array{G,1},sizes::intvecType) where G <: Integer
   w = length(pos)
   pos[w] += 1
   @inbounds while w > 1 && pos[w] > sizes[w]

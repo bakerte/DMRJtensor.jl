@@ -574,7 +574,7 @@ end
 
 `size` prints out the size tuple `G` of the tensor field of a `Env`, `MPS`, or `MPO`; this is effectively the number of sites
 """
-@inline function size(H::MPO)
+ function size(H::MPO)
   return size(H.H)
 end
 
@@ -583,23 +583,23 @@ end
 
 `size` prints out the size tuple `G` of the tensor field of a `Env`, `MPS`, or `MPO`; this is effectively the number of sites
 """
-@inline function size(H::MPO,i::Integer)
+ function size(H::MPO,i::Integer)
   return size(H.H[i])
 end
 
-@inline function size(psi::MPS)
+ function size(psi::MPS)
   return size(psi.A)
 end
 
-@inline function size(psi::MPS,i::Integer)
+ function size(psi::MPS,i::Integer)
   return size(psi.A[i])
 end
 
-@inline function size(G::regEnv)
+ function size(G::regEnv)
   return size(G.V)
 end
 
-@inline function size(G::regEnv,i::Integer)
+ function size(G::regEnv,i::Integer)
   return size(G.V[i])
 end
 
@@ -609,15 +609,15 @@ end
 
 `length` prints out the number of entries of the input `H` being a `Env`, `MPS`, or `MPO`; this is effecitvely the number of sites
 """
-@inline function length(H::MPO)
+ function length(H::MPO)
   return length(H.H)
 end
 
-@inline function length(psi::MPS)
+ function length(psi::MPS)
   return length(psi.A)
 end
 
-@inline function length(G::regEnv)
+ function length(G::regEnv)
   return length(G.V)
 end
 
@@ -627,15 +627,15 @@ end
 
 `eltype` gets element type `G` of the `Env`, `MPS`, or `MPO` tensor fields
 """
-@inline function eltype(Y::regMPS)
+ function eltype(Y::regMPS)
   return eltype(Y.A[1])
 end
 
-@inline function eltype(H::regMPO)
+ function eltype(H::regMPO)
   return eltype(H.H[1])
 end
 
-@inline function eltype(G::regEnv)
+ function eltype(G::regEnv)
   return eltype(G.V[1])
 end
 
@@ -645,7 +645,7 @@ end
 
 `getindex` allows to retrieve tensor `G` at position `i` from `Env`, `MPS` or `MPO`
 """
-@inline function getindex(A::regMPS,i::Integer)
+ function getindex(A::regMPS,i::Integer)
   return A.A[i]
 end
 
@@ -663,7 +663,7 @@ function getindex(A::regMPS,r::UnitRange{W}) where W <: Integer
   return MPS(A.A[r],oc=newoc)
 end
 
-@inline function getindex(H::regMPO,i::Integer)
+ function getindex(H::regMPO,i::Integer)
   return H.H[i]
 end
 
@@ -671,7 +671,7 @@ function getindex(H::regMPO,r::UnitRange{W}) where W <: Integer
   return MPO(H.H[r])
 end
 
-@inline function getindex(G::regEnv,i::Integer)
+ function getindex(G::regEnv,i::Integer)
   return G.V[i]
 end
 
@@ -686,15 +686,15 @@ end
 
 `lastindex!` allows to get the end element of an `Env`, `MPS`, or `MPO`
 """
-@inline function lastindex(A::regMPS)
+ function lastindex(A::regMPS)
   return lastindex(A.A)
 end
 
-@inline function lastindex(H::regMPO)
+ function lastindex(H::regMPO)
   return lastindex(H.H)
 end
 
-@inline function lastindex(G::regEnv)
+ function lastindex(G::regEnv)
   return lastindex(G.V)
 end
 
@@ -705,17 +705,17 @@ end
 
 setindex! allows to assign elements `G` to an `Env`, `MPS`, or `MPO` at element `i`
 """
-@inline function setindex!(H::regMPO,A::TensType,i::intType)
+ function setindex!(H::regMPO,A::TensType,i::intType)
   H.H[i] = A
   nothing
 end
 
-@inline function setindex!(H::regMPS,A::TensType,i::intType)
+ function setindex!(H::regMPS,A::TensType,i::intType)
   H.A[i] = A
   nothing
 end
 
-@inline function setindex!(G::regEnv,A::TensType,i::intType)
+ function setindex!(G::regEnv,A::TensType,i::intType)
   G.V[i] = A
   nothing
 end
