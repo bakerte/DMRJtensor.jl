@@ -207,3 +207,22 @@ fulltest &= testfct(testval,"tebd (dense & symmetry)")
 
 println()
 println()
+
+Ns = 100
+
+initTensor = [zeros(1,2,1) for i=1:Ns]
+for i = 1:Ns
+   initTensor[i][1,i%2 == 1 ? 1 : 2,1] = 1.0
+end
+
+psi = MPS(initTensor)
+mpo = makeMPO(heisenbergMPO,2,Ns)
+
+Qlabels = [testspin(-2),testspin(2)]
+qpsi,qmpo = MPS(Qlabels,psi,mpo)
+
+par_energy = paralleldmrg(psi,mpo,m=45,sweeps=100)
+par_QNenergy = paralleldmrg(qpsi,qmpo,m=45,sweeps=100)
+
+testval = abs(par_energy-par_QNenergy) < 1E-4
+fulltest &= testfct(testval,"parallel (dense & symmetry)")

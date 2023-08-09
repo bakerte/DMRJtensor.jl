@@ -59,10 +59,10 @@ println()
 
 newpsi,D,V = leftnormalize(copy(testpsi))
 testvec = [true]
-for i = 1:length(newpsi)
+for i = 1:length(newpsi)-1
   testvec[1] &= abs(ccontract(newpsi[i]) - size(newpsi[i],3)) < 1E-5
 end
-testval = testvec[1]
+testval = testvec[1] && abs(ccontract(newpsi[end]) - 1) < 1E-5
 testval &= newpsi.oc == length(testpsi) + 1
 fulltest &= testfct(testval,"leftnormalize(MPS)")
 
@@ -70,10 +70,10 @@ println()
 
 newpsi,D,V = leftnormalize!(copy(testpsi))
 testvec = [true]
-for i = 1:length(newpsi)
+for i = 1:length(newpsi)-1
   testvec[1] &= abs(ccontract(newpsi[i]) - size(newpsi[i],3)) < 1E-5
 end
-testval = testvec[1]
+testval = testvec[1] && abs(ccontract(newpsi[end]) - 1) < 1E-5
 testval &= newpsi.oc == length(testpsi) + 1
 fulltest &= testfct(testval,"leftnormalize!(MPS)")
 
@@ -81,10 +81,10 @@ println()
 
 U,D,newpsi = rightnormalize(copy(testpsi))
 testvec = [true]
-for i = 1:length(newpsi)
+for i = 2:length(newpsi)
   testvec[1] &= abs(ccontract(newpsi[i]) - size(newpsi[i],1)) < 1E-5
 end
-testval = testvec[1]
+testval = testvec[1] && abs(ccontract(newpsi[1]) - 1) < 1E-5
 testval &= newpsi.oc == 0
 fulltest &= testfct(testval,"rightnormalize(MPS)")
 
@@ -93,10 +93,10 @@ println()
 
 U,D,newpsi = rightnormalize!(copy(testpsi))
 testvec = [true]
-for i = 1:length(newpsi)
+for i = 2:length(newpsi)
   testvec[1] &= abs(ccontract(newpsi[i]) - size(newpsi[i],1)) < 1E-5
 end
-testval = testvec[1]
+testval = testvec[1] && abs(ccontract(newpsi[1]) - 1) < 1E-5
 testval &= newpsi.oc == 0
 fulltest &= testfct(testval,"rightnormalize!(MPS)")
 

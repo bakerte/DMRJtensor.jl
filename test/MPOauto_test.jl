@@ -314,3 +314,29 @@ fulltest &= testfct(testval,"compressMPO!(mpo)")
 println()
 
 #reorder!()
+
+
+Ns = 100
+
+psi = randMPS(2,Ns)
+mpo = makeMPO(heisenbergMPO,2,Ns)
+dmrg(psi,mpo,sweeps=300,goal=1E-8,cutoff=1E-9,m=100,method="twosite",silent=true)
+
+println("STARTING ALGORITHM")
+true_energy = expect(psi,mpo)
+@time expect(psi,mpo)
+
+
+C = [nametens(conj(psi[i]), ["a$(i-1)", "b$i", "a$i"]) for i in range(1,Ns)]
+D = [nametens(mpo[i], ["h$(i-1)", "c$i", "b$(i)", "h$i"]) for i in range(1,Ns)]
+E = [nametens(psi[i], ["f$(i-1)", "c$i", "f$i"]) for i in range(1,Ns)]
+
+F = vcat(E,C,D)
+
+G = network(F)
+answer = contract(G)
+
+#@time contract(G)
+
+testval = abs(true_energy - answer.N.T[1]) < 1E-6
+fulltest &= testfct(testval,"contract(network)")
