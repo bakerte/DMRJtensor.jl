@@ -22,8 +22,7 @@ moves `psi`'s orthogonality center right one space, with a maximum bond dimenion
 See also: [`moveR!`](@ref)
 """
  function moveR!(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
-                fast::Bool=false,qrfct::Function=qr!,svdfct::Function=svd)
-
+                fast::Bool=true,qrfct::Function=qr!,svdfct::Function=svd)
   if (min(size(Lpsi,1)*size(Lpsi,2),size(Lpsi,3)) <= m || m == 0) && !isapprox(cutoff,0.) && fast
     Ltens,modV = qrfct(Lpsi,[[1,2],[3]])
 
@@ -49,7 +48,7 @@ moves `psi`'s orthogonality center right one space, with a maximum bond dimenion
 See also: [`moveR!`](@ref)
 """
  function moveR(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
-                fast::Bool=false,qrfct::Function=qr!,svdfct::Function=svd)
+                fast::Bool=true,qrfct::Function=qr!,svdfct::Function=svd)
   return moveR!(Lpsi,Rpsi,cutoff=cutoff,m=m,minm=minm,condition=condition,mag=mag,qrfct=qr,svdfct=svd)
 end
 export moveR
@@ -78,8 +77,7 @@ moves `psi`'s orthogonality center left one space, with a maximum bond dimenion 
 See also: [`moveL!`](@ref)
 """
  function moveL!(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
-                fast::Bool=false,lqfct::Function=lq!,svdfct::Function=svd)
-
+                fast::Bool=true,lqfct::Function=lq!,svdfct::Function=svd)
   if (min(size(Rpsi,1),size(Rpsi,2)*size(Rpsi,3)) <= m || m == 0) && !isapprox(cutoff,0.) && fast
     modU,Rtens = lqfct(Rpsi,[[1],[2,3]])
 
@@ -103,7 +101,7 @@ moves `psi`'s orthogonality center left one space, with a maximum bond dimenion 
 See also: [`moveL!`](@ref)
 """
  function moveL(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
-  fast::Bool=false,lqfct::Function=lq,svdfct::Function=svd)
+  fast::Bool=true,lqfct::Function=lq,svdfct::Function=svd)
   return moveL!(Lpsi,Rpsi,cutoff=cutoff,m=m,minm=minm,condition=condition,mag=mag,lqfct=lq,svdfct=svd)
 end
 export moveL
@@ -376,10 +374,12 @@ function makeEnv(dualpsi::MPS,psi::MPS,mpo::MPO...;Lbound::TensType=defaultBound
   Lenv[1],Renv[Ns] = makeEnds(dualpsi,psi,mpo...;Lbound=Lbound,Rbound=Rbound)
   for i = 1:psi.oc-1
     Lupdate!(i,Lenv,dualpsi,psi,mpo...)
+    Renv[i] = Lenv[i] #avoids any undefined elements
   end
 
   for i = Ns:-1:psi.oc+1
     Rupdate!(i,Renv,dualpsi,psi,mpo...)
+    Lenv[i] = Renv[i] #avoids any undefined elements
   end
   return Lenv,Renv
 end

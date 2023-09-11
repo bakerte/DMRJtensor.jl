@@ -510,8 +510,8 @@ note: deparallelizes after every addition
 
 See also: [`deparallelization`](@ref) [`add!`](@ref)
 """
-function +(X::MPO...;nthreads::Integer=Threads.nthreads())
-  finalMPO = *(X...,nthreads=nthreads,fct=add!)
+function +(X::MPO...)
+  finalMPO = *(X...,fct=add!)
   return finalMPO
 end
 
@@ -573,8 +573,9 @@ note: deparallelizes after every addition
 
 See also: [`deparallelization`](@ref) [`add!`](@ref)
 """
-function *(X::MPO...;nthreads::Integer=Threads.nthreads(),fct::Function=mult!)
+function *(X::MPO...;fct::Function=mult!)
   checktype = typeof(prod(w->eltype(X[w])(1),1:length(X)))
+  nthreads = Threads.nthreads()
   if length(X) > 2
     sizeparts = cld(length(X),nthreads)
     startparts = Array{intType,1}(undef,nthreads+1)
