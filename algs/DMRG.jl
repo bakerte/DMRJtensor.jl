@@ -28,7 +28,7 @@ using ..Krylov
 using ..optimizeMPS
 =#
 
-@inline function twosite_update(Lenv::TensType,Renv::TensType,tensors::TensType...)
+function twosite_update(Lenv::TensType,Renv::TensType,tensors::TensType...)
 
   AA = tensors[1]
   #=
@@ -70,6 +70,7 @@ end
 
 
 function simplelanczos(Lenv::TensType,Renv::TensType,psiL::TensType,psiR::TensType,mpoL::TensType,mpoR::TensType;betatest::Float64 = 1E-10)
+  
   Hpsi = make2site(Lenv,Renv,psiL,psiR,mpoL,mpoR)
   AA = contract(psiL,3,psiR,1)
   AA = div!(AA,norm(AA))
@@ -86,12 +87,8 @@ function simplelanczos(Lenv::TensType,Renv::TensType,psiL::TensType,psiR::TensTy
       Hpsi2 = contract(Hpsi2,[2,3,4],ops,[1,2,4])
       Hpsi2 = contract(Hpsi2,[2,5],Renv,[1,2])
     else
-#      println()
-#      println(size(Hpsi2)," ",size(mpoL))
       Hpsi2 = contract(Hpsi2,(2,3),mpoL,(1,2))
-#      println(size(Hpsi2)," ",size(mpoR))
       Hpsi2 = contract(Hpsi2,(5,2),mpoR,(1,2))
-#      println(size(Hpsi2)," ",size(Renv))
       Hpsi2 = contract(Hpsi2,(2,5),Renv,(1,2))
     end
 
@@ -99,7 +96,7 @@ function simplelanczos(Lenv::TensType,Renv::TensType,psiL::TensType,psiR::TensTy
     M = Float64[alpha1 beta1; beta1 alpha2]
     D, U = eigen(M)
     energy = D[1,1]
-    outAA = conj(U[1,1])*AA + conj(U[2,1])*psi2
+    outAA = tensorcombination!((conj(U[1,1]),conj(U[2,1])),AA,psi2) #conj(U[1,1])*AA + conj(U[2,1])*psi2
   else
     energy = alpha1
     outAA = AA
@@ -201,7 +198,7 @@ function string(vect::Array{W,1}) where W <: Number
   return string(vect,1,length(vect))
 end
 
-@inline function SvNcheck!(i::Integer,j::Integer,D::TensType,Ns::Integer,params::TNparams;alpha::Bool=true,rev::Bool=false)
+function SvNcheck!(i::Integer,j::Integer,D::TensType,Ns::Integer,params::TNparams;alpha::Bool=true,rev::Bool=false)
   if params.maxtrunc < params.truncerr
     params.maxtrunc = params.truncerr
   end
@@ -241,7 +238,7 @@ end
   nothing
 end
 #=
-@inline function regular_SvNcheck!(i::Integer,j::Integer,D::TensType,Ns::Integer,params::TNparams;rev::Bool=false)
+function regular_SvNcheck!(i::Integer,j::Integer,D::TensType,Ns::Integer,params::TNparams;rev::Bool=false)
   return SvNcheck!(i,j,D,Ns,params,alpha=false,rev=rev)
 end
 =#
@@ -302,15 +299,14 @@ function setDMRG(psi::MPS,mpo::MPO,m::Integer,minm::Integer,Lenv::TensType,Renv:
   return Lenv,Renv,SvN,lastSvN,maxtrunc,biggestm,Ns,curr_alpha,Nsteps,timer,j,SvNvec,startoc
 end
 
-@inline function Lexpand(A::TensType,ops::TensType,HL::TensType,alpha::Float64)
+function Lexpand(A::TensType,ops::TensType,HL::TensType,alpha::Float64)
   Lenvpsi = contract(HL,(3,),A,(1,))
   Hpsi = contract((1,3,4,2),Lenvpsi,(2,3),ops,(1,2),alpha=alpha)
   expAA = reshape!(Hpsi,[[1],[2],[3,4]],merge=true)
-  out = joinindex!(A,expAA,3)
-  return out
+  return joinindex!(A,expAA,3)
 end
 
-@inline function Rexpand(A::TensType,ops::TensType,HR::TensType,alpha::Float64)
+function Rexpand(A::TensType,ops::TensType,HR::TensType,alpha::Float64)
   Renvpsi = contract(A,(3,),HR,(1,))
   Hpsi = contract((3,1,2,4),ops,(2,4),Renvpsi,(2,3),alpha=alpha)
   expAA = reshape!(Hpsi,[[1,2],[3],[4]],merge=true)
@@ -319,9 +315,10 @@ end
 end
 
 const alpha_max = 1.
-@inline function alpha_update(alpha::Float64,truncerr::Float64,cutoff::Float64,
+function alpha_update(alpha::Float64,truncerr::Float64,cutoff::Float64,
                       lastEnergy::R,currenergy::S,noise_goal::Float64,
                       dalpha::Float64;avgE::W=currenergy)::Number where {R <: Number, S <: Number, W <: Number}
+
   trunc_check = truncerr <= max(cutoff,1E-12)
   errEst = abs(currenergy-lastEnergy) <= max(abs(currenergy*cutoff),1E-12)
   sitecond = abs((truncerr*avgE)/(lastEnergy/currenergy-1)) > noise_goal #recommendation in 3S paper
@@ -333,7 +330,7 @@ const alpha_max = 1.
   return max(min(alpha,alpha_max),1E-42)
 end
 #=
-@inline function Nsite_update(Lenv::TensType,Renv::TensType,psiops::TensType...)
+function Nsite_update(Lenv::TensType,Renv::TensType,psiops::TensType...)
   AA = psiops[1]
   ops = psiops[2]
   nsites = ndims(AA)-2
@@ -352,10 +349,12 @@ end
 export Nsite_update
 =#
 
-@inline function step3S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
+function step3S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                 psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
                 
+#println(n," ",j," ",i," ",iL," ",iR)
   currops = mpo[i]
+
   AAvec,outEnergy = lanczos(psi[i],currops,maxiter=params.maxiter,updatefct=singlesite_update,Lenv=Lenv[i],Renv=Renv[i])
   noise = params.noise
 
@@ -373,10 +372,13 @@ export Nsite_update
     tempR = (alpha_condition ? Rexpand(AAvec[1],currops,Renv[iR],noise) : AAvec[1])
     psi[iL],psi[iR],D,truncerr = moveL!(psi[iL],tempR,cutoff=cutoff,m=maxm,minm=minm,condition=alpha_condition)
   end
-  
-  params.noise = alpha_update(noise,truncerr,params.cutoff,params.lastenergy,params.energy,params.noise_goal,params.noise_incr)
+
+  params.noise = alpha_update(noise,truncerr,params.cutoff,params.lastenergy[1],params.energy[1],params.noise_goal,params.noise_incr)
+
   params.truncerr = truncerr
   params.biggestm = max(params.biggestm,size(D,1))
+
+#  println()
 
   if !params.efficient
     SvNcheck!(i,j,D,length(psi),params)
@@ -384,15 +386,15 @@ export Nsite_update
   nothing
 end
 
-@inline function twostep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
+function twostep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                   psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
 
-#=                  if j > 0
-    psi[iL] = div!(psi[iL],norm(psi[iL]))
-  else
-    psi[iR] = div!(psi[iR],norm(psi[iR]))
-  end
-  =#
+#  if j > 0
+#    @time psi[iL] = div!(psi[iL],norm(psi[iL]))
+#  else
+#    @time psi[iR] = div!(psi[iR],norm(psi[iR]))
+#  end
+  
 
   AA,energy = simplelanczos(Lenv[iL],Renv[iR],psi[iL],psi[iR],mpo[iL],mpo[iR])
 
@@ -427,14 +429,14 @@ dmrg(psi,mpo,cutoff=1E-9,sweeps=300,m=100,method="twosite",silent=true,goal=1E-8
   nothing
 end
 
-@inline function step2S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
+function step2S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                 psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
 
-  if j > 0
-    psi[iL] = div!(psi[iL],norm(psi[iL]))
-  else
-    psi[iR] = div!(psi[iR],norm(psi[iR]))
-  end
+#  if j > 0
+#    psi[iL] = div!(psi[iL],norm(psi[iL]))
+#  else
+#    psi[iR] = div!(psi[iR],norm(psi[iR]))
+#  end
 
   AA,energy = simplelanczos(Lenv[iL],Renv[iR],psi[iL],psi[iR],mpo[iL],mpo[iR])
 
@@ -473,7 +475,7 @@ end
     psi[iR] = U
   end
 
-  params.noise = alpha_update(noise,truncerr,params.cutoff,params.lastenergy,params.energy,params.noise_goal,params.noise_incr)
+  params.noise = alpha_update(noise,truncerr,params.cutoff,params.lastenergy[1],params.energy[1],params.noise_goal,params.noise_incr)
 
   params.truncerr = truncerr
   params.biggestm = max(params.biggestm,size(D,1))
@@ -486,14 +488,14 @@ end
 
 
 #  import ..optimizeMPS.Nstep
-@inline function dmrgNstep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
+function dmrgNstep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                     psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
 #println("IN HERE?")
-  if j > 0
-    psi[iL] = div!(psi[iL],norm(psi[iL]))
-  else
-    psi[iR] = div!(psi[iR],norm(psi[iR]))
-  end
+#  if j > 0
+#    psi[iL] = div!(psi[iL],norm(psi[iL]))
+#  else
+#    psi[iR] = div!(psi[iR],norm(psi[iR]))
+#  end
 
   AA,energy = simplelanczos(Lenv[iL],Renv[iR],psi,mpo,iL,iR)
   params.energy = energy
@@ -541,7 +543,7 @@ function dmrg(psi::MPS,mpo::MPO;params::TNparams = algvars(psi),
                                 nsites::Integer=params.nsites,efficient::Bool=params.efficient,
                                 cvgE::Bool=params.cvgE,maxiter::Integer=params.maxiter,
                                 mincr::Integer=params.mincr,fixD::Bool=params.fixD,Lbound::TensType=params.Lbound,Rbound::TensType=params.Rbound,
-                                noise::P=params.noise,noise_goal::Float64=params.noise_goal,noise_incr::Float64=params.noise_incr,noise_decay::Float64=params.noise_decay,method::String="3S",shift::Bool=params.shift,
+                                noise::P=params.noise,noise_goal::Float64=params.noise_goal,noise_incr::Float64=params.noise_incr,noise_decay::Float64=params.noise_decay,method::String="twosite",shift::Bool=params.shift,
                                 saveEnergy::AbstractArray=params.saveEnergy,halfsweep::Bool=params.halfsweep,Lenv::Env=params.Lenv,Renv::Env=params.Renv,origj::Bool=params.origj,maxshowD::Integer=params.maxshowD,
                                 storeD::Array{W,1}=params.storeD,exnum::Integer=params.exnum) where {P <: Union{Number,Array{Float64,1}}, W <: Number}
   if params.load
@@ -569,7 +571,7 @@ function dmrg(psi::MPS,mpo::MPO;params::TNparams = algvars(psi),
                   noise=noise,noise_decay=noise_decay,noise_goal=noise_goal,noise_incr=noise_incr,shift=shift,saveEnergy=saveEnergy,
                   halfsweep=halfsweep,Lbound=Lbound,Rbound=Rbound,Lenv=Lenv,Renv=Renv,origj=origj,maxshowD=maxshowD,storeD=storeD)
   else
-    error("DMRG method not defined")
+    error("DMRG method ($method) not defined")
   end
 end
 export dmrg
@@ -651,7 +653,7 @@ function dmrg3S(psi::MPS,mpo::MPO;params::TNparams = algvars(psi),
                                   storeD::Array{W,1}=params.storeD,exnum::Integer=params.exnum) where {P <: Union{Number,Array{Float64,1}}, W <: Number}
   loadvars!(params,"DMRG-"*method,minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
       noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)
-  return optmps(psi,psi,mpo,[1.],params=params,stepfct=step3S,#=makeOps=singlesiteOps,=#cvgfct=dmrgcvg,displayfct=dmrginformation)
+  return optmps(psi,psi,mpo,[1.],params=params,stepfct=step3S,cvgfct=dmrgcvg,displayfct=dmrginformation)
 end
 export dmrg3S
 
@@ -669,7 +671,7 @@ function dmrg_twosite(psi::MPS,mpo::MPO;params::TNparams = algvars(psi),
                                         storeD::Array{W,1}=params.storeD,exnum::Integer=params.exnum) where {P <: Union{Number,Array{Float64,1}}, W <: Number}
   loadvars!(params,"DMRG-"*method,minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
       noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)
-  return optmps(psi,psi,mpo,[1.],params=params,measfct=expect,stepfct=twostep,#=makeOps=twositeOps,=#cvgfct=dmrgcvg,displayfct=dmrginformation)
+  return optmps(psi,psi,mpo,[1.],params=params,measfct=startval,stepfct=twostep,#=makeOps=twositeOps,=#cvgfct=dmrgcvg,displayfct=dmrginformation)
 end
 export dmrg_twosite
 
@@ -682,7 +684,7 @@ function dmrg_Nsite(psi::MPS,mpo::MPO;m::Integer=0,minm::Integer=2,sweeps::Integ
                   storeD::Array{W,1}=params.storeD,alpha_decay::Float64=0.9,exnum::Integer=params.exnum) where {P <: Union{Number,Array{Float64,1}}, W <: Number}
   loadvars!(params,"DMRG-"*method*" (N=$nsites)",minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
       noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)
-  return optmps(psi,psi,mpo,[1.],params=params,measfct=expect,stepfct=dmrgNstep,#=makeOps=NsiteOps,=#cvgfct=dmrgcvg,displayfct=dmrginformation)
+  return optmps(psi,psi,mpo,[1.],params=params,measfct=startval,stepfct=dmrgNstep,#=makeOps=NsiteOps,=#cvgfct=dmrgcvg,displayfct=dmrginformation)
 end
 export dmrg_Nsite
 

@@ -181,8 +181,13 @@ function optinformation(params::TNparams)
   nothing
 end
 
+function startval(Lenv::TensType,Renv::TensType,dualpsi::TensType,psi::TensType,mpo::TensType)
+  Hpsi = singlesite_update(Lenv,Renv,psi,mpo)
+  return [ccontract(dualpsi,Hpsi)]
+end
+
 function setEnv(dualpsi::MPS,psi::MPS,mpo::MPO,params::TNparams,
-                prevpsi::MPS...;measfct::Function=expect,mover::Function=move!)
+                prevpsi::MPS...;measfct::Function=startval,mover::Function=move!)
 
   if params.Lenv == [0] && params.Renv == [0]
     params.Lenv,params.Renv = makeEnv(dualpsi,psi,mpo,Lbound=params.Lbound,Rbound=params.Rbound)
@@ -218,10 +223,10 @@ function setEnv(dualpsi::MPS,psi::MPS,mpo::MPO,params::TNparams,
   startoc = copy(psi.oc)
 
   if isapprox(sum(params.energy),0.) && !params.efficient
-    currLenv = params.Lenv[1]
-    currRenv = params.Renv[Ns]
-    outmeas = measfct(dualpsi,psi,mpo,Lbound=currLenv,Rbound=currRenv)
-    params.energy = real(outmeas)
+    currLenv = params.Lenv[psi.oc]
+    currRenv = params.Renv[psi.oc]
+    outmeas = measfct(currLenv,currRenv,dualpsi[psi.oc],psi[psi.oc],mpo[psi.oc])
+    params.energy = real.(outmeas)
   end
   params.lastenergy = copy(params.energy)
 
@@ -349,6 +354,16 @@ end
 
 function singlesite_update(Lenv::TensType,Renv::TensType,AA::TensType,optup::NTuple{G,P}) where {G, P <: TensType}
   ops = optup[1]
+  LAA = contract(Lenv,(3,),AA,(1,))
+  LopsAA = contract(LAA,(2,3),ops,(1,2))
+  return contract(LopsAA,(2,4),Renv,(1,2))
+#  Hpsi = contract(ops,[2],AA,[2])
+#  LHpsi = contract(Lenv,[2,3],Hpsi,[1,4])
+#  return contract(LHpsi,[4,3],Renv,[1,2])
+end
+
+function singlesite_update(Lenv::TensType,Renv::TensType,AA::TensType,optup::TensType)# where {P <: TensType}
+  ops = optup
   LAA = contract(Lenv,(3,),AA,(1,))
   LopsAA = contract(LAA,(2,3),ops,(1,2))
   return contract(LopsAA,(2,4),Renv,(1,2))
@@ -561,7 +576,7 @@ export Noptimize
 
 function optmps(dualpsi::MPS,psi::MPS,mpo::MPO,beta::Array{P,1},prevpsi::MPS...;params::TNparams=algvars(),
                   displayfct::Function=optinformation,Envfct::Function=setEnv,
-                  measfct::Function=expect,stepfct::Function=optstep,
+                  measfct::Function=startval,stepfct::Function=optstep,
 #                  makeOps::Function=NsiteOps,
                   cvgfct::Function=optcvg,
                   mover::Function=move!,boundarymover::Function=boundaryMove!,
