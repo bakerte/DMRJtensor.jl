@@ -5,7 +5,7 @@ version = "0.10.4"
 
 [compat]
 julia = "1.8.3"
-TensorPACK = "0.3.1"
+TensorPACK = "0.3.4"
 
 [deps]
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
