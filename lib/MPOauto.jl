@@ -224,7 +224,7 @@ end
 
 function MPO(opstring::MPOterm,reverse::Bool=true,countreduce::intType=100,sweeps::intType=2)
 
-  Ns,mpotype,base,Qnumvec,qarrayops,physinds = prepare_autoInfo(opstring)
+  Ns,mpotype,base,Qnumvec,qarrayops,physind = prepare_autoInfo(opstring)
 
   mpo = 0
   singlempo = 0
@@ -241,7 +241,7 @@ function MPO(opstring::MPOterm,reverse::Bool=true,countreduce::intType=100,sweep
       singleterms[i] = mpotype[Id O; O Id]
     end
 
-    singlempo = makeMPO(singleterms,physinds)
+    singlempo = makeMPO(singleterms,physind)
 
     if qarrayops
       singlempo = makeqMPO(Qnumvec,singlempo)
