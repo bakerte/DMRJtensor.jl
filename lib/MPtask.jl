@@ -128,7 +128,8 @@ Assigns names to MPS `A`
 See also: [`nameMPO`](@ref)
 """
 function nameMPS(psi::MPS)
-  TNmps = Array{TNobj,1}(undef,length(psi))
+  W = typeof(psi[1])
+  TNmps = Array{nametens{W,String},1}(undef,length(psi))
   for i = 1:length(TNmps)
     TNmps[i] = nametens(psi[i],["l$(i-1)","p$i","l$i"])
   end
@@ -144,7 +145,8 @@ Assigns names to MPO `A`
 See also: [`nameMPS`](@ref)
 """
 function nameMPO(mpo::MPO)
-  TNmpo = Array{TNobj,1}(undef,length(mpo))
+  W = typeof(psi[1])
+  TNmpo = Array{nametens{W,String},1}(undef,length(mpo))
   for i = 1:length(mpo)
     TNmpo[i] = nametens(mpo[i],["l$(i-1)","p$i","d$i","l$i"])
   end
