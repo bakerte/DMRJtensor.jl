@@ -6,6 +6,10 @@ version = "0.10.7"
 [compat]
 julia = "1.8.3"
 TensorPACK = "0.3.8"
+LinearAlgebra = "1.9.0"
+Distributed = "1.9.0"
+Printf = "1.9.0"
+Serialization = "1.9.0"
 
 [deps]
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
