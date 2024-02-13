@@ -22,7 +22,7 @@ function qubitOps(;d::intType=2,angle::W=pi/4,s::P=(d-1)/2) where {W <: Number, 
 
   s = (d-1)/2
   O = zeros(Float64,d,d) #zero matrix
-  Id = eye(2) #identity matrix
+  Id = makeArray(eye(2)) #identity matrix
   oz = copy(O) # z operator
   op = copy(O) # raising operator
   for (q,m) in enumerate(s:-1:-s) #counts from m to -m (all states)
@@ -142,6 +142,9 @@ function heisenbergMPO(i::intType;spinmag::Number=0.5,J::Number=0.5,Ops::Tuple=s
           O Sp Sm Sz Id]
 end
 export heisenbergMPO
+
+XXZ = heisenbergMPO
+export XXZ
 
 function hubbardMPO(i::intType;t::Number=1.0,mu::Number=-2.0,HubU::Number=4.0,Ops::Tuple = fermionOps())
   Cup,Cdn,F,Nup,Ndn,Ndens,O,Id = Ops
