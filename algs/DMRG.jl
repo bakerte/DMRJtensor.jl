@@ -70,7 +70,7 @@ end
 
 
 function simplelanczos(Lenv::TensType,Renv::TensType,psiL::TensType,psiR::TensType,mpoL::TensType,mpoR::TensType;betatest::Float64 = 1E-10)
-  
+
   Hpsi = make2site(Lenv,Renv,psiL,psiR,mpoL,mpoR)
   AA = contract(psiL,3,psiR,1)
   AA = div!(AA,norm(AA))
@@ -101,30 +101,20 @@ function simplelanczos(Lenv::TensType,Renv::TensType,psiL::TensType,psiR::TensTy
     energy = alpha1
     outAA = AA
   end
-  return outAA,energy
+  return energy,outAA
 end
 
 
 function makeNsite(Lenv::TensType,Renv::TensType,psivec::MPS,mpovec::MPO,iL::intType,iR::intType)
 
-#  println("start")
-#  println(size(Lenv)," ",size(psivec[iL]))
-
   Lpsi = contract(Lenv,3,psivec[iL],1)
-
-#  println(size(Lpsi)," ",size(mpovec[iL]))
 
   LHpsi = contract(Lpsi,(2,3),mpovec[iL],(1,2))
   for w = 1:iR-iL
-#    println("w = $w")
-#    println(size(LHpsi)," ",size(psivec[iL+w]))
     LHpsi = contract(LHpsi,w+1,psivec[iL+w],1)
-#    println(size(LHpsi)," ",size(mpovec[iL+w]))
     LHpsi = contract(LHpsi,(w+1,w+2),mpovec[iL+w],(1,2))
   end
   G = iR-iL+1
-#  println("end $G:")
-#  println(size(LHpsi)," ",size(Renv))
   return contract(LHpsi,(1+G,3+G),Renv,(1,2))
 end
 
@@ -134,12 +124,8 @@ function simplelanczos(Lenv::TensType,Renv::TensType,psivec::MPS,mpovec::MPO,iL:
   G = length(psivec)
   for w = iL+1:iR
     AA = contract(AA,ndims(AA),psivec[w],1)
-#    println(size(AA))
   end
-#  AA = div!(AA,norm(AA))
   alpha1 = real(ccontract(AA,Hpsi))
-
-#  println(size(Hpsi)," ",size(AA))
 
   psi2 = sub!(Hpsi, AA, alpha1)
   beta1 = norm(psi2)
@@ -355,7 +341,7 @@ function step3S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi
 #println(n," ",j," ",i," ",iL," ",iR)
   currops = mpo[i]
 
-  AAvec,outEnergy = lanczos(psi[i],currops,maxiter=params.maxiter,updatefct=singlesite_update,Lenv=Lenv[i],Renv=Renv[i])
+  outEnergy,AAvec = lanczos(psi[i],currops,maxiter=params.maxiter,updatefct=singlesite_update,Lenv=Lenv[i],Renv=Renv[i])
   noise = params.noise
 
   params.energy = outEnergy[1]
@@ -389,14 +375,14 @@ end
 function twostep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                   psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
 
-#  if j > 0
-#    @time psi[iL] = div!(psi[iL],norm(psi[iL]))
-#  else
-#    @time psi[iR] = div!(psi[iR],norm(psi[iR]))
-#  end
+  if j > 0
+    psi[iL] = div!(psi[iL],norm(psi[iL]))
+  else
+    psi[iR] = div!(psi[iR],norm(psi[iR]))
+  end
   
 
-  AA,energy = simplelanczos(Lenv[iL],Renv[iR],psi[iL],psi[iR],mpo[iL],mpo[iR])
+  energy,AA = simplelanczos(Lenv[iL],Renv[iR],psi[iL],psi[iR],mpo[iL],mpo[iR])
 
   params.energy = energy
 
@@ -432,13 +418,13 @@ end
 function step2S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                 psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
 
-#  if j > 0
-#    psi[iL] = div!(psi[iL],norm(psi[iL]))
-#  else
-#    psi[iR] = div!(psi[iR],norm(psi[iR]))
-#  end
+  if j > 0
+    psi[iL] = div!(psi[iL],norm(psi[iL]))
+  else
+    psi[iR] = div!(psi[iR],norm(psi[iR]))
+  end
 
-  AA,energy = simplelanczos(Lenv[iL],Renv[iR],psi[iL],psi[iR],mpo[iL],mpo[iR])
+  energy,AA = simplelanczos(Lenv[iL],Renv[iR],psi[iL],psi[iR],mpo[iL],mpo[iR])
 
   params.energy = energy
 
@@ -491,13 +477,13 @@ end
 function dmrgNstep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                     psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
 #println("IN HERE?")
-#  if j > 0
-#    psi[iL] = div!(psi[iL],norm(psi[iL]))
-#  else
-#    psi[iR] = div!(psi[iR],norm(psi[iR]))
-#  end
+  if j > 0
+    psi[iL] = div!(psi[iL],norm(psi[iL]))
+  else
+    psi[iR] = div!(psi[iR],norm(psi[iR]))
+  end
 
-  AA,energy = simplelanczos(Lenv[iL],Renv[iR],psi,mpo,iL,iR)
+  energy,AA = simplelanczos(Lenv[iL],Renv[iR],psi,mpo,iL,iR)
   params.energy = energy
 
 #  println(energy)
