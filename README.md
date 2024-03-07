@@ -1,3 +1,5 @@
+![alt text](https://github.com/bakerte/DMRJtensor.jl/blob/main/dmrjulia.png?raw=true)
+
 # DMRjulia (DMRJtensor.jl)
 DMRjulia is a general purpose tensor network library in the Julia programming language
 
