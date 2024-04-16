@@ -43,17 +43,17 @@ function twositeOps(mpo::MPO,nsites::Integer)
 end
 
 
-@inline function joinedtwosite_update(Lenv::TensType,Renv::TensType,tensors::TensType...)
+@inline function joinedtwosite_update(Lenv::TensType,Renv::TensType,AA,tops)
 
-  AA = tensors[1]
-  ops = tensors[2]
-
-  Hpsi = contract(ops,(5,6),AA,(2,3))
-  LHpsi = contract(Lenv,(2,3),Hpsi,(1,5))
-  temp = contract(LHpsi,(5,4),Renv,(1,2))
-
-  return temp
-end
+  #  AA = tensors[1]
+    ops = tops[1] #tensors[2]
+  
+    Hpsi = contract(ops,(5,6),AA,(2,3))
+    LHpsi = contract(Lenv,(2,3),Hpsi,(1,5))
+    temp = contract(LHpsi,(5,4),Renv,(1,2))
+  
+    return temp
+  end
 
 
 #           +---------------------------------+
@@ -220,12 +220,10 @@ end
 
   function krylovTimeEvol(psiops::TensType...;prefactor::Number=1,lanczosfct::Function=lanczos,maxiter::Integer=2,updatefct::Function=makeHpsi,Lenv::TensType=eltype(psiops[1])[0],Renv::TensType=Lenv)
 
-#    println(typeof(psiops)," ",typeof(psiops[1])," ",typeof(Lenv)," ",typeof(Renv))
-
     alpha = Array{Float64,1}(undef,maxiter)
     beta = Array{Float64,1}(undef,maxiter)
 
-    psivec,energies = lanczosfct(psiops...,maxiter=maxiter,retnum=maxiter,updatefct=updatefct,Lenv=Lenv,Renv=Renv,alpha=alpha,beta=beta)
+    energies,psivec = lanczosfct(psiops...,maxiter=maxiter,retnum=maxiter,updatefct=updatefct,Lenv=Lenv,Renv=Renv,alpha=alpha,beta=beta)
     M = LinearAlgebra.SymTridiagonal(alpha,beta)
     En,U = LinearAlgebra.eigen(M)
     expH = exp(M,prefactor)
@@ -233,11 +231,15 @@ end
       expH = LinearAlgebra.I + LinearAlgebra.SymTridiagonal(alpha,beta)
     end
     coeffs = ntuple(w->convert(eltype(psivec[1]),expH[w,1]),length(psivec)) #works for any orthogonal basis, else (expH*overlaps)
-    keepers = [!isapprox(coeffs[w],0) for w = 1:length(coeffs)]
+
+#    println(psivec)
+
+    keepers = [!isapprox(coeffs[w],0) #=&& isassigned(psivec,w)=# for w = 1:length(coeffs)]
     if sum(keepers) < length(coeffs)
       psivec = psivec[keepers]
       coeffs = coeffs[keepers]
     end
+
     newpsi = tensorcombination!(psivec...,alpha=coeffs)
     return newpsi,En[1]
   end
