@@ -393,7 +393,7 @@ function MPO(T::DataType,H::Array{W,1};regtens::Bool=false) where W <: TensType
   for a = 1:size(H,1)
     if ndims(H[a]) == 2
       rP = reshape(H[a],size(H[a],1),size(H[a],2),1,1)
-      newH[a] = permutedims(rP,[4,2,1,3])
+      newH[a] = permutedims(rP,[4,1,2,3])
     else
       newH[a] = H[a]
     end
@@ -549,11 +549,12 @@ function add!(X::MPS,Y::MPS)
   end
   return X
 end
-
-function +(X::MPS,Y::MPS)
-  return add!(copy(X),Y)
-end
 =#
+
+import Base.push!
+function *(X::MPS,Y::MPS)
+  return MPS(vcat(X.A,Y.A),oc=0)
+end
 
 
 #  import .tensor.elnumtype
@@ -1458,4 +1459,158 @@ end
 function MPS(Qlabels::Array{Array{Q,1},1},mps::MPS,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
   qpsi = makeqMPS(Qlabels,mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
   return qpsi
+end
+
+
+#         +-----------------+
+#>--------|    MPO viewer   |----------<
+#         +-----------------+
+
+#defines the multiplication of two arrays of strings
+
+struct paulistring{W <: String}
+  term::Array{W,1}
+end
+
+struct Hterm{W}
+  vec::Array{paulistring{W},1}
+end
+
+import Base.length
+function length(X::paulistring)
+  return length(X.term)
+end
+
+function length(X::Hterm)
+  return length(X.vec)
+end
+
+import Base.getindex
+function getindex(X::paulistring,a::Integer)
+  return X.term[a]
+end
+
+function getindex(X::Hterm,a::Integer)
+  return X.vec[a]
+end
+
+import Base.lastindex
+function lastindex(X::paulistring)
+  return X.term[end] #[length(X.term)]
+end
+
+
+function maketerm(X::paulistring)
+  finalterm = ""
+  for w = 1:length(X)-1
+    finalterm *= X[w]
+    finalterm *= "⊗"
+  end
+  return finalterm * X[length(X)]
+end
+
+function maketerm(X::Hterm)
+  finalterm = ""
+  for w = 1:length(X)-1
+    finalterm *= maketerm(X[w])
+    finalterm *= " + "
+  end
+  return finalterm * maketerm(X[length(X)])
+end
+
+import Base.display
+function display(A::Array{W,2}) where W <: Hterm
+  C = Array{String,2}(undef,size(A)...)
+  for y = 1:size(C,2)
+    for x = 1:size(C,1)
+      C[x,y] = maketerm(A[x,y])
+    end
+  end
+  display(C)
+end
+
+function display(A::Hterm)
+  display(maketerm(A))
+end
+
+function format_matrix(H::Array{W,2}) where W <: String
+  return [Hterm([paulistring([H[x,y]])]) for x = 1:size(H,1), y = 1:size(H,2)]
+end
+
+import Base.*
+function *(A::paulistring,B::paulistring)
+  return [paulistring(vcat(A.term,B.term))]
+end
+
+function *(A::Hterm,B::Hterm)
+  
+  C = Array{paulistring{String},1}[]
+  for y = 1:length(B)
+    for x = 1:length(A)
+      push!(C,A.vec[x]*B.vec[y])
+    end
+  end
+  return Hterm(vcat(C...))
+end
+
+import Base.+
+function +(A::Hterm,B::Hterm)
+  Cvec = vcat(A.vec,B.vec)
+  keepvec = Array{Bool,1}(undef,length(Cvec))
+  for w = 1:length(keepvec)
+    finalbool = true
+    p = 0
+    while finalbool && p < length(Cvec[w])
+      p += 1
+      finalbool &= Cvec[w][p] != "O"
+    end
+    keepvec[w] = finalbool
+  end
+
+  return sum(keepvec) == 0 ? Hterm([paulistring(["O"])]) : Hterm(Cvec[keepvec])
+end
+
+function mult(A::Array{Hterm{String}, 2},B::Array{Hterm{String}, 2})
+  C = [Hterm([paulistring(["O"])]) for x = 1:size(A,1), y = 1:size(B,2)]
+  for y = 1:size(B,2)
+    for x = 1:size(A,1)
+      for z = 1:size(A,2)
+        out = A[x,z]*B[z,y]
+        C[x,y] += out
+      end
+    end
+  end
+  return C
+end
+
+function mult(A::Array{String,2},B::Array{String,2})
+  X = format_matrix(A)
+  Y = format_matrix(B)
+  return mult(X,Y)
+end
+
+function mult(A::Array{Hterm{String}},B::Array{String,2})
+  Y = format_matrix(B)
+  return mult(A,Y)
+end
+
+function mult(A::Array{String,2},B::Array{Hterm{String}})
+  X = format_matrix(A)
+  return mult(X,B)
+end
+
+function *(A::Array{Hterm{String}, 2},B::Array{Hterm{String}, 2})
+  return mult(A,B)
+end
+
+function *(A::Array{String,2},B::Array{String,2})
+  return mult(A,B)
+end
+
+function *(A::Array{Hterm{String}},B::Array{String,2})
+  return mult(A,B)
+end
+
+function *(A::Array{String,2},B::Array{Hterm{String}})
+  return mult(A,B)
 end
