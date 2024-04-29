@@ -296,20 +296,25 @@ function randMPS(T::DataType,physindvec::Array{W,1};oc::Integer=1,m::Integer=1) 
     end
     psi = MPS(vec,oc=oc)
   else
-    Lsize,Rsize = 1,prod(w->physindvec[w],2:length(physindvec))
-    currLsize = 1
     for w = 1:Ns
-      physindsize = physindvec[w]
-      currRsize = min(Rsize,m)
-      vec[w] = rand(T,currLsize,physindsize,currRsize)
+      if w == 1
+        currLsize = 1
+      else
+        currLsize = m
+      end
+      if w == Ns
+        currRsize = 1
+      else
+        currRsize = m
+      end
+      vec[w] = rand(T,currLsize,physindvec[w],currRsize)
       vec[w] /= norm(vec[w])
-      currLsize = currRsize
-      Rsize = cld(Rsize,physindsize)
     end
     psi = MPS(vec,oc=oc)
+
     move!(psi,1)
     move!(psi,Ns)
-    move!(psi,1)
+    move!(psi,oc)
     psi[oc] /= expect(psi)
   end
   return psi
@@ -1500,37 +1505,153 @@ function lastindex(X::paulistring)
 end
 
 
-function maketerm(X::paulistring)
-  finalterm = ""
-  for w = 1:length(X)-1
-    finalterm *= X[w]
-    finalterm *= "⊗"
+
+
+const subnumberstrings = [Char(0x2081),Char(0x2082),Char(0x2083),Char(0x2084),Char(0x2085),Char(0x2086),Char(0x2087),Char(0x2088),Char(0x2089),Char(0x2080)]
+
+"""
+  half
+
+String code for a fraction of 1/2; useful for bulkMPO
+
+See also: [`bulkMPO`](@ref) [`Omat`](@ref)
+"""
+const half = Char(0x00BD)
+export half
+
+function substringnumber(stringstart::String,w::Integer)
+  pstart = ceil(log(10,w) + 1)
+  mone = fld(w,10^(pstart-1)) % 10 == 0 #whether to add 1 or not
+  pstart = convert(Int64,ceil(log(10,w))) + (mone ? 0 : 1)
+  out = ntuple(p->fld(w,10^(pstart-p)) % 10,pstart)
+
+  makestring = stringstart
+  for b = 1:length(out)
+    pos = (b-1) % length(subnumberstrings) + 1
+    rpos = pos == 0 ? 10 : pos
+    rout = out[rpos] == 0 ? 10 : out[rpos]
+    makestring *= subnumberstrings[rout]
   end
-  return finalterm * X[length(X)]
+  return makestring
 end
 
-function maketerm(X::Hterm)
+
+
+
+
+
+
+"""
+  Omat(m)
+
+Generates a bulk matrix product operator with reserved string "O" for zero with a matrix of size `m x m`. Can multiply this object to get bulk MPO for a given system.
+
+
+# Example:
+
+```julia
+
+H = bulkMPO(5) #["O" for i = 1:5,j = 1:5]
+
+#XXZ model
+H[1,1] = H[end,end] = "I"
+H[2,1] = "S"*Char(0x207B)
+H[3,1] = "S"*Char(0x207A)
+H[4,1] = "Sz"
+H[end,2] = half*"S"*Char(0x207A)
+H[end,3] = half*"S"*Char(0x207B)
+H[end,4] = "Sz"
+H*H*H #multiply 3 sites together
+
+```
+
+See also: [`bulkMPO`](@ref) [`half`](@ref)
+"""
+function Omat(m::Integer)
+  return ["O" for i = 1:m,j = 1:m]
+end
+export Omat
+
+"""
+  bulkMPO(m)
+
+Generates a bulk matrix product operator with reserved string "O" for zero with a matrix of size `m x m`. Can multiply this object to get bulk MPO for a given system.
+
+# Example:
+
+# Example:
+
+```julia
+
+H = bulkMPO(5) #["O" for i = 1:5,j = 1:5]
+
+#XXZ model
+H[1,1] = H[end,end] = "I"
+H[2,1] = "S"*Char(0x207B)
+H[3,1] = "S"*Char(0x207A)
+H[4,1] = "Sz"
+H[end,2] = half*"S"*Char(0x207A)
+H[end,3] = half*"S"*Char(0x207B)
+H[end,4] = "Sz"
+H*H*H #multiply 3 sites together
+
+```
+
+See also: [`Omat`](@ref) [`half`](@ref)
+"""
+function bulkMPO(m::Integer)
+  return Omat(m)
+end
+export bulkMPO
+
+
+function maketerm(X::paulistring;kron::Bool=false)
+  if kron
+    finalterm = ""
+    for w = 1:length(X)-1
+      finalterm *= X[w]
+      finalterm *= "⊗" #"⋅"
+    end
+    return finalterm * X[length(X)]
+  else
+#    yesprint = [X != "I" && X != "Id" for w = 1:length(X)]
+    p = 1
+    while p < length(X) && (X[p] == "I" || X[p] == "Id")
+      p += 1
+    end
+    finalterm = substringnumber(X[p],p)
+    for w = p+1:length(X)
+      if X[w] != "I" && X[w] != "Id"
+        finalterm *= "⋅"
+        finalterm *= substringnumber(X[w],w) #X[w]*
+      end
+    end
+    return finalterm
+  end
+end
+
+function maketerm(X::Hterm;kron::Bool=false)
   finalterm = ""
   for w = 1:length(X)-1
-    finalterm *= maketerm(X[w])
+    finalterm *= maketerm(X[w],kron=kron)
     finalterm *= " + "
   end
-  return finalterm * maketerm(X[length(X)])
+  return finalterm * maketerm(X[length(X)],kron=kron)
 end
 
 import Base.display
-function display(A::Array{W,2}) where W <: Hterm
+function display(A::Array{W,2};kron::Bool=false) where W <: Hterm
   C = Array{String,2}(undef,size(A)...)
   for y = 1:size(C,2)
     for x = 1:size(C,1)
-      C[x,y] = maketerm(A[x,y])
+      C[x,y] = maketerm(A[x,y],kron=kron)
     end
   end
   display(C)
 end
 
-function display(A::Hterm)
-  display(maketerm(A))
+function display(A::Hterm;kron::Bool=false)
+  display(maketerm(A,kron=kron))
 end
 
 function format_matrix(H::Array{W,2}) where W <: String
