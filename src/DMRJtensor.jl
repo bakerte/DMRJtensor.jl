@@ -34,6 +34,7 @@ Funding for this program is graciously provided by:
    + National Science and Engineering Research Council (NSERC)
 """
 module DMRJtensor
+using TensorPACK
 
 const DMRjulia = DMRJtensor
 export DMRjulia
