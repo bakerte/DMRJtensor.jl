@@ -1,30 +1,13 @@
-
-#include("../DMRjulia.jl")
-
-function testfct(test::Bool,message::String)
-#  try test
-  if test
-    printstyled("PASS",color=:green)
-  else
-    printstyled("FAIL ",color=:red)
-  end
-  println(" "*message)
-#  catch
-#    error(message)
-#  end
-  return test
-end
-
-function checkall(fulltestrecord::Array{Bool,1},i::Integer,fulltest::Bool)
-  fulltestrecord[i] = fulltest
-  print("All tests passed? ")
-  if fulltest
-    printstyled(fulltest,color=:green)
-  else
-    printstyled(fulltest,color=:red)
-  end
-  println()
-end
+###############################################################################
+#
+#  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
+#                               v1.0
+#
+###############################################################################
+# Made by Thomas E. Baker and « les qubits volants » (2024)
+# See accompanying license with this program
+# This code is native to the julia programming language (v1.10.0+)
+#
 
 const tests = [
 "MPtask_test.jl",
@@ -38,6 +21,17 @@ const tests = [
 "dmrg_test.jl"
 ]
 
+function checkall(fulltestrecord::Array{Bool,1},i::Integer,fulltest::Bool)
+  fulltestrecord[i] = fulltest
+  print("All tests passed? ")
+  if fulltest
+    printstyled(fulltest,color=:green)
+  else
+    printstyled(fulltest,color=:red)
+  end
+  println()
+end
+
 """
   testlib([,tests=,path=libdir*"/test/"])
 
@@ -45,7 +39,7 @@ Tests all functions in the files enumerated in `tests`. Default is to check all 
 
 See also: [`libdir`](@ref)
 """
-function libtest(;tests::Array{String,1}=tests,path::String=libdir*"/../test/")
+function libtest(;tests::Array{String,1}=tests,dir::String=libdir,path::String=dir*"/test/")
 
   fulltestrecord = Array{Bool,1}(undef,length(tests))
 

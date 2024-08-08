@@ -27,7 +27,8 @@ function checkqubitops(val)
       end
       C = MPO(B)
       for k = 1:Ns
-        testval &= isapprox(makeArray(A[k]),makeArray(C[k]))
+        ktest = isapprox(Array(A[k]),Array(C[k]))
+        testval &= ktest
       end
     end
   end
@@ -55,7 +56,8 @@ function checkqubitops_noval(val)
       end
       C = MPO(B)
       for k = 1:Ns
-        testval &= isapprox(makeArray(A[k]),makeArray(C[k]))
+        ktest = isapprox(Array(A[k]),Array(C[k]))
+        testval &= ktest
       end
     end
   end
@@ -80,7 +82,8 @@ function checkqubitops_single(val)
     end
     C = MPO(B)
     for k = 1:Ns
-      testval &= isapprox(makeArray(A[k]),makeArray(C[k]))
+      ktest = isapprox(Array(A[k]),Array(C[k]))
+      testval &= ktest
     end
   end
   return testval
@@ -104,7 +107,7 @@ function checkqubitops_single_noval(val)
     end
     C = MPO(B)
     for k = 1:Ns
-      testval &= isapprox(makeArray(A[k]),makeArray(C[k]))
+      testval &= isapprox(Array(A[k]),Array(C[k]))
     end
   end
   return testval
@@ -136,7 +139,7 @@ function Qcheckqubitops(val)
       end
       C = MPO(B)
       for k = 1:Ns
-        testval &= isapprox(makeArray(A[k]),makeArray(C[k]))
+        testval &= isapprox(Array(A[k]),Array(C[k]))
       end
     end
   end
@@ -166,7 +169,7 @@ function checkqubitops_string(val,vecQlabels)
       end
       C = MPO(B)
       for k = 1:Ns
-        testval &= isapprox(makeArray(A[k]),makeArray(C[k]))
+        testval &= isapprox(Array(A[k]),Array(C[k]))
       end
     end
   end
@@ -196,7 +199,7 @@ function checkqubitops_string_noval(vecQlabels)
       end
       C = MPO(B)
       for k = 1:Ns
-        testval &= isapprox(makeArray(A[k]),makeArray(C[k]))
+        testval &= isapprox(Array(A[k]),Array(C[k]))
       end
     end
   end
@@ -247,7 +250,7 @@ end
 
 Ham,mpo = test(Sp,Sm,Sz,Id,Ns)
 
-testval = isapprox(makeArray(Ham),makeArray(fullH(mpo)))
+testval = isapprox(Array(Ham),Array(fullH(mpo)))
 D,U = LinearAlgebra.eigen(Ham)
 testval &= isapprox(D[1],-4.258035204637)
 
@@ -295,7 +298,7 @@ end
 
 mpo = another_test(Sp,Sm,Sz,Id,Ns)
 
-testval = isapprox(makeArray(Ham),makeArray(fullH(mpo)))
+testval = isapprox(Array(Ham),Array(fullH(mpo)))
 D,U = LinearAlgebra.eigen(Ham)
 testval &= isapprox(D[1],-4.258035204637)
 fulltest &= testfct(testval,"+(mpo...) and add!(mpo,mpo)")

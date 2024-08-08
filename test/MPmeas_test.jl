@@ -163,8 +163,6 @@ testval = isapprox(expect(psi,mpo),C)
 fulltest &= testfct(testval,"makeEnv(psi,psi,mpo...)")
 
 
-
-
 Lenv,Renv = makeEnv(psi,mpo)
 
 B = contract(Lenv[psi.oc],3,psi[psi.oc],1)
@@ -173,6 +171,7 @@ B = contract(B,[2,4],Renv[psi.oc],[1,2])
 C = ccontract(psi[psi.oc],B)
 testval = isapprox(expect(psi,mpo),C)
 fulltest &= testfct(testval,"makeEnv(psi,mpo...)")
+
 
 println()
 
@@ -283,7 +282,10 @@ fulltest &= testfct(testval,"applyOps(psi,sites,Op)")
 
 println()
 
-dmrg(psi,mpo,sweeps=20,m=45,cutoff=1E-9,silent=true)
+D,U = eigen(mpo)
+psi = makeMPS(U[:,1],2)
+
+#dmrg(psi,mpo,sweeps=20,m=45,cutoff=1E-9,silent=true)
 
 testval = isapprox(expect(psi,mpo),-4.2580352071064205)
 fulltest &= testfct(testval,"expect(psi,mpo)")
@@ -320,7 +322,7 @@ move!(psi,5)
 
 L,T,R = localizeOp(psi,[Sp,Sm],[3,6])
 import LinearAlgebra
-testval = isapprox(makeArray(T),zeros(2,2) + LinearAlgebra.I)
+testval = isapprox(Array(T),zeros(2,2) + LinearAlgebra.I)
 
 A = contract(L,2,psi[psi.oc],1)
 B = contract(A,3,R,1)
@@ -333,7 +335,7 @@ fulltest &= testfct(testval,"localizeOp(psi,Operators,sites)")
 
 L,T,R = localizeOp(psi,[Sp,Sm],[3,6],trail=(Id,Id))
 import LinearAlgebra
-testval = isapprox(makeArray(T),zeros(2,2) + LinearAlgebra.I)
+testval = isapprox(Array(T),zeros(2,2) + LinearAlgebra.I)
 
 A = contract(L,2,psi[psi.oc],1)
 B = contract(A,3,R,1)

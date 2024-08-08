@@ -1,3 +1,14 @@
+###############################################################################
+#
+#  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
+#                               v1.0
+#
+###############################################################################
+# Made by Thomas E. Baker and « les qubits volants » (2024)
+# See accompanying license with this program
+# This code is native to the julia programming language (v1.10.0+)
+#
+
 println("#            +-------------+")
 println("#>-----------|  MPtask.jl  |-----------<")
 println("#            +-------------+")
@@ -11,19 +22,19 @@ C = [rand(i == 1 ? 1 : msize,2,i == Ns ? 1 : msize) for i = 1:Ns]
 
 psi = MPS(C,oc=3,regtens=true)
 testval = psi.oc == 3
-testval &= psi.A == C
+testval &= psi.A.net == C
 fulltest &= testfct(testval,"MPS(vector{Array},oc=)")
 
 C = [tens(rand(i == 1 ? 1 : msize,2,i == Ns ? 1 : msize)) for i = 1:Ns]
 
 psi = MPS(C,oc=3)
 testval = psi.oc == 3
-testval &= length(C) == sum([makeArray(psi.A[i]) == makeArray(C[i]) for i = 1:length(C)])
+testval &= length(C) == sum([Array(psi.A[i]) == Array(C[i]) for i = 1:length(C)])
 fulltest &= testfct(testval,"MPS(vector{Tens},oc=)")
 
 X = MPS(psi)
 testval = X.oc == 3
-testval &= length(C) == sum([makeArray(X.A[i]) == makeArray(C[i]) for i = 1:length(C)])
+testval &= length(C) == sum([Array(X.A[i]) == Array(C[i]) for i = 1:length(C)])
 fulltest &= testfct(testval,"MPS(MPS,oc=)")
 
 D = MPS(ComplexF64,C,oc=3)
@@ -36,7 +47,7 @@ println()
 C = [rand(i == 1 ? 1 : msize,2,2,i == Ns ? 1 : msize) for i = 1:Ns]
 
 mpo = MPO(C,regtens=true)
-testval = mpo.H == C
+testval = mpo.H.net == C
 fulltest &= testfct(testval,"MPO(vector{Array})")
 
 C = [tens(rand(i == 1 ? 1 : msize,2,2,i == Ns ? 1 : msize)) for i = 1:Ns]
@@ -46,11 +57,11 @@ testval = eltype(mpo) == ComplexF64
 fulltest &= testfct(testval,"MPO(ComplexF64,vector{Tens})")
 
 mpo = MPO(C)
-testval = mpo.H == C
+testval = mpo.H.net == C
 fulltest &= testfct(testval,"MPO(vector{Tens})")
 
 B = MPO(mpo)
-testval = mpo.H == B.H
+testval = mpo.H.net == B.H.net
 fulltest &= testfct(testval,"MPO(MPO)")
 
 Y = MPO(ComplexF64,mpo)
@@ -62,17 +73,17 @@ println()
 
 
 Z = environment(C...)
-testval = Z.V == C
+testval = Z.V.net == C
 fulltest &= testfct(testval,"environment(vector)")
 
 B = environment(C[1],Ns)
 testval = length(B.V) == Ns
-testval &= eltype(B.V) == eltype(C)
+testval &= eltype(B.V.net) == eltype(C)
 fulltest &= testfct(testval,"environment(Array,Ns)")
 
 B = environment(tens(C[1]),Ns)
 testval = length(B.V) == Ns
-testval &= eltype(B.V) == eltype(C)
+testval &= eltype(B.V.net) == eltype(C)
 fulltest &= testfct(testval,"environment(tens,Ns)")
 
 B = environment(psi)
@@ -138,15 +149,23 @@ fulltest &= testfct(testval,"getindex(Env,integer)")
 
 B = X[4:6].A
 C = X.A[4:6]
-testval = makeArray(B[1]) == makeArray(C[1])
-testval &= makeArray(B[2]) == makeArray(C[2])
-testval &= makeArray(B[3]) == makeArray(C[3])
+testval = Array(B[1]) == Array(C[1])
+testval &= Array(B[2]) == Array(C[2])
+testval &= Array(B[3]) == Array(C[3])
 fulltest &= testfct(testval,"getindex(MPS,unitrange)")
 
-testval = Y[4:6].H == Y.H[4:6]
+B = Y[4:6].H
+C = Y.H[4:6]
+testval = Array(B[1]) == Array(C[1])
+testval &= Array(B[2]) == Array(C[2])
+testval &= Array(B[3]) == Array(C[3])
 fulltest &= testfct(testval,"getindex(MPO,unitrange)")
 
-testval = Z[4:6].V == Z.V[4:6]
+B = Z[4:6].V
+C = Z.V[4:6]
+testval = Array(B[1]) == Array(C[1])
+testval &= Array(B[2]) == Array(C[2])
+testval &= Array(B[3]) == Array(C[3])
 fulltest &= testfct(testval,"getindex(Env,unitrange)")
 
 println()
@@ -180,17 +199,18 @@ fulltest &= testfct(testval,"setindex!(Env)")
 println()
 
 copypsi = copy(psi)
-testval = sum(w->makeArray(copypsi.A[w]) == makeArray(psi.A[w]),1:Ns) == Ns
+testval = sum(w->Array(copypsi.A[w]) == Array(psi.A[w]),1:Ns) == Ns
 fulltest &= testfct(testval,"copy(MPS)")
 
 copympo = copy(mpo)
-testval = sum(w->makeArray(copympo.H[w]) == makeArray(mpo.H[w]),1:Ns) == Ns
+testval = sum(w->Array(copympo.H[w]) == Array(mpo.H[w]),1:Ns) == Ns
 fulltest &= testfct(testval,"copy(MPO)")
 
 C = environment([psi[i] for i = 1:length(psi)])
 
 copyenv = copy(C)
-testval = sum(w->makeArray(copyenv.V[w]) == makeArray(psi.A[w]),1:Ns) == Ns
+
+testval = sum(w->Array(copyenv.V[w]) == Array(psi.A[w]),1:Ns) == Ns
 fulltest &= testfct(testval,"copy(Env)")
 
 println()
@@ -305,7 +325,7 @@ fulltest &= testfct(testval,"fullH(MPO)")
 
 println()
 
-testpsi = makeMPS(makeArray(U[:,1]),2)
+testpsi = makeMPS(Array(U[:,1]),2)
 testval = isapprox(expect(testpsi,mpo),-4.258035207282883)
 fulltest &= testfct(testval,"makeMPS(vect,integer)")
 
@@ -317,9 +337,9 @@ println()
 
 C = fullpsi(testpsi)
 
-testval = norm(makeArray(U[:,1])-makeArray(C)) < 1E-6#isapprox(makeArray(U[:,1]),makeArray(C))
+testval = norm(Array(U[:,1])-Array(C)) < 1E-6#isapprox(Array(U[:,1]),Array(C))
 
-#println(makeArray(U[:,1])-makeArray(C))
+#println(Array(U[:,1])-Array(C))
 
 fulltest &= testfct(testval,"fullpsi(psi)")
 
@@ -385,21 +405,21 @@ println()
 A = makeqMPO(Qlabels[1],mpo)
 testvalvec = [true]
 for i = 1:length(A)
-  testvalvec[1] &= isapprox(makeArray(A[i]),makeArray(mpo[i]))
+  testvalvec[1] &= isapprox(Array(A[i]),Array(mpo[i]))
 end
 fulltest &= testfct(testvalvec[1],"makeqMPO(Vector{Qnum},MPO)")
 
 A = makeqMPO(Qlabels,mpo)
 testvalvec = [true]
 for i = 1:length(A)
-  testvalvec[1] &= isapprox(makeArray(A[i]),makeArray(mpo[i]))
+  testvalvec[1] &= isapprox(Array(A[i]),Array(mpo[i]))
 end
 fulltest &= testfct(testvalvec[1],"makeqMPO(Vector{Vector{Qnum}},MPO)")
 #=
 A = makeqMPO(mpo.H,Qlabels)
 testvalvec = [true]
 for i = 1:length(A)
-  testvalvec[1] &= isapprox(makeArray(A[i]),makeArray(mpo[i]))
+  testvalvec[1] &= isapprox(Array(A[i]),Array(mpo[i]))
 end
 fulltest &= testfct(testvalvec[1],"makeqMPO(vector,Vector{Vector{Qnum}})")
 =#

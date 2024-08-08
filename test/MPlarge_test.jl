@@ -140,32 +140,32 @@ fulltest &= testfct(testval,"getindex([largeMPS,largeMPO,largeEnv])")
 println()
 
 X = loadMPS(length(psi))
-testval = isapprox(makeArray(X[4]),makeArray(psi[4]))
+testval = isapprox(Array(X[4]),Array(psi[4]))
 fulltest &= testfct(testval,"loadMPS(integer)")
 
 println()
 
 Y = loadMPO(length(mpo))
-testval = isapprox(makeArray(Y[4]),makeArray(mpo[4]))
+testval = isapprox(Array(Y[4]),Array(mpo[4]))
 fulltest &= testfct(testval,"loadMPO(integer)")
 
 println()
 
 Y = loadLenv(length(mpo))
-testval = isapprox(makeArray(Y[4]),makeArray(Lenv[4]))
+testval = isapprox(Array(Y[4]),Array(Lenv[4]))
 fulltest &= testfct(testval,"loadLenv(integer)")
 
 println()
 
 Y = loadRenv(length(mpo))
-testval = isapprox(makeArray(Y[4]),makeArray(Renv[4]))
+testval = isapprox(Array(Y[4]),Array(Renv[4]))
 fulltest &= testfct(testval,"loadRenv(integer)")
 
 println()
 
 Y,Z = loadEnv(length(mpo))
-testval = isapprox(makeArray(Y[4]),makeArray(Lenv[4]))
-testval &= isapprox(makeArray(Z[4]),makeArray(Renv[4]))
+testval = isapprox(Array(Y[4]),Array(Lenv[4]))
+testval &= isapprox(Array(Z[4]),Array(Renv[4]))
 fulltest &= testfct(testval,"loadEnv(integer)")
 
 println()
