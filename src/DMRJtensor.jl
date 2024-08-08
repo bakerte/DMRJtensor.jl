@@ -35,6 +35,8 @@ Funding for this program is graciously provided by:
 """
 module DMRJtensor
 using TensorPACK
+const TENPACK = TensorPACK
+export TENPACK
 
 const DMRjulia = DMRJtensor
 export DMRjulia
