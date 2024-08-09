@@ -1,3 +1,14 @@
+###############################################################################
+#
+#  Density Matrix Renormalization Group (and other methods) in julia (DMRjulia)
+#                               v1.0
+#
+###############################################################################
+# Made by Thomas E. Baker and « les qubits volants » (2024)
+# See accompanying license with this program
+# This code is native to the julia programming language (v1.10.0+)
+#
+
 println("_________  _________ _       _ _")
 println("|     \\  \\/  || ___ (_)     | (_)")
 println("| | | | .  . || |_/ /_ _   _| |_  __ _ ")
