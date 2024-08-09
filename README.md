@@ -1,9 +1,8 @@
 ![alt text](https://github.com/bakerte/DMRJtensor.jl/blob/main/dmrjulia.png?raw=true)
 
 # DMRjulia (DMRJtensor.jl)
-DMRjulia is a general purpose tensor network library in the Julia programming language
 
-Hello! Welcome to the site of DMRjulia, a tensor network library for physics computations written in Julia. We are pending the full release of v1.0 which will contain all algorithms needed for cutting edge research. We will not get into the discussion of who's code is fastest, but DMRjulia is fast and we think easy to use for making new algorithms or solving systems.
+Hello! Welcome to the site of DMRjulia, a tensor network library for physics computations written in Julia. We are beta-testing the full release of v1.0 which will contain all algorithms needed for cutting edge research. DMRjulia is fast and easy to use for making new algorithms or solving systems.
 
 DMRjulia is official registered in Julia's package library, making installation simple. Just type the following into the Julia terminal.
 
