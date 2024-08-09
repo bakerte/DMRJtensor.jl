@@ -12,6 +12,7 @@
 #This example will make the bulk MPO for the XXZ model
 #For viewing only
 
+
 H = bulkMPO(5)
 
 H[1,1] = H[end,end] = "I"
@@ -24,4 +25,6 @@ H[end,2] = "Sz"
 H[end,3] = half*"Sm"
 H[end,4] = half*"Sp"
 
-H*H #Hamiltonian terms will accumulate in the lower left corner
+Ns = 10 #number of sites
+bigH = prod(w->H,1:Ns)
+display(bigH[end,1]) #Hamiltonian terms will accumulate in the lower left corner
