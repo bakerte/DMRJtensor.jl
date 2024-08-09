@@ -45,7 +45,7 @@ const libdir = @__DIR__
 
 const libpath = libdir*"/../lib/"
 
-files = ["imports.jl","banner.jl","types.jl","models.jl"]
+files = ["imports.jl","banner.jl","types.jl","models.jl","network.jl"]
 for w = 1:length(files)
   include(libpath*files[w])
 end
