@@ -51,7 +51,7 @@ for w = 1:length(files)
 end
 
 
-files = ["mult.jl","div.jl","star.jl","slash.jl","conj.jl","copy.jl","eltype.jl","emptyTensor.jl","get_tensors.jl","getindex.jl","lastindex.jl","length.jl","setindex.jl","size.jl","tensordisc.jl"]
+files = ["mult.jl","div.jl","star.jl","slash.jl","conj.jl","copy.jl","eltype.jl","emptyTensor.jl","get_tensors.jl","getindex.jl","lastindex.jl","length.jl","setindex.jl","size.jl"]
 subdir = "methods/"
 for w = 1:length(files)
   include(libpath*subdir*files[w])
