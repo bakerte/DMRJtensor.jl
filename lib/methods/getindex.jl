@@ -83,7 +83,7 @@ end
 `getindex` allows to retrieve tensor `G` at position `i` from `largeMPS`
 """
 function getindex(A::largeMPS,i::Integer)
-  return tensorfromdisc(A.A[i])
+  return tensorfromdisc(A.A[i],ext=file_extension)
 end
 
 """
@@ -92,7 +92,7 @@ end
 `getindex` allows to retrieve tensor `G` at position `i` from `largeMPO`
 """
 function getindex(A::largeMPO,i::Integer)
-  return tensorfromdisc(A.H[i])
+  return tensorfromdisc(A.H[i],ext=file_extension)
 end
 
 """
@@ -101,5 +101,5 @@ end
 `getindex` allows to retrieve tensor `G` at position `i` from `largeEnv`
 """
 function getindex(A::largeEnv,i::Integer)
-  return tensorfromdisc(A.V[i])
+  return tensorfromdisc(A.V[i],ext=file_extension)
 end
