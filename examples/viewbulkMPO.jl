@@ -17,11 +17,11 @@ H = bulkMPO(5)
 H[1,1] = H[end,end] = "I"
 
 H[2,1] = "Sz"
-H[3,1] = half*"Sp"
-H[4,1] = half*"Sm"
+H[3,1] = "Sp"
+H[4,1] = "Sm"
 
 H[end,2] = "Sz"
-H[end,3] = "Sm"
-H[end,4] = "Sp"
+H[end,3] = half*"Sm"
+H[end,4] = half*"Sp"
 
 H*H #Hamiltonian terms will accumulate in the lower left corner
