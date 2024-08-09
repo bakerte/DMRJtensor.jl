@@ -260,7 +260,6 @@ fulltest &= testfct(testval,"copy(String,largeEnv)")
 
 
 
-rm("del.dmrjulia")
 for i = 1:Ns
   rm("mps_$i.dmrjulia")
   rm("mpo_$i.dmrjulia")
