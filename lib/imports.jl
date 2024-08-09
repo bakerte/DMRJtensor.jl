@@ -42,87 +42,87 @@ import .LinearAlgebra.norm
 
 
 #using TensorPACK
-using ..TENPACK
+using TENPACK
 
 
 #import .TENPACK.TensType
 
-import ..TENPACK.undefMat,..TENPACK.checkType,..TENPACK.tensorcombination,..TENPACK.tensorcombination!
-import ..TENPACK.permutedims
+import TENPACK.undefMat,TENPACK.checkType,TENPACK.tensorcombination,TENPACK.tensorcombination!
+import TENPACK.permutedims
 
-import ..TENPACK.invmat!
+import TENPACK.invmat!
 
-import ..TENPACK.reshape!,..TENPACK.unreshape!,..TENPACK.unreshape
+import TENPACK.reshape!,TENPACK.unreshape!,TENPACK.unreshape
 
-import ..TENPACK.get_denseranges
+import TENPACK.get_denseranges
 
-import ..TENPACK.sub!,..TENPACK.add!,..TENPACK.mult!,..TENPACK.div!
-import ..TENPACK.joinindex!
-import ..TENPACK.getindex!
-import ..TENPACK.searchindex
+import TENPACK.sub!,TENPACK.add!,TENPACK.mult!,TENPACK.div!
+import TENPACK.joinindex!
+import TENPACK.getindex!
+import TENPACK.searchindex
 
-import ..TENPACK.libmult,..TENPACK.libsvd,..TENPACK.libsvd!,..TENPACK.libeigen,..TENPACK.libeigen!,..TENPACK.libqr,..TENPACK.liblq,..TENPACK.libqr!,..TENPACK.liblq!
+import TENPACK.libmult,TENPACK.libsvd,TENPACK.libsvd!,TENPACK.libeigen,TENPACK.libeigen!,TENPACK.libqr,TENPACK.liblq,TENPACK.libqr!,TENPACK.liblq!
 
 
 
 #contracions
-import ..TENPACK.contract
-import ..TENPACK.ccontract
-import ..TENPACK.contractc
-import ..TENPACK.ccontractc
+import TENPACK.contract
+import TENPACK.ccontract
+import TENPACK.contractc
+import TENPACK.ccontractc
 
 
 
-import ..TENPACK.dot
-import ..TENPACK.libmult
-import ..TENPACK.dmul!
-import ..TENPACK.diagcontract!
+import TENPACK.dot
+import TENPACK.libmult
+import TENPACK.dmul!
+import TENPACK.diagcontract!
 
 
-import ..TENPACK.permq
-import ..TENPACK.willperm
-import ..TENPACK.prepareT
-import ..TENPACK.getsizes
-import ..TENPACK.maincontractor
+import TENPACK.permq
+import TENPACK.willperm
+import TENPACK.prepareT
+import TENPACK.getsizes
+import TENPACK.maincontractor
 
-import ..TENPACK.trace
+import TENPACK.trace
 
 #decompositions
-import ..TENPACK.libsvd
-import ..TENPACK.libsvd!
+import TENPACK.libsvd
+import TENPACK.libsvd!
 
 
-import ..TENPACK.libeigen
-import ..TENPACK.libeigen!
+import TENPACK.libeigen
+import TENPACK.libeigen!
 
-import ..TENPACK.sqrt!
+import TENPACK.sqrt!
 
-import ..TENPACK.libqr
-import ..TENPACK.libqr!
+import TENPACK.libqr
+import TENPACK.libqr!
 
-import ..TENPACK.liblq
-import ..TENPACK.liblq!
-
-
-import ..TENPACK.defzero
-import ..TENPACK.basedims
-import ..TENPACK.makeHpsi
+import TENPACK.liblq
+import TENPACK.liblq!
 
 
-import ..TENPACK.root
+import TENPACK.defzero
+import TENPACK.basedims
+import TENPACK.makeHpsi
 
 
-import ..TENPACK.truncate,..TENPACK.svd,..TENPACK.svd!,..TENPACK.getorder,..TENPACK.findsize,..TENPACK.svdvals,..TENPACK.eigen,..TENPACK.eigen!,..TENPACK.eigvals,..TENPACK.eigvals!,..TENPACK.qr,..TENPACK.qr!,..TENPACK.lq,..TENPACK.lq!,..TENPACK.polar,...TENPACK.eye
+import TENPACK.root
 
 
-import ..TENPACK.network, ..TENPACK.TNnetwork
+import TENPACK.truncate,TENPACK.svd,TENPACK.svd!,TENPACK.getorder,TENPACK.findsize,TENPACK.svdvals,TENPACK.eigen,TENPACK.eigen!,TENPACK.eigvals,TENPACK.eigvals!,TENPACK.qr,TENPACK.qr!,TENPACK.lq,TENPACK.lq!,TENPACK.polar,.TENPACK.eye
 
 
-import ..TENPACK.largevector, ..TENPACK.tensor2disc, ..TENPACK.tensorfromdisc
+import TENPACK.network, TENPACK.TNnetwork
 
 
-import ..TENPACK.stdavg
-import ..TENPACK.testfct
+import TENPACK.largevector, TENPACK.tensor2disc, TENPACK.tensorfromdisc
+
+
+import TENPACK.stdavg
+import TENPACK.testfct
 
 #=
 import TensorPACK.undefMat,TensorPACK.makeArray,TensorPACK.checkType,TensorPACK.tensorcombination,TensorPACK.tensorcombination!
@@ -147,9 +147,9 @@ import Base.length,Base.adjoint
 #export tens
 
 
-import ..TENPACK.convertTens
+import TENPACK.convertTens
 
 
 
-#import ..TENPACK.sin
-#import ..TENPACK.cos
+#import TENPACK.sin
+#import TENPACK.cos
