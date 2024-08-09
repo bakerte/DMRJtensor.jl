@@ -48,22 +48,18 @@ Inputs tensors `P` representing an `MPS` or an `MPO` into environment `V`
 
 See also: [`MPS`](@ref) [`MPO`](@ref)
 """
-function environment(network::MPS) #where G <: Union{MPS,MPO}
-#  Ns = length(network)
+function environment(network::MPS)
   return environment(copy(network.A.net))
 end
 
-function environment(network::MPO) #where G <: Union{MPS,MPO}
-#  Ns = length(network)
+function environment(network::MPO)
   return environment(copy(network.H.net))
 end
 
-function environment(network::network) #where G <: Union{MPS,MPO}
-#  Ns = length(network)
-  return environment(network(copy(network.net)))
+function environment(network::network{W}) where W <: TensType
+  return environment{W}(network(copy(network.net)))
 end
 
-function environment(input::Array{W,1}) where W <: TensType #where G <: Union{MPS,MPO}
-  #  Ns = length(network)
-    return environment{W}(network(copy(input)))
-  end
+function environment(input::Array{W,1}) where W <: TensType
+  return environment{W}(network(copy(input)))
+end
