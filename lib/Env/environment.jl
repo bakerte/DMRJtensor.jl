@@ -42,24 +42,45 @@ function environment(T::W,Ns::Integer) where W <: TensType
 end
 
 """
-    V = environment(P...)
+    V = environment(P)
 
-Inputs tensors `P` representing an `MPS` or an `MPO` into environment `V`
+Inputs tensors `P` representing an `MPS` into environment `V`
 
-See also: [`MPS`](@ref) [`MPO`](@ref)
+See also: [`MPS`](@ref)
 """
 function environment(network::MPS)
   return environment(copy(network.A.net))
 end
 
+"""
+    V = environment(P)
+
+Inputs tensors `P` representing an `MPO` into environment `V`
+
+See also: [`MPO`](@ref)
+"""
 function environment(network::MPO)
   return environment(copy(network.H.net))
 end
 
+"""
+    V = environment(P)
+
+Inputs tensors `P` representing a `network` into environment `V`
+
+See also: [`network`](@ref)
+"""
 function environment(network::network{W}) where W <: TensType
   return environment{W}(network(copy(network.net)))
 end
 
+"""
+    V = environment(P)
+
+Inputs tensors `P` representing an `Array` of tensors into environment `V`
+
+See also: [`Array`](@ref)
+"""
 function environment(input::Array{W,1}) where W <: TensType
   return environment{W}(network(copy(input)))
 end

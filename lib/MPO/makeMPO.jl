@@ -33,18 +33,25 @@
   #of the H matrix as recorded in each s1s2 pair.  These are each of the operators in H.
 
 """
-    makeMPO(H,physSize,Ns[,infinite=,lower=])
+    mpo = makeMPO(H,physSize[,lower=])
 
-Converts function or vector (`H`) to each of `Ns` MPO tensors; `physSize` can be a vector (one element for the physical index size on each site) or a number (uniform sites); `lower` signifies the input is the lower triangular form (default)
+Converts vector (`H`) of matrices into a full MPO `mpo`; `physSize` is a vector (one element for the physical index size on each site); `lower` signifies the input is the lower triangular form (default) and is represented by a tensor diagrammatically as
+  
+         s2
+         |
+   a1 -- W -- a2       =    W[a1,s1,s2,a2]
+         |
+         s1
 
 # Example:
 
 ```julia
 spinmag = 0.5;Ns = 10
-Sx,Sy,Sz,Sp,Sm,O,Id = spinOps(spinmag)
+Sp,Sm,Sz,Sx,Sy,O,Id = spinOps(spinmag)
 function H(i::Integer)
-    return [Id O;
-            Sz Id]
+    return [Id O O;
+            Sz O O;
+            O Sz Id]
 end
 isingmpo = makeMPO(H,size(Id,1),Ns)
 ```
@@ -84,34 +91,148 @@ function makeMPO(H::Array{Array{X,2},1},physSize::Array{Y,1};
   return MPO(retType,finalMPO,regtens=regtens)
 end
 
+"""
+    mpo = makeMPO(H,physSize,Ns[,lower=])
+
+Converts a bulk MPO tensor `H` for `Ns` sites; `physSize` is a vector (one element for the physical index size on each site); `lower` signifies the input is the lower triangular form (default) and is represented by a tensor diagrammatically as
+
+         s2
+         |
+   a1 -- W -- a2       =    W[a1,s1,s2,a2]
+         |
+         s1
+
+# Example:
+
+```julia
+spinmag = 0.5;Ns = 10
+Sp,Sm,Sz,Sx,Sy,O,Id = spinOps(spinmag)
+function H(i::Integer)
+    return [Id O O;
+            Sz O O;
+            O Sz Id]
+end
+isingmpo = makeMPO(H,size(Id,1),Ns)
+```
+"""
 function makeMPO(H::Array{X,2},physSize::Array{Y,1},Ns::Integer;
                       lower::Bool=true,regtens::Bool=false) where {X <: Number, Y <: Integer}
   return makeMPO([H for i = 1:Ns],physSize)
 end
 
+"""
+    mpo = makeMPO(H,physSize,Ns[,lower=])
+
+Converts a bulk MPO tensor `H` into an MPO `mpo` of `Ns` sites; `physSize` is a number (uniform sites); `lower` signifies the input is the lower triangular form (default) and is represented by a tensor diagrammatically as
+  
+         s2
+         |
+   a1 -- W -- a2       =    W[a1,s1,s2,a2]
+         |
+         s1
+
+# Example:
+
+```julia
+spinmag = 0.5;Ns = 10
+Sp,Sm,Sz,Sx,Sy,O,Id = spinOps(spinmag)
+function H(i::Integer)
+    return [Id O O;
+            Sz O O;
+            O Sz Id]
+end
+isingmpo = makeMPO(H,size(Id,1),Ns)
+```
+"""
 function makeMPO(H::Array{X,2},physSize::Y,Ns::Integer;
                       lower::Bool=true,regtens::Bool=false) where {X <: Number, Y <: Integer}
   return makeMPO([H for i = 1:Ns],[physSize])
 end
 
-function makeMPO(H::Array{X,1},physSize::Y,Ns::Integer;
-                      lower::Bool=true,regtens::Bool=false) where {X <: Array, Y <: Integer}
+"""
+    mpo = makeMPO(H,physSize[,lower=])
+
+Converts vector (`H`) of matrices into a full MPO `mpo`; `physSize` is a number (uniform sites); `lower` signifies the input is the lower triangular form (default) and is represented by a tensor diagrammatically as
+  
+         s2
+         |
+   a1 -- W -- a2       =    W[a1,s1,s2,a2]
+         |
+         s1
+
+# Example:
+
+```julia
+spinmag = 0.5;Ns = 10
+Sp,Sm,Sz,Sx,Sy,O,Id = spinOps(spinmag)
+function H(i::Integer)
+    return [Id O O;
+            Sz O O;
+            O Sz Id]
+end
+isingmpo = makeMPO(H,size(Id,1),Ns)
+```
+"""
+function makeMPO(H::Array{X,1},physSize::Integer;
+                      lower::Bool=true,regtens::Bool=false) where {X <: Array}
   return makeMPO(H,[physSize],lower=lower,regtens=regtens)
 end
 
-function makeMPO(H::Array{X,1},physSize::Y;
-                      lower::Bool=true,regtens::Bool=false) where {X <: Array, Y <: Integer}
-  return makeMPO(H,[physSize],lower=lower,regtens=regtens)
-end
+"""
+    mpo = makeMPO(H,physSize,Ns[,lower=])
 
+Converts a function producing a bulk MPO tensor `H` input `i` the site index into an MPO `mpo`; `physSize` is a vector (one element for the physical index size on each site); `lower` signifies the input is the lower triangular form (default) and is represented by a tensor diagrammatically as
+  
+         s2
+         |
+   a1 -- W -- a2       =    W[a1,s1,s2,a2]
+         |
+         s1
+
+# Example:
+
+```julia
+spinmag = 0.5;Ns = 10
+Sp,Sm,Sz,Sx,Sy,O,Id = spinOps(spinmag)
+function H(i::Integer)
+    return [Id O O;
+            Sz O O;
+            O Sz Id]
+end
+isingmpo = makeMPO(H,size(Id,1),Ns)
+```
+"""
 function makeMPO(H::Function,physSize::Array{X,1},Ns::Integer;
                       lower::Bool=true,regtens::Bool=false) where X <: Integer
   thisvec = [H(i) for i = 1:Ns]
   return makeMPO(thisvec,physSize,lower=lower,regtens=regtens)
 end
 
+"""
+    mpo = makeMPO(H,physSize,Ns[,lower=])
+
+Converts a function producing a bulk MPO tensor `H` input `i` the site index into an MPO `mpo`; `physSize` can be a vector (one element for the physical index size on each site) or a number (uniform sites); `lower` signifies the input is the lower triangular form (default) and is represented by a tensor diagrammatically as
+  
+         s2
+         |
+   a1 -- W -- a2       =    W[a1,s1,s2,a2]
+         |
+         s1
+
+# Example:
+
+```julia
+spinmag = 0.5;Ns = 10
+Sp,Sm,Sz,Sx,Sy,O,Id = spinOps(spinmag)
+function H(i::Integer)
+    return [Id O O;
+            Sz O O;
+            O Sz Id]
+end
+isingmpo = makeMPO(H,size(Id,1),Ns)
+```
+"""
 function makeMPO(H::Function,physSize::Integer,Ns::Integer;
                       lower::Bool=true,regtens::Bool=false)
   return makeMPO(H,[physSize],Ns,lower=lower,regtens=regtens)
 end
-export makeMPO

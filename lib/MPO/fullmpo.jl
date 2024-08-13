@@ -39,7 +39,7 @@ fullmpo = fullH
 export fullmpo
 
 """
-  D,U,truncerr,mag = eigen(H)
+    D,U,truncerr,mag = eigen(H)
 
 Computes eigenvalue decomposition of an input MPO `H` that is contracted into the Hamiltonian tensor (will give a fault if the resulting array is too large); useful for small systems
 

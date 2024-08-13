@@ -506,7 +506,7 @@ end
 
 
 
-
+#=
 function expMPO(opstring::MPOterm)
 
   Ns,mpotype,base,Qnumvec,qarrayops = prepare_autoInfo(opstring)
@@ -558,16 +558,44 @@ function expMPO(opstring::MPOterm)
 
   return mpo
 end
+=#
+function expmpoterm(lambda::Number,Op1::TensType,Op2::TensType,trail::U...) where U <: TensType
 
-function expMPO(lambda::Number,op1::TensType,op2::TensType,Ns::Integer;start::Integer=1,stop::Integer=Ns,reverse::Bool=true)
+  mpotype = typeof(typeof(lambda)(1)*eltype(Op1)(1)*eltype(Op2)(1))
+  Id = Array(eye(mpotype,size(Op1,1)))
+  O = zero(Id)
+  if length(trail) > 0
+    out = [Id O O;
+            Array(Op1) lambda*Array(trail[1]) O;
+            O Array(Op2*trail[1]) Id]
+  else
+    out = [Id O O;
+            Array(Op1) lambda*Id O;
+            O Array(Op2) Id]
+  end
+  return out
+end
+export expmpoterm
 
-  mpotype = typeof(typeof(lambda)(1) * eltype(op1)(1) * eltype(op2)(1))
+function expMPO(lambda::Number,op1::TensType,op2::TensType,Ns::Integer,trailterm::U...;start::Integer=1,stop::Integer=Ns,reverse::Bool=true) where U <: Union{Tuple,Array}
+  vecop1 = [op1 for w = 1:Ns]
+  vecop2 = [op2 for w = 1:Ns]
+  return expMPO(lambda,vecop1,vecop2,trailterm...,start=start,stop=stop,reverse=reverse)
+end
 
-  physind = size(op1,2)
+function expMPO(lambda::Number,op1::Array,op2::Array,trailterm::U...;start::Integer=1,stop::Integer=length(op1),reverse::Bool=true) where U <: Union{Tuple,Array}
 
-  base = [zeros(mpotype,i == 1 ? 1 : 3,physind,physind,i == Ns ? 1 : 3) for i = 1:Ns]
-  mpo = MPO(base)
+  mpotype = typeof(typeof(lambda)(1) * eltype(op1[1])(1) * eltype(op2[1])(1))
 
+  @assert(length(op1) == length(op2))
+
+  Ns = stop
+
+  physind = [size(op1[w],2) for w = 1:length(op1)]
+
+  base = [expmpoterm(lambda,op1[w],op2[w],trailterm...) for w = 1:Ns] #[zeros(mpotype,i == 1 ? 1 : 3,physind,physind,i == Ns ? 1 : 3) for i = 1:Ns]
+  mpo = makeMPO(base,physind)
+#=
   Id = eye(mpotype,physind)
   if typeof(op1) <: qarray
     Qlabel = recoverQNs(1,op1)
@@ -600,29 +628,10 @@ function expMPO(lambda::Number,op1::TensType,op2::TensType,Ns::Integer;start::In
       mpo[a] = permutedims!(mpo[a],[1,3,2,4])
     end
   end
-
+=#
   return mpo
 end
 export expMPO
-
-function expmpoterm(lambda::Number,Op1::TensType,Op2::TensType,trailterm::U...) where U <: Union{Tuple,Array}
-
-  mpotype = typeof(typeof(lambda)(1)*eltype(Op1)(1)*eltype(Op2)(1))
-  Id = Array(eye(mpotype,size(Op1,1)))
-  O = zero(Id)
-  if length(trailterm) > 0
-    trail = trailterm[1]
-    out = [Id O O;
-            Array(Op1) lambda*Array(trail[i]) O;
-            O Array(Op2*trail[i]) Id]
-  else
-    out = [Id O O;
-            Array(Op1) lambda*Id O;
-            O Array(Op2) Id]
-  end
-  return out
-end
-export expmpoterm
 
 
 """

@@ -68,21 +68,24 @@ function makeMPS(vect::Array{W,1},inputphysInd::Array{P,1};Ns::Integer=length(ph
   return finalmps
 end
 
+"""
+    makeMPS(vect,physInd[,Ns=,oc=])
+
+generates an MPS from a single vector expressed as a `denstens` (i.e., from exact diagonalization) for `Ns` sites and `physInd` size physical index at orthogonality center `oc`
+"""
 function makeMPS(vect::denstens,physInd::Array{P,1};Ns::Integer=length(physInd),
                   left2right::Bool=true,oc::Integer=left2right ? Ns : 1,regtens::Bool=false) where P <: Integer
   newvect = copy(vect.T)
   return makeMPS(newvect,physInd;Ns=Ns,oc=oc,left2right=left2right,regtens=regtens)
 end
 
-function makeMPS(vect::Array{W,1},physInd::Integer;Ns::Integer=convert(Int64,log(physInd,length(vect))),
-                  left2right::Bool=true,oc::Integer=left2right ? Ns : 1,regtens::Bool=false) where W <: Union{denstens,Number}
-  vecPhysInd = [physInd for i = 1:Ns]
-  return makeMPS(vect,vecPhysInd;Ns=Ns,oc=oc,left2right=left2right,regtens=regtens)
-end
+"""
+    makeMPS(vect,physInd[,Ns=,oc=])
 
-function makeMPS(vect::tens{W},physInd::Integer;Ns::Integer=convert(Int64,log(physInd,length(vect))),
+generates an MPS from a single vector expressed as a `denstens` (i.e., from exact diagonalization) for `Ns` sites and `physInd` an integer that is equal on all sites for the size physical index at orthogonality center `oc`
+"""
+function makeMPS(vect::Union{Array{W,1},tens{W}},physInd::Integer;Ns::Integer=convert(Int64,log(physInd,length(vect))),
                   left2right::Bool=true,oc::Integer=left2right ? Ns : 1,regtens::Bool=false) where W <: Union{denstens,Number}
   vecPhysInd = [physInd for i = 1:Ns]
   return makeMPS(vect,vecPhysInd;Ns=Ns,oc=oc,left2right=left2right,regtens=regtens)
 end
-export makeMPS
