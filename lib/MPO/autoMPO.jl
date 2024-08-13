@@ -22,16 +22,16 @@ abstract type MPOterm end
 export MPOterm
 
 """
-  mpoterm{W}
+    mpoterm{W}
 
 Stores terms of an MPO
 """
-struct mpoterm <: MPOterm #where W <: Tuple
+struct mpoterm <: MPOterm
   T::Vector{Any}
 end
 
 """
-  mpoterm(val,operator,ind,base,trail...)
+    mpoterm(val,operator,ind,base,trail...)
 
 Creates an MPO from operators (`operator`) with a prefactor `val` on sites `ind`.  Must also provide a `base` function which are identity operators for each site.  `trail` operators can be defined (example: fermion string operators)
 
@@ -65,13 +65,16 @@ function mpoterm(val::Number,operator::Array{W,1},ind::Array{P,1},base::Array{X,
   isdens = W <: denstens || X <: denstens
   if isdens
     opString = Array{tens{finalType},1}(undef,length(base))
+    @inbounds for i = 1:length(base)
+      opString[i] = tens(base[i])
+    end
   else
     opString = Array{Array{finalType,2},1}(undef,length(base))
+    @inbounds for i = 1:length(base)
+      opString[i] = base[i]
+    end
   end
   a = 0
-  @inbounds for i = 1:length(base)
-    opString[i] = base[i]
-  end
   for i = length(ind):-1:1
     thisval = i == 1 ? val : 1.0
     opString[ind[i]] = contract(operator[i],2,opString[ind[i]],1,alpha=thisval)
@@ -394,7 +397,7 @@ function MPO(opstring::MPOterm,reverse::Bool=true,countreduce::intType=100,sweep
     value_mpo_vec[i] = 0
   end
 
-  #=Threads.@threads :static=# for a in regularterms
+  #=Threads.@threads=# for a in regularterms
 
     numthread = Threads.threadid()
 
@@ -420,7 +423,7 @@ function MPO(opstring::MPOterm,reverse::Bool=true,countreduce::intType=100,sweep
   end
 
 
-  mpo += singlempo
+  mpo *= singlempo
 
 
 
@@ -435,7 +438,7 @@ function MPO(opstring::MPOterm,reverse::Bool=true,countreduce::intType=100,sweep
 
     counter = zeros(Int64,length(manyvec))
 
-    #=Threads.@threads :static=# for a in manysiteterms
+    #=Threads.@threads=# for a in manysiteterms
 
       numthread = Threads.threadid()
 
@@ -461,7 +464,7 @@ function MPO(opstring::MPOterm,reverse::Bool=true,countreduce::intType=100,sweep
 
     end
 #=
-    #=Threads.@threads :static=# for w = 1:length(manyvec)
+    #=Threads.@threads=# for w = 1:length(manyvec)
       if manyvec[w] != 0 && !isapprox(sum(p->norm(manyvec[w][p]),1:length(manyvec[w])),0)
         manyvec[w] = compressMPO!(manyvec[w],sweeps=sweeps)
       end
@@ -627,9 +630,9 @@ export expmpoterm
 
 functionality for adding (similar to direct sum) of MPOs together; uses joinindex function to make a combined MPO
 
-note: deparallelizes after every addition
+Note: Calls `add!` so will run deparallelization on MPOs
 
-See also: [`deparallelization`](@ref) [`add!`](@ref)
+See also: [`deparallelization`](@ref) [`add!`](@ref) [`mult!`](@ref)
 """
 function +(X::MPO...)
   finalMPO = *(X...,fct=add!)
@@ -680,7 +683,7 @@ note: deparallelizes after every addition
 
 See also: [`deparallelization`](@ref) [`+`](@ref)
 """
-function add!(A::MPO,B::MPO;finiteBC::Bool=true)
+function add!(A::MPO,B::MPO)
   mult!(A,B)
   return deparallelize!(A)
 end
@@ -708,7 +711,7 @@ function *(X::MPO...;fct::Function=mult!)
 
     R = Array{MPO,1}(undef,nthreads)
 
-    #=Threads.@threads :static=# for w = 1:nthreads
+    #=Threads.@threads=# for w = 1:nthreads
 
       start = startparts[w] + 1
       stop = startparts[w+1]
