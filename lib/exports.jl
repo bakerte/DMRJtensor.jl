@@ -36,3 +36,7 @@ export makeMPO
 
 
 export TRG_square
+
+
+
+export makeqMPS

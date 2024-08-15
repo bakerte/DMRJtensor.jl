@@ -10,20 +10,20 @@
 #
 
 """
-    makeqMPS(mps,Qlabels[,arrows,newnorm=,setflux=,flux=,randomize=,override=])
+    makeqMPS(mps,Qlabels[,newnorm=true,setflux=false,flux=...,randomize=true,override=true,lastfluxzero=false])
 
 creates quantum number MPS from regular MPS according to `Qlabels`
 
-# Arguments
+# Optional arguments
 + `mps::MPS`: dense MPS
 + `Qlabels::Array{Array{Qnum,1},1}`: quantum number labels on each physical index (assigns physical index labels mod size of this vector)
-+ `arrows::Array{Bool,1}`: first entry of this tuple is the arrow convention on MPS tensors (default: [false,true,true])
 + `newnorm::Bool`: set new norm of the MPS tensor
 + `setflux::Bool`: toggle to force this to be the total flux of the MPS tensor
 + `flux::Qnum`: quantum number to force total MPS flux to be if setflux=true
 + `randomize::Bool`: randomize last tensor if flux forces a zero tensor
++ `lastfluxzero::Bool`: determines whether the rightmost flux should be zero or not
 """
-function makeqMPS(Qlabels::Array{Array{Q,1},1},mps::MPS,arrows::Array{Bool,1}...;newnorm::Bool=true,setflux::Bool=false,
+function makeqMPS(Qlabels::Array{Array{Q,1},1},mps::MPS;newnorm::Bool=true,setflux::Bool=false,
                   flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false)::MPS where Q <: Qnum
   if newnorm
     if mps.oc < length(mps)
@@ -41,7 +41,6 @@ function makeqMPS(Qlabels::Array{Array{Q,1},1},mps::MPS,arrows::Array{Bool,1}...
 
   Ns = length(mps)
   storeQnumMat = [Q()]
-  theseArrows = length(arrows) == 0 ? Bool[false,true,true] : arrows[1]
   @inbounds for i = 1:Ns
     currSize = size(mps[i])
     QnumMat = Array{Q,1}[Array{Q,1}(undef,currSize[a]) for a = 1:ndims(mps[i])]
@@ -103,27 +102,40 @@ function makeqMPS(Qlabels::Array{Array{Q,1},1},mps::MPS,arrows::Array{Bool,1}...
 end
 
 """
-    makeqMPS(Qlabels,mps[,arrows,newnorm=,setflux=,flux=,randomize=,override=])
+    makeqMPS(Qlabels,mps[,newnorm=true,setflux=false,flux=...,randomize=true,override=true,lastfluxzero=false])
 
 creates quantum number MPS from regular MPS according to `Qlabels`
 
-# Arguments
+# Optional arguments
 + `mps::MPS`: dense MPS
-+ `Qlabels::Array{Qnum,1}`: quantum number labels on each physical index (uniform physical indices)
-+ `arrows::Array{Bool,1}`: first entry of this tuple is the arrow convention on MPS tensors (default: [false,true,true])
++ `Qlabels::Array{Array{Qnum,1},1}`: quantum number labels on each physical index (assigns physical index labels mod size of this vector)
 + `newnorm::Bool`: set new norm of the MPS tensor
 + `setflux::Bool`: toggle to force this to be the total flux of the MPS tensor
 + `flux::Qnum`: quantum number to force total MPS flux to be if setflux=true
 + `randomize::Bool`: randomize last tensor if flux forces a zero tensor
++ `lastfluxzero::Bool`: determines whether the rightmost flux should be zero or not
 """
-function makeqMPS(Qlabels::Array{Q,1},mps::MPS,arrows::Array{Bool,1}...;newnorm::Bool=true,setflux::Bool=false,
+function makeqMPS(Qlabels::Array{Q,1},mps::MPS;newnorm::Bool=true,setflux::Bool=false,
   flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false)::MPS where Q <: Qnum
-  return makeqMPS([Qlabels],mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
+  return makeqMPS([Qlabels],mps,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
 end
 
-function makeqMPS(Qlabels::W,arr::Union{network,Array},arrows::Array{Bool,1}...;oc::Integer=1,newnorm::Bool=true,setflux::Bool=false,
+"""
+    makeqMPS(Qlabels,arr[,newnorm=true,setflux=false,flux=...,randomize=true,override=true,lastfluxzero=false])
+
+creates quantum number MPS from an input array or `network` (`arr`) according to `Qlabels`
+
+# Optional arguments:
++ `mps::MPS`: dense MPS
++ `Qlabels::Array{Array{Qnum,1},1}`: quantum number labels on each physical index (assigns physical index labels mod size of this vector)
++ `newnorm::Bool`: set new norm of the MPS tensor
++ `setflux::Bool`: toggle to force this to be the total flux of the MPS tensor
++ `flux::Qnum`: quantum number to force total MPS flux to be if setflux=true
++ `randomize::Bool`: randomize last tensor if flux forces a zero tensor
++ `lastfluxzero::Bool`: determines whether the rightmost flux should be zero or not
+"""
+function makeqMPS(Qlabels::W,arr::Union{network,Array};oc::Integer=1,newnorm::Bool=true,setflux::Bool=false,
   flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false)::MPS where W <: Union{Array{Array{Q,1},1},Array{Q,1}} where Q <: Qnum
   mps = MPS(arr,oc=oc)
-  return makeqMPS(Qlabels,mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
+  return makeqMPS(Qlabels,mps,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
 end
-export makeqMPS

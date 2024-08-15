@@ -10,22 +10,20 @@
 #
 
 """
-    mpo = makeqMPO(Qlabels,mpo[,arrows])
+    mpo = makeqMPO(Qlabels,mpo)
 
 Generates quantum number MPO from a dense Hamiltonian based on `Qlabels`
 
 # Arguments:
 + `mpo::MPO`: dense MPO
 + `Qlabels::Array{Array{Qnum,1},1}`: quantum numbers for physical indices (modulus size of vector)
-+ `arrows::Array{Bool,1}`: arrow convention for quantum numbers (default: [false,false,true,true])
 """
-function makeqMPO(Qlabels::Array{Array{Q,1},1},mpo::MPO,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1)::MPO where Q <: Qnum
-  Ns = infinite ? 3*unitcell*length(mpo) : length(mpo)
+function makeqMPO(Qlabels::Array{Array{Q,1},1},mpo::MPO) where Q <: Qnum
+  Ns = length(mpo)
   W = elnumtype(mpo)
   QtensVec = Array{Qtens{W,Q},1}(undef, Ns)
 
   storeQnumMat = [Q()]
-  theseArrows = length(arrows) == 0 ? Bool[false,false,true,true] : arrows[1]
   @inbounds for w = 1:Ns
     i = (w-1) % length(mpo) + 1
     QnumMat = Array{Q,1}[Array{Q,1}(undef,size(mpo[i],a)) for a = 1:ndims(mpo[i])]
@@ -54,26 +52,20 @@ function makeqMPO(Qlabels::Array{Array{Q,1},1},mpo::MPO,arrows::Array{Bool,1}...
     QtensVec[i] = Qtens(mpo[i],baseQtens)
   end
   T = prod(a->eltype(mpo[a])(1),1:length(mpo))
-  if infinite
-    finalQtensVec = QtensVec[unitcell*length(mpo)+1:2*unitcell*length(mpo)]
-  else
-    finalQtensVec = QtensVec
-  end
-  finalMPO = MPO(typeof(T),finalQtensVec)
+  finalMPO = MPO(typeof(T),QtensVec)
   return finalMPO
 end
 
 """
-    mpo = makeqMPO(Qlabels,mpo[,arrows])
+    mpo = makeqMPO(Qlabels,mpo)
 
 Generates quantum number MPO from a dense Hamiltonian based on `Qlabels`
 
 # Arguments:
 + `mpo::MPO`: dense MPO
 + `Qlabels::Array{Qnum,1}`: quantum numbers for physical indices (uniform)
-+ `arrows::Array{Bool,1}`: arrow convention for quantum numbers (default: [false,false,true,true])
 """
-function makeqMPO(Qlabels::Array{Q,1},mpo::MPO,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1)::MPO where Q <: Qnum
-  return makeqMPO([Qlabels],mpo,arrows...,infinite=infinite,unitcell=unitcell)
+function makeqMPO(Qlabels::Array{Q,1},mpo::MPO) where Q <: Qnum
+  return makeqMPO([Qlabels],mpo)
 end
 export makeqMPO

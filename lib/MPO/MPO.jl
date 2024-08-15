@@ -12,7 +12,7 @@
 """
     mpo = MPO(H[,regtens=false])
 
-constructor for MPO with tensors `H` either a vector of tensors or the MPO. `regtens` outputs with the julia Array type
+constructor for MPO with an array of `TensType` `H`; `regtens` outputs with the julia Array type
 """
 function MPO(H::Array{W,1};regtens::Bool=false) where W <: TensType
   T = typeof(prod(a->eltype(H[a])(1),1:length(H)))
@@ -27,7 +27,7 @@ end
 """
     mpo = MPO(T,H[,regtens=false])
 
-constructor for MPO with tensors `H` either a vector of tensors or the `MPO`; can request an element type `T` for the tensors. `regtens` outputs with the julia Array type
+constructor for MPO with an array of `TensType` `H`; can change the element type `T` for the tensors; `regtens` outputs with the julia Array type
 """
 function MPO(T::DataType,H::Array{W,1};regtens::Bool=false) where W <: TensType
   if W <: AbstractArray
@@ -57,53 +57,111 @@ function MPO(T::DataType,H::Array{W,1};regtens::Bool=false) where W <: TensType
   return matrixproductoperator{eltype(finalH)}(network(finalH))
 end
 
+"""
+    mpo = MPO(T,H[,regtens=false])
+
+constructor for MPO with a `network` `H`; can change the element type `T` for the tensors; `regtens` outputs with the julia Array type
+"""
 function MPO(T::DataType,H::network;regtens::Bool=false)
   return MPO(T,H.net,regtens=regtens)
 end
 
+"""
+    mpo = MPO(T,H[,regtens=false])
+
+constructor for MPO with an MPO `H`; can change the element type `T` for the tensors; `regtens` outputs with the julia Array type
+"""
 function MPO(T::DataType,mpo::MPO;regtens::Bool=false)
   return MPO(T,mpo.H,regtens=regtens)
 end
 
+"""
+    mpo = MPO(H[,regtens=false])
+
+constructor for MPO with an MPO `H`; `regtens` outputs with the julia Array type
+"""
 function MPO(mpo::MPO;regtens::Bool=false)
   return MPO(mpo.H,regtens=regtens)
 end
 
+"""
+    mpo = MPO(H[,regtens=false])
+
+constructor for MPO with a `network` `H`; `regtens` outputs with the julia Array type
+"""
 function MPO(mpo::network;regtens::Bool=false)
   return MPO(mpo.net,regtens=regtens)
 end
 
-function MPO(Qlabels::Array{Array{Q,1},1},mpo::MPO,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
-  qmpo = makeqMPO(Qlabels,mpo,arrows...,infinite=infinite,unitcell=unitcell)
+"""
+    qmpo = MPO(Qlabels,mpo[,regtens=false])
+
+Creates a quantum number MPO `qmpo` from input `mpo` and `Qlabels`, a vector of `Qnum`
+
+See also: [`Qnum`](@ref)
+"""
+function MPO(Qlabels::Array{Array{Q,1},1},mpo::MPO) where Q <: Qnum
+  qmpo = makeqMPO(Qlabels,mpo)
   return qmpo
 end
 
+"""
+    qmpo,qmps = MPO(Qlabels,mpo,mps[,newnorm=true,setflux=false,flux=...,randomize=true,override=true,lastfluxzero=false])
+
+Creates a quantum number MPO `qmpo` from input `mpo` and `Qlabels`, a vector of `Qnum`; also returns a quantum number MPS `qmps` from input dense `mps`
 
 
+# Optional arguments
++ `mps::MPS`: dense MPS
++ `Qlabels::Array{Array{Qnum,1},1}`: quantum number labels on each physical index (assigns physical index labels mod size of this vector)
++ `newnorm::Bool`: set new norm of the MPS tensor
++ `setflux::Bool`: toggle to force this to be the total flux of the MPS tensor
++ `flux::Qnum`: quantum number to force total MPS flux to be if setflux=true
++ `randomize::Bool`: randomize last tensor if flux forces a zero tensor
++ `lastfluxzero::Bool`: determines whether the rightmost flux should be zero or not
 
-#ease of use
-function MPO(Qlabels::Array{Q,1},mpo::MPO,mps::MPS,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
-  qmpo = makeqMPO([Qlabels],mpo,arrows...,infinite=infinite,unitcell=unitcell)
-  qpsi = makeqMPS([Qlabels],mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
+See also: [`Qnum`](@ref)
+"""
+function MPO(Qlabels::Array{Q,1},mpo::MPO,mps::MPS;newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
+  qmpo = makeqMPO([Qlabels],mpo)
+  qpsi = makeqMPS([Qlabels],mps,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
   return qmpo,qpsi
 end
 
 
+"""
+    qmpo = MPO(Qlabels,mpo)
 
-function MPO(Qlabels::Array{Q,1},mpo::MPO,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
-  qmpo = makeqMPO([Qlabels],mpo,arrows...,infinite=infinite,unitcell=unitcell)
+Creates a quantum number MPO `qmpo` from input `mpo` and `Qlabels`
+
+See also: [`Qnum`](@ref)
+"""
+function MPO(Qlabels::Array{Q,1},mpo::MPO) where Q <: Qnum
+  qmpo = makeqMPO([Qlabels],mpo)
   return qmpo
 end
 
 
+"""
+    qmpo,qmps = MPO(Qlabels,mpo,mps[,newnorm=true,setflux=false,flux=...,randomize=true,override=true,lastfluxzero=false])
+
+Creates a quantum number MPO `qmpo` from input `mpo` and an array of quantum number labels `Qlabels`, a vector of `Qnum`; also returns a quantum number MPS `qmps` from input dense `mps`
 
 
+# Optional arguments
++ `mps::MPS`: dense MPS
++ `Qlabels::Array{Array{Qnum,1},1}`: quantum number labels on each physical index (assigns physical index labels mod size of this vector)
++ `newnorm::Bool`: set new norm of the MPS tensor
++ `setflux::Bool`: toggle to force this to be the total flux of the MPS tensor
++ `flux::Qnum`: quantum number to force total MPS flux to be if setflux=true
++ `randomize::Bool`: randomize last tensor if flux forces a zero tensor
++ `lastfluxzero::Bool`: determines whether the rightmost flux should be zero or not
 
-
-
-function MPO(Qlabels::Array{Array{Q,1},1},mpo::MPO,mps::MPS,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
-  qmpo = makeqMPO(Qlabels,mpo,arrows...,infinite=infinite,unitcell=unitcell)
-  qpsi = makeqMPS(Qlabels,mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
+See also: [`Qnum`](@ref)
+"""
+function MPO(Qlabels::Array{Array{Q,1},1},mpo::MPO,mps::MPS;newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
+  qmpo = makeqMPO(Qlabels,mpo)
+  qpsi = makeqMPS(Qlabels,mps,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
   return qmpo,qpsi
 end
 

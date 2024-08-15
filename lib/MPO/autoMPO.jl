@@ -397,7 +397,7 @@ function MPO(opstring::MPOterm,reverse::Bool=true,countreduce::intType=100,sweep
     value_mpo_vec[i] = 0
   end
 
-  #=Threads.@threads=# for a in regularterms
+  Threads.@threads for a in regularterms
 
     numthread = Threads.threadid()
 

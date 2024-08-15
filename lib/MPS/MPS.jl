@@ -10,9 +10,9 @@
 #
 
 """
-    psi = MPS(A[,regtens=false,oc=1])
+    psi = MPS(A[,regtens=false,oc=psi.oc,type=...])
 
-Constructs `psi` for MPS with tensors `A` (Array of tensors or MPS) with orthogonality center `oc`. `regtens` avoids conversion to `denstens` type (defaulted to perform the conversion for efficiency)
+Constructs `psi` for MPS with tensors `A` (Array of tensors or MPS) with orthogonality center `oc`. `regtens` avoids conversion to `denstens` type (defaulted to perform the conversion for efficiency); `type` defaults to the input type of the tensors in `psi`
 """
 function MPS(psi::Array{W,1};regtens::Bool=false,oc::Integer=1,type::DataType=eltype(psi[1])) where W <: TensType
   if W <: densTensType
@@ -37,38 +37,22 @@ function MPS(psi::Array{W,1};regtens::Bool=false,oc::Integer=1,type::DataType=el
 end
 
 """
-    psi = MPS(A[,regtens=false,oc=1])
+    psi = MPS(A[,regtens=false,oc=psi.oc,type=...])
 
-Constructs `psi` for MPS with tensors `A` (MPS format) with orthogonality center `oc`. `regtens` avoids conversion to `denstens` type (defaulted to perform the conversion for efficiency)
+Constructs `psi` for MPS with tensors `A` (MPS format) with orthogonality center `oc`. `regtens` avoids conversion to `denstens` type (defaulted to perform the conversion for efficiency); `type` defaults to the input type of the tensors in `psi`
 """
 function MPS(psi::MPS;regtens::Bool=false,oc::Integer=psi.oc,type::DataType=eltype(psi[1]))
   return MPS(psi.A,regtens=regtens,oc=oc,type=type)
 end
 
 """
-    psi = MPS(A[,regtens=false,oc=1])
+    psi = MPS(A[,regtens=false,oc=psi.oc,type=...])
 
-Constructs `psi` for MPS with tensors `A` (`network`) with orthogonality center `oc`. `regtens` avoids conversion to `denstens` type (defaulted to perform the conversion for efficiency)
+Constructs `psi` for MPS with tensors `A` (`network`) with orthogonality center `oc`. `regtens` avoids conversion to `denstens` type (defaulted to perform the conversion for efficiency); `type` defaults to the input type of the tensors in `psi`
 """
 function MPS(psi::network;regtens::Bool=false,oc::Integer=psi.oc,type::DataType=eltype(psi[1]))
   return MPS(psi.net,regtens=regtens,oc=oc,type=type)
 end
-
-#=
-"""
-  psi = MPS(A[,regtens=false,oc=1,type=eltype(A[1])])
-
-Constructs `psi` for MPS with tensors `A` (Array of tensors or MPS) with orthogonality center `oc`. `regtens` avoids conversion to `denstens` type (defaulted to perform the conversion for efficiency)
-"""
-function MPS(B::Array{W,1};regtens::Bool=false,oc::Integer=1,type::DataType=eltype(B[1])) where W <: Array
-  if !regtens
-    MPSvec = [tens(convert(Array{type,ndims(B[i])},copy(B[i]))) for i = 1:size(B,1)]
-  else
-    MPSvec = [convert(Array{type,ndims(B[i])},copy(B[i])) for i = 1:size(B,1)]
-  end
-  return matrixproductstate{eltype(MPSvec)}(MPSvec,oc)
-end
-=#
 
 """
     psi = MPS(T,A[,regtens=false,oc=1])
@@ -147,13 +131,21 @@ end
 
 
 
+"""
+    qmps = MPS(Qlabels[,oc=1,type=Float64])
 
+Creates a quantum number MPS `qmps` with quantum numbers assigned from an array of `qnum`s in `Qlabels` with orthogonality center `oc` and data type `type`; `Ns` is the number of sites in the system
+"""
 function MPS(Qlabels::Array{Q,1},Ns::Integer;oc::Integer=1,type::DataType=Float64) where Q <: Qnum
   newQlabels = [Qlabels for w = 1:Ns]
   return MPS(newQlabels,Ns,oc=oc,type=type)
 end
 
+"""
+    qmps = MPS(Qlabels[,oc=1,type=Float64])
 
+Creates a quantum number MPS `qmps` with quantum numbers assigned from an array of an array of `qnum` (non-uniform and can be shorter than `Ns`, which will cause the program to repeat a shorter number) `Qlabels` with orthogonality center `oc` and data type `type`; `Ns` is the number of sites in the system
+"""
 function MPS(Qlabels::Array{Array{Q,1},1},Ns::Integer;oc::Integer=1,type::DataType=Float64) where Q <: Qnum
   physindvec = [length(Qlabels[(i-1) % length(Qlabels) + 1]) for i = 1:Ns]
   psi = MPS(physindvec,oc=oc,type=type)
@@ -161,15 +153,33 @@ function MPS(Qlabels::Array{Array{Q,1},1},Ns::Integer;oc::Integer=1,type::DataTy
   return qpsi
 end
 
+"""
+    qmps = MPS(Qlabels[,oc=1,type=Float64])
 
+Creates a quantum number MPS `qmps` with quantum numbers assigned from an array of `qnum` vectors `Qlabels` with orthogonality center `oc` and data type `type`
+"""
 function MPS(Qlabels::Array{Array{Q,1},1};oc::Integer=1,type::DataType=Float64) where Q <: Qnum
   return MPS(Qlabels,length(Qlabels),oc=oc,type=type)
 end
 
+"""
+    qmps = MPS(Qlabels,arr[,oc=1,newnorm=true,setflux=false,flux=...,randomize=true,override=true,lastfluxzero=false])
 
-function MPS(Tarray::Array{W,1},Qlabels::Array{Array{Q,1},1},arrows::Array{Bool,1}...;newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false)::MPS where {Q <: Qnum, W <: densTensType}
+Converts an array `arr` into a quantum number MPS `qmps` with quantum numbers assigned from an array of `qnum` vectors `Qlabels`
 
-  A = MPS(Tarray,arrows...)
+# Optional arguments
++ `mps::MPS`: dense MPS
++ `Qlabels::Array{Array{Qnum,1},1}`: quantum number labels on each physical index (assigns physical index labels mod size of this vector)
++ `oc::Integer`: Integer
++ `newnorm::Bool`: set new norm of the MPS tensor
++ `setflux::Bool`: toggle to force this to be the total flux of the MPS tensor
++ `flux::Qnum`: quantum number to force total MPS flux to be if setflux=true
++ `randomize::Bool`: randomize last tensor if flux forces a zero tensor
++ `lastfluxzero::Bool`: determines whether the rightmost flux should be zero or not
+"""
+function MPS(Qlabels::Array{Array{Q,1},1},Tarray::Array{W,1},;oc::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false)::MPS where {Q <: Qnum, W <: densTensType}
+
+  A = MPS(Tarray,oc=oc)
   return makeqMPS(Qlabels,A)
 end
 
@@ -204,30 +214,83 @@ end
 
 
 
+"""
+    MPS(Qlabels,mps[,newnorm=true,setflux=false,flux=...,randomize=true,override=true,lastfluxzero=false])
 
-function MPS(Qlabels::Array{Q,1},mps::MPS,mpo::MPO,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
-  qmpo = makeqMPO([Qlabels],mpo,arrows...,infinite=infinite,unitcell=unitcell)
-  qpsi = makeqMPS([Qlabels],mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
-  return qpsi,qmpo
-end
+Converts an MPS `mps` into a quantum number version with `Qlabels` assigned uniformly to every site
 
-function MPS(Qlabels::Array{Q,1},mps::MPS,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
-  qpsi = makeqMPS([Qlabels],mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
+# Optional arguments
++ `mps::MPS`: dense MPS
++ `Qlabels::Array{Array{Qnum,1},1}`: quantum number labels on each physical index (assigns physical index labels mod size of this vector)
++ `newnorm::Bool`: set new norm of the MPS tensor
++ `setflux::Bool`: toggle to force this to be the total flux of the MPS tensor
++ `flux::Qnum`: quantum number to force total MPS flux to be if setflux=true
++ `randomize::Bool`: randomize last tensor if flux forces a zero tensor
++ `lastfluxzero::Bool`: determines whether the rightmost flux should be zero or not
+"""
+function MPS(Qlabels::Array{Q,1},mps::MPS;newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
+  qpsi = makeqMPS([Qlabels],mps,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
   return qpsi
 end
 
+"""
+    MPS(Qlabels,mps,mpo[,newnorm=true,setflux=false,flux=...,randomize=true,override=true,lastfluxzero=false])
 
-function MPS(Qlabels::Array{Array{Q,1},1},mps::MPS,mpo::MPO,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
-  qmpo = makeqMPO(Qlabels,mpo,arrows...,infinite=infinite,unitcell=unitcell)
-  qpsi = makeqMPS(Qlabels,mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
+Converts an MPS `mps` and MPO `mpo` into a an array of quantum number arrays with quantum numbers assigned from an array of `qnum` vectors `Qlabels`
+
+# Optional arguments
++ `mps::MPS`: dense MPS
++ `Qlabels::Array{Array{Qnum,1},1}`: quantum number labels on each physical index (assigns physical index labels mod size of this vector)
++ `newnorm::Bool`: set new norm of the MPS tensor
++ `setflux::Bool`: toggle to force this to be the total flux of the MPS tensor
++ `flux::Qnum`: quantum number to force total MPS flux to be if setflux=true
++ `randomize::Bool`: randomize last tensor if flux forces a zero tensor
++ `lastfluxzero::Bool`: determines whether the rightmost flux should be zero or not
+"""
+function MPS(Qlabels::Array{Array{Q,1},1},mps::MPS,mpo::MPO;newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
+  qmpo = makeqMPO(Qlabels,mpo)
+  qpsi = makeqMPS(Qlabels,mps,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
   return qpsi,qmpo
 end
 
 
 
 
+"""
+    MPS(Qlabels,mps[,newnorm=true,setflux=false,flux=...,randomize=true,override=true,lastfluxzero=false])
 
-function MPS(Qlabels::Array{Array{Q,1},1},mps::MPS,arrows::Array{Bool,1}...;infinite::Bool=false,unitcell::Integer=1,newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
-  qpsi = makeqMPS(Qlabels,mps,arrows...,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
+Converts an MPS `mps` into a an array of quantum number arrays with quantum numbers assigned from an array of `qnum` vectors `Qlabels`
+
+# Optional arguments
++ `mps::MPS`: dense MPS
++ `Qlabels::Array{Array{Qnum,1},1}`: quantum number labels on each physical index (assigns physical index labels mod size of this vector)
++ `newnorm::Bool`: set new norm of the MPS tensor
++ `setflux::Bool`: toggle to force this to be the total flux of the MPS tensor
++ `flux::Qnum`: quantum number to force total MPS flux to be if setflux=true
++ `randomize::Bool`: randomize last tensor if flux forces a zero tensor
++ `lastfluxzero::Bool`: determines whether the rightmost flux should be zero or not
+"""
+function MPS(Qlabels::Array{Array{Q,1},1},mps::MPS;newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
+  qpsi = makeqMPS(Qlabels,mps,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
   return qpsi
+end
+
+"""
+    MPS(Qlabels,mps,mpo[,newnorm=true,setflux=false,flux=...,randomize=true,override=true,lastfluxzero=false])
+
+Converts an MPS `mps` and MPO `mpo` into a quantum number version with `Qlabels` assigned uniformly to every site
+
+# Optional arguments
++ `mps::MPS`: dense MPS
++ `Qlabels::Array{Array{Qnum,1},1}`: quantum number labels on each physical index (assigns physical index labels mod size of this vector)
++ `newnorm::Bool`: set new norm of the MPS tensor
++ `setflux::Bool`: toggle to force this to be the total flux of the MPS tensor
++ `flux::Qnum`: quantum number to force total MPS flux to be if setflux=true
++ `randomize::Bool`: randomize last tensor if flux forces a zero tensor
++ `lastfluxzero::Bool`: determines whether the rightmost flux should be zero or not
+"""
+function MPS(Qlabels::Array{Q,1},mps::MPS,mpo::MPO;newnorm::Bool=true,setflux::Bool=false,flux::Q=Q(),randomize::Bool=true,override::Bool=true,lastfluxzero::Bool=false) where Q <: Qnum
+  qmpo = makeqMPO([Qlabels],mpo)
+  qpsi = makeqMPS([Qlabels],mps,newnorm=newnorm,setflux=setflux,flux=flux,randomize=randomize,override=override,lastfluxzero=lastfluxzero)
+  return qpsi,qmpo
 end

@@ -26,12 +26,23 @@
 # any MPOs in between have the same arrow conventions as 2
 
 """
-    Lbound = makeBoundary(qind,newArrows[,retType=])
+    Lbound = makeBoundary(dualpsi,psi,mpovec...[,left=true,rightind=3])
 
-makes a boundary tensor `Lbound` for an input from the quantum numbers `qind` and arrows `newArrows`; can also define type of resulting Qtensor `retType` (default `Float64`)
+Creates boundary tensor `Lbound` from an input MPS `psi`, dual MPS `dualpsi`, and any number of MPOs `mpovec`; `left` controls whether to make the left or right boundary tensor; `rightind` is the number index of the MPS that corresponds to the right link index
 
 #Note:
 + dense tensors are just ones(1,1,1,...)
+
+Current environment convention is
+     LEFT              RIGHT
+   +--<-- 1          3 ---<--+
+   |                         |
+   |                         |
+   +-->-- 2          2 --->--+
+   |                         |
+   |                         |
+   +-->-- 3          1 --->--+
+
 
 See also: [`makeEnds`](@ref)
 """
@@ -85,7 +96,7 @@ function defaultBoundary(A::TensType)
 end
 
 """
-    Lbound = makeEdgeEnv(dualpsi,psi[,mpovec,boundary=defaultBoundary,left=true])
+    Lbound = makeEdgeEnv(dualpsi,psi,mpovec...[,boundary=defaultBoundary,left=true])
 
 Created leftmost boundary tensor for the MPS `psi`, dual MPS `dualpsi`, any number of MPOs `mpovec`; `boundary` creates a tensor of the appropriate type and `left` makes either a left (true) or right (false) tensor
 """
@@ -111,6 +122,18 @@ Generates first and last environments for a given system of variable MPOs
 + `mpovec::MPO`: MPOs
 + `Lbound::TensType`: left boundary
 + `Rbound::TensType`: right boundary
+
+
+Current environment convention is
+     LEFT              RIGHT
+   +--<-- 1          3 ---<--+
+   |                         |
+   |                         |
+   +-->-- 2          2 --->--+
+   |                         |
+   |                         |
+   +-->-- 3          1 --->--+
+
 """
 function makeEnds(dualpsi::MPS,psi::MPS,mpovec::MPO...;Lbound::TensType=defaultBoundary(psi[1]),Rbound::TensType=typeof(psi[end])())
   left = makeEdgeEnv(dualpsi,psi,mpovec...,boundary=Lbound)
@@ -128,6 +151,16 @@ Generates first and last environment tensors for a given system of variable MPOs
 + `mpovec::MPO`: MPOs
 + `Lbound::TensType`: left boundary
 + `Rbound::TensType`: right boundary
+
+Current environment convention is
+     LEFT              RIGHT
+   +--<-- 1          3 ---<--+
+   |                         |
+   |                         |
+   +-->-- 2          2 --->--+
+   |                         |
+   |                         |
+   +-->-- 3          1 --->--+
 """
 function makeEnds(psi::MPS,mpovec::MPO...;Lbound::TensType=defaultBoundary(psi[1]),Rbound::TensType=defaultBoundary(psi[1]))
   return makeEnds(psi,psi,mpovec...,Lbound=Lbound,Rbound=Rbound)
@@ -138,6 +171,16 @@ export makeEnds
     Lenv,Renv = makeEnv(dualpsi,psi,mpo[,Lbound=defaultBoundary,Rbound=defaultBoundary,Llabel="Lenv_",Rlabel="Renv_"])
 
 Generates environment tensors for a MPS (`psi` and its dual `dualpsi`) with boundaries `Lbound` and `Rbound`; labels `Llabel` and `Rlabel` are for large-types
+    
+Current environment convention is
+     LEFT              RIGHT
+   +--<-- 1          3 ---<--+
+   |                         |
+   |                         |
+   +-->-- 2          2 --->--+
+   |                         |
+   |                         |
+   +-->-- 3          1 --->--+
 """
 function makeEnv(dualpsi::MPS,psi::MPS,mpo::MPO...;Lbound::TensType=defaultBoundary(psi[1]),Rbound::TensType=defaultBoundary(psi[1]),Llabel::String="Lenv_",Rlabel::String="Renv_")
   Ns = length(psi)
@@ -168,6 +211,16 @@ end
     Lenv,Renv = makeEnv(psi,mpo[,Lbound=,Rbound=])
 
 Generates environment tensors for a MPS (`psi`) with boundaries `Lbound` and `Rbound`
+
+Current environment convention is
+     LEFT              RIGHT
+   +--<-- 1          3 ---<--+
+   |                         |
+   |                         |
+   +-->-- 2          2 --->--+
+   |                         |
+   |                         |
+   +-->-- 3          1 --->--+
 """
 function makeEnv(psi::MPS,mpo::MPO;Lbound::TensType=[0],Rbound::TensType=[0])
   return makeEnv(psi,psi,mpo,Lbound=Lbound,Rbound=Rbound)
