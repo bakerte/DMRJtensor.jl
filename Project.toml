@@ -5,7 +5,7 @@ version = "0.13.0"
 
 [compat]
 julia = "1.10.0"
-TensorPACK = "0.7.2"
+TensorPACK = "0.7.3"
 LinearAlgebra = "1.10.0"
 Distributed = "1.10.0"
 Printf = "1.10.0"
