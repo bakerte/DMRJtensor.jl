@@ -59,6 +59,8 @@ function MPO(T::DataType,H::Array{W,1};regtens::Bool=false) where W <: TensType
     for a = 1:length(newH)
       finalH[a] = tens{T}(newH[a])
     end
+  elseif W <: qarray
+    finalH = [Qtens(T,newH[w]) for w = 1:length(newH)]
   else
     finalH = newH
   end
