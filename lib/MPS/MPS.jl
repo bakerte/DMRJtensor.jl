@@ -64,6 +64,15 @@ function MPS(type::DataType,B::Union{MPS,Array{W,1}};regtens::Bool=false,oc::Int
 end
 
 """
+    cpsi,cmpo = MPS(T,psi,mpo[,oc=1])
+
+Converts `psi` (MPS) and `mpo` (MPO) to type given by `T`
+"""
+function MPS(type::DataType,psi::MPS,mpo::MPO;regtens::Bool=false,oc::Integer=1)
+  return MPS(psi,regtens=regtens,oc=oc,type=type),MPO(type,mpo,regtens=regtens)
+end
+
+"""
     psi = MPS(physindvec[,regtens=false,oc=1,type=Float64])
 
 Constructs `psi` for MPS of tensor type `type` by making empty tensors of size (1,`physindvec`[w],1) for w indexing `physindvec` with othrogonality center `oc`. `regtens` avoids conversion to `denstens` type (defaulted to perform the conversion for efficiency)

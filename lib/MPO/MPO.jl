@@ -25,6 +25,15 @@ function MPO(H::Array{W,1};regtens::Bool=false) where W <: TensType
 end
 
 """
+    cmpo,cpsi = MPS(T,mpo,psi[,oc=1])
+
+Converts `psi` (MPS) and `mpo` (MPO) to type given by `T`
+"""
+function MPO(type::DataType,psi::MPS,mpo::MPO;regtens::Bool=false,oc::Integer=1)
+  return MPO(psi,regtens=regtens,oc=oc,type=type),MPO(mpo,regtens=regtens,oc=oc,type=type)
+end
+
+"""
     mpo = MPO(T,H[,regtens=false])
 
 constructor for MPO with an array of `TensType` `H`; can change the element type `T` for the tensors; `regtens` outputs with the julia Array type

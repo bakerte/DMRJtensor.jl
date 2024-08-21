@@ -40,3 +40,6 @@ export TRG_square
 
 
 export makeqMPS
+
+
+export randMPS

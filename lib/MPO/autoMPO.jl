@@ -224,112 +224,6 @@ function prepare_autoInfo(opstring::MPOterm)
   return Ns,mpotype,base,Qnumvec,qarrayops,physind
 end
 
-
-#=
-function MPO(opstring::MPOterm,reverse::Bool=true)
-
-  Ns,mpotype,base,Qnumvec,qarrayops,physind = prepare_autoInfo(opstring)
-
-  mpo = 0
-  singlempo = 0
-
-
-  singlesite = [1 < length(opstring[w]) < 5 for w = 1:length(opstring)]
-  nosingles = findfirst(singlesite)
-  if typeof(nosingles) <: Integer
-
-    singleterms = Array{Array{mpotype,2},1}(undef,Ns)
-    for i = 1:Ns
-      Id = Array(base[i])
-      O = zero(Id)
-      singleterms[i] = mpotype[Id O; O Id]
-    end
-
-    singlempo = makeMPO(singleterms,physind)
-
-    if qarrayops
-      singlempo = makeqMPO(Qnumvec,singlempo)
-    end
-
-    terms = findall(singlesite)
-    for a in terms
-      ind = opstring[a][3]
-      value = opstring[a][1]
-      operator = opstring[a][2]
-
-
-      singlempo[ind][end,:,:,1] += operator * value
-
-      trailon = length(opstring[a]) % 2 == 0
-
-      if trailon
-        trailvec = opstring[a][end]
-        for g = 1:ind-1
-          checkzero = true
-          y = 0
-          while checkzero && y < physind[ind]
-            y += 1
-            x = 0
-            while checkzero && x < physind[ind]
-              x += 1
-              checkzero = searchindex(size(singleterms[g],1),x,y,1) == 0
-            end
-          end
-          if checkzero
-            singlempo[g][end,:,:,1] = trailvec[g]
-          else
-            singlempo[g][end,:,:,1] = contract(trailvec[g],2,singlempo[g][end,:,:,1],1)
-          end
-        end
-      end
-    end
-  end
-
-  regularterms = findall(w->!singlesite[w],1:length(singlesite))
-  mpovec = Array{Any,1}(undef,Threads.nthreads())
-  value_mpo_vec = Array{Any,1}(undef,Threads.nthreads())
-  for i = 1:length(mpovec)
-    mpovec[i] = 0
-    value_mpo_vec[i] = 0
-  end
-  Threads.@threads for a in regularterms
-
-    numthread = Threads.threadid()
-
-    if length(opstring) == 1
-      value_mpo_vec[numthread] += opstring[1]
-    else
-
-      value = opstring[a][1]
-      Opvec = [opstring[a][x] for x = 2:2:length(opstring[a])]
-      posvec = [opstring[a][x] for x = 3:2:length(opstring[a])]
-
-      trailon = length(opstring[a]) % 2 == 0
-      if trailon
-        mpovec[numthread] += mpoterm(value,Opvec,posvec,base,opstring[a][end])
-      else
-        mpovec[numthread] += mpoterm(value,Opvec,posvec,base)
-      end
-    end
-  end
-  for i = 1:length(mpovec)
-    mpo += mpovec[i]
-    mpo += value_mpo_vec[i]
-  end
-
-  mpo += singlempo
-
-  if reverse && typeof(mpo[1]) <: qarray
-    for a = 1:length(mpo)
-      mpo[a] = permutedims!(mpo[a],[1,3,2,4])
-    end
-  end
-
-  return mpo
-end
-=#
-
-
 function MPO(opstring::MPOterm,reverse::Bool=true,countreduce::intType=100,sweeps::intType=2)
 
   Ns,mpotype,base,Qnumvec,qarrayops,physind = prepare_autoInfo(opstring)
@@ -361,28 +255,31 @@ function MPO(opstring::MPOterm,reverse::Bool=true,countreduce::intType=100,sweep
       value = opstring[a][1]
       operator = opstring[a][2]
 
+      if !isapprox(value,0)
 
-      singlempo[ind][end,:,:,1] += operator * value
 
-      trailon = length(opstring[a]) % 2 == 0
+        singlempo[ind][end,:,:,1] += operator * value
 
-      if trailon
-        trailvec = opstring[a][end]
-        for g = 1:ind-1
-          checkzero = true
-          y = 0
-          while checkzero && y < physind[ind]
-            y += 1
-            x = 0
-            while checkzero && x < physind[ind]
-              x += 1
-              checkzero = searchindex(size(singleterms[g],1),x,y,1) == 0
+        trailon = length(opstring[a]) % 2 == 0
+
+        if trailon
+          trailvec = opstring[a][end]
+          for g = 1:ind-1
+            checkzero = true
+            y = 0
+            while checkzero && y < physind[ind]
+              y += 1
+              x = 0
+              while checkzero && x < physind[ind]
+                x += 1
+                checkzero = searchindex(size(singleterms[g],1),x,y,1) == 0
+              end
             end
-          end
-          if checkzero
-            singlempo[g][end,:,:,1] = trailvec[g]
-          else
-            singlempo[g][end,:,:,1] = contract(trailvec[g],2,singlempo[g][end,:,:,1],1)
+            if checkzero
+              singlempo[g][end,:,:,1] = trailvec[g]
+            else
+              singlempo[g][end,:,:,1] = contract(trailvec[g],2,singlempo[g][end,:,:,1],1)
+            end
           end
         end
       end
@@ -409,11 +306,14 @@ function MPO(opstring::MPOterm,reverse::Bool=true,countreduce::intType=100,sweep
       Opvec = [opstring[a][x] for x = 2:2:length(opstring[a])]
       posvec = [opstring[a][x] for x = 3:2:length(opstring[a])]
 
-      trailon = length(opstring[a]) % 2 == 0
-      if trailon
-        mpovec[numthread] += mpoterm(value,Opvec,posvec,base,opstring[a][end])
-      else
-        mpovec[numthread] += mpoterm(value,Opvec,posvec,base)
+      if !isapprox(value,0)
+
+        trailon = length(opstring[a]) % 2 == 0
+        if trailon
+          mpovec[numthread] += mpoterm(value,Opvec,posvec,base,opstring[a][end])
+        else
+          mpovec[numthread] += mpoterm(value,Opvec,posvec,base)
+        end
       end
     end
   end
@@ -438,7 +338,7 @@ function MPO(opstring::MPOterm,reverse::Bool=true,countreduce::intType=100,sweep
 
     counter = zeros(Int64,length(manyvec))
 
-    #=Threads.@threads=# for a in manysiteterms
+    Threads.@threads for a in manysiteterms
 
       numthread = Threads.threadid()
 
@@ -446,119 +346,43 @@ function MPO(opstring::MPOterm,reverse::Bool=true,countreduce::intType=100,sweep
       Opvec = [opstring[a][x] for x = 2:2:length(opstring[a])]
       posvec = [opstring[a][x] for x = 3:2:length(opstring[a])]
 
-      trailon = length(opstring[a]) % 2 == 0
-      if trailon
-        manyvec[numthread] *= mpoterm(value,Opvec,posvec,base,opstring[a][end])
-      else
-        manyvec[numthread] *= mpoterm(value,Opvec,posvec,base)
-      end
+      if !isapprox(value,0)
 
-      counter[numthread] += 1
+        trailon = length(opstring[a]) % 2 == 0
+        if trailon
+          manyvec[numthread] *= mpoterm(value,Opvec,posvec,base,opstring[a][end])
+        else
+          manyvec[numthread] *= mpoterm(value,Opvec,posvec,base)
+        end
 
-      if counter[numthread] % countreduce == 0
-#        println()
-#        println(numthread," ",size.(manyvec[numthread].H))
-        manyvec[numthread] = manyvec[numthread] #compressMPO!(v)
-#        println(numthread," ",size.(manyvec[numthread].H))
-      end
-
-    end
-#=
-    #=Threads.@threads=# for w = 1:length(manyvec)
-      if manyvec[w] != 0 && !isapprox(sum(p->norm(manyvec[w][p]),1:length(manyvec[w])),0)
-        manyvec[w] = compressMPO!(manyvec[w],sweeps=sweeps)
+        counter[numthread] += 1
+  #=
+        if counter[numthread] % countreduce == 0
+          compressMPO!(manyvec[numthread])
+        end
+        =#
       end
     end
-=#
 
     for i = 1:length(manyvec)
-      manympo *= manyvec[i] # compressMPO!(manyvec[i],sweeps=sweeps) #manyvec[i]
+      manympo *= manyvec[i]
     end
 
     if !isapprox(sum(p->norm(manympo[p]),1:length(manympo)),0)
-      mpo *= manympo #compressMPO!(manympo,sweeps=sweeps)
-      #compressMPO!(mpo,sweeps=sweeps)
+      mpo *= manympo
     end
-
-
-#mpo = manyvec[1]
   end
 
-
-
-
-
-
-
-
-
-  if reverse # && typeof(mpo[1]) <: qarray
+  if reverse
     for a = 1:length(mpo)
       mpo[a] = permutedims!(mpo[a],[1,3,2,4])
     end
   end
-
-
-
 
   return mpo #compressMPO!(mpo)
 end
 
 
-
-#=
-function expMPO(opstring::MPOterm)
-
-  Ns,mpotype,base,Qnumvec,qarrayops = prepare_autoInfo(opstring)
-
-  lambda = opstring[1][1]
-
-  true_expterms = [mpotype[base[i] zero(base[i]) zero(base[i]); zero(base[i]) lambda*base[i] zero(base[i]); zero(base[i]) zero(base[i]) base[i]] for i = 1:Ns]
-
-
-  mpo = makeMPO(true_expterms,physind)
-  if qarrayops
-    mpo = makeqMPO(Qnumvec,mpo)
-  end
-
-  firstop = [true for i = 1:Ns]
-  lastop = [true for i = 1:Ns]
-
-  i = 0
-  while sum(firstop) != 0 && sum(secondop) != 0 && i < length(opstring)
-    i += 1
-
-    if opstring[i][3] < opstring[i][5]
-      a = opstring[i][3]
-      op1 = opstring[i][2]
-      b = opstring[i][5]
-      op2 = opstring[i][4]
-    else
-      a = opstring[i][5]
-      op1 = opstring[i][4]
-      b = opstring[i][3]
-      op2 = opstring[i][2]
-    end
-
-    if firstop[b]
-      mpo[b][2,:,:,1] = op2
-      firstop[b] = false
-    end
-    if secondop[a]
-      mpo[a][end,:,:,2] = ops1
-      secondop[a] = false
-    end
-  end
-
-  if reverse && typeof(mpo[1]) <: qarray
-    for a = 1:length(mpo)
-      mpo[a] = permutedims!(mpo[a],[1,3,2,4])
-    end
-  end
-
-  return mpo
-end
-=#
 function expmpoterm(lambda::Number,Op1::TensType,Op2::TensType,trail::U...) where U <: TensType
 
   mpotype = typeof(typeof(lambda)(1)*eltype(Op1)(1)*eltype(Op2)(1))
@@ -593,53 +417,19 @@ function expMPO(lambda::Number,op1::Array,op2::Array,trailterm::U...;start::Inte
 
   physind = [size(op1[w],2) for w = 1:length(op1)]
 
-  base = [expmpoterm(lambda,op1[w],op2[w],trailterm...) for w = 1:Ns] #[zeros(mpotype,i == 1 ? 1 : 3,physind,physind,i == Ns ? 1 : 3) for i = 1:Ns]
+  base = [expmpoterm(lambda,op1[w],op2[w],trailterm...) for w = 1:Ns]
   mpo = makeMPO(base,physind)
-#=
-  Id = eye(mpotype,physind)
-  if typeof(op1) <: qarray
-    Qlabel = recoverQNs(1,op1)
-    mpo = makeqMPO(Qlabel,mpo)
-    Id = Qtens(Qlabel,Id)
-  end
-
-  lambda_Id = lambda*Id
-
-  for i = 1:Ns
-    if i > 1
-      mpo[i][1,:,:,1] = Id
-      if start <= i <= stop
-        mpo[i][2,:,:,1] = op2
-      end
-    end
-    if i < Ns
-      mpo[i][end,:,:,end] = Id
-      if start <= i <= stop
-        mpo[i][end,:,:,2] = op1
-      end
-    end
-    if 1 < i < Ns
-      mpo[i][2,:,:,2] = lambda_Id
-    end
-  end
-
-  if reverse && typeof(mpo[1]) <: qarray
-    for a = 1:length(mpo)
-      mpo[a] = permutedims!(mpo[a],[1,3,2,4])
-    end
-  end
-=#
   return mpo
 end
 export expMPO
 
 
 """
-  A + B
+    A + B
 
 functionality for adding (similar to direct sum) of MPOs together; uses joinindex function to make a combined MPO
 
-Note: Calls `add!` so will run deparallelization on MPOs
+Note: Calls `add!` so will run `compressMPO!` on the result
 
 See also: [`deparallelization`](@ref) [`add!`](@ref) [`mult!`](@ref)
 """
@@ -648,41 +438,6 @@ function +(X::MPO...)
   return finalMPO
 end
 
-#=
-function +(X::MPO...;nthreads::Integer=Threads.nthreads())
-
-  sizeparts = cld(length(X),nthreads)
-  startparts = Array{intType,1}(undef,nthreads+1)
-  startparts[1] = 0
-  for i = 1:nthreads-1
-    startparts[i+1] = sizeparts*i
-  end
-  startparts[end] = length(X)
-
-  Z = Array{MPO,1}(undef,nthreads)
-
-  #=Threads.@threads =#for w = 1:nthreads
-
-    checktype = typeof(prod(w->eltype(X[w])(1),startparts[w]+1:startparts[w+1]))
-    if checktype != eltype(X[startparts[w]+1])
-      C = MPO(checktype,copy(X[startparts[w]+1]))
-    else
-      C = copy(X[startparts[w]+1])
-    end
-    for k = startparts[w]+2:startparts[w+1]
-      add!(C,X[k])
-    end
-    Z[w] = C
-  end
-  R = Z[1]
-  for w = 2:nthreads
-    R += Z[w]
-  end
-  return R
-end
-=#
-
-#  import .QN.add!
 """
   add!(A,B)
 
@@ -694,7 +449,7 @@ See also: [`deparallelization`](@ref) [`+`](@ref)
 """
 function add!(A::MPO,B::MPO)
   mult!(A,B)
-  return deparallelize!(A)
+  return A #compressMPO!(A)
 end
 
 """
@@ -720,7 +475,7 @@ function *(X::MPO...;fct::Function=mult!)
 
     R = Array{MPO,1}(undef,nthreads)
 
-    #=Threads.@threads=# for w = 1:nthreads
+    Threads.@threads for w = 1:nthreads
 
       start = startparts[w] + 1
       stop = startparts[w+1]

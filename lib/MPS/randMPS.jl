@@ -12,7 +12,7 @@
 """
     psi = randMPS(T,physindsize,Ns[,oc=1,m=1])
 
-Generates MPS with data type `T`, uniform physical index size `physindsize`, with `Ns` sites, orthogonality center `oc`, and bond dimension `m`.
+Generates random MPS with data type `T`, uniform physical index size `physindsize` (integer), with `Ns` sites, orthogonality center `oc`, and bond dimension `m`.
 """
 function randMPS(T::DataType,physindsize::Integer,Ns::Integer;oc::Integer=1,m::Integer=1)
   physindvec = [physindsize for i = 1:Ns]
@@ -22,7 +22,7 @@ end
 """
     psi = randMPS(T,physindvec,Ns[,oc=1,m=1])
 
-Generates MPS with data type `T`, physical index size vector `physindvec` (repeating over `Ns` sites), with `Ns` sites, orthogonality center `oc`, and bond dimension `m`.
+Generates random MPS with data type `T`, physical index size vector `physindvec` (repeating over `Ns` sites), with `Ns` sites, orthogonality center `oc`, and bond dimension `m`.
 """
 function randMPS(T::DataType,physindvec::Array{W,1};oc::Integer=1,m::Integer=1) where W <: Integer
   Ns = length(physindvec)
@@ -57,26 +57,36 @@ end
 """
     psi = randMPS(physindsize,Ns[,oc=1,m=1])
 
-Generates MPS with data type Float64, uniform physical index size `physindsize`, with `Ns` sites, orthogonality center `oc`, and bond dimension `m`.
+Generates random MPS with data type Float64, uniform physical index size `physindsize`, with `Ns` sites, orthogonality center `oc`, and bond dimension `m`.
 """
 function randMPS(physindsize::Integer,Ns::Integer;oc::Integer=1,m::Integer=1,datatype::DataType=Float64)
   return randMPS(datatype,physindsize,Ns,oc=oc,m=m)
 end
 
 """
-    psi = randMPS(T,physindvec,Ns[,oc=1,m=1])
+    psi = randMPS(physindvec[,oc=1,m=1])
 
-Generates MPS with data type Float64, physical index size vector `physindvec` (repeating over `Ns` sites), with `Ns` sites, orthogonality center `oc`, and bond dimension `m`.
+Generates random MPS with data type Float64, physical index size vector `physindvec`, with `Ns` sites, orthogonality center `oc`, and bond dimension `m`.
 """
 function randMPS(physindvec::Array{W,1};oc::Integer=1,m::Integer=1,datatype::DataType=Float64) where W <: Integer
   return randMPS(datatype,physindvec,oc=oc,m=m)
 end
 
+"""
+    psi = randMPS(physindvec,Ns[,oc=1,m=1])
+
+Generates random MPS with data type Float64, physical index size vector `physindvec` (repeating over `Ns` sites, `physindvec` can be smaller than `Ns` where the inputs will repeat), orthogonality center `oc`, and bond dimension `m`.
+"""
 function randMPS(physindvec::Array{W,1},Ns::Integer;oc::Integer=1,m::Integer=1,datatype::DataType=Float64) where W <: Integer
   newphysindvec = [physindvec[(w-1) % length(physindvec) + 1] for w = 1:Ns]
   return randMPS(datatype,newphysindvec,oc=oc,m=m)
 end
 
+"""
+    newpsi = randMPS(psi[,oc=...,m=...,datatype=...,physind=...])
+
+Generates random MPS from an input MPS `psi`; parameters taken from `psi` for orthogonality center, bond dimension, data type in each tensor, and physical indices
+"""
 function randMPS(psi::MPS;oc::Integer=psi.oc,m::Integer=maximum([size(psi[w],3) for w = 1:length(psi)]),datatype::DataType=eltype(psi),physind::Union{intType,Array{intType,1}} = [size(psi[w],2) for w = 1:length(psi)])
   if typeof(psi[1]) <: qarray
     Ns = length(psi)
@@ -89,6 +99,11 @@ function randMPS(psi::MPS;oc::Integer=psi.oc,m::Integer=maximum([size(psi[w],3) 
   end
 end
 
+"""
+    psi = randMPS(mpo[,oc=...,m=...,datatype=...,physind=...])
+
+Generates random MPS from an input MPO `mpo`; parameters chosen for a generic classical product state in terms of the orthogonality center, bond dimension, data type in each tensor, and physical indices
+"""
 function randMPS(mpo::MPO;oc::Integer=1,m::Integer=1,datatype::DataType=eltype(mpo),physind::Union{intType,Array{intType,1}} = [size(mpo[w],2) for w = 1:length(mpo)])
   if typeof(mpo[1]) <: qarray
     Ns = length(mpo)
@@ -100,13 +115,23 @@ function randMPS(mpo::MPO;oc::Integer=1,m::Integer=1,datatype::DataType=eltype(m
     return randMPS(datatype,physindvec,oc=oc,m=m)
   end
 end
-export randMPS
 
+
+"""
+    psi = randMPS(Qlabel,Ns[,m=2,type=Float64,flux=...])
+
+generates a random MPS from `qnum`s on a given site stored in a vector `Qlabel` for `Ns` sites; bond dimension `m`; `type` for the element types; and overall `flux` (default zero of type given in `Qlabel`)
+"""
 function randMPS(Qlabel::Array{Q,1},Ns::Integer;m::Integer=2,type::DataType=Float64,flux::Q=Q()) where Q <: Qnum
   Qlabels = [Qlabel for i = 1:Ns]
   return randMPS(Qlabels,Ns,m=m,type=type,flux=flux)
 end
 
+"""
+    psi = randMPS(Qlabel,Ns[,m=2,type=Float64,flux=...])
+
+generates a random MPS from `qnum`s on a given site stored in an array of vectors `Qlabel` for `Ns` sites (will repeat if `Ns` is longer than array); bond dimension `m`; `type` for the element types; and overall `flux` (default zero of type given in `Qlabel`)
+"""
 function randMPS(Qlabels::Array{Array{Q,1},1},Ns::Integer;m::Integer=2,type::DataType=Float64,flux::Q=Q()) where Q <: Qnum
   A = Array{tens{type},1}(undef,Ns)
   for i = 1:Ns
