@@ -62,7 +62,7 @@ DeltaT = -im*0.001
 println("#############")
 println("nonQN version")
 println("#############")
-#=
+
 energy = dmrg(psi,mpo,m=100,sweeps=200,goal=1E-10,cutoff=1E-9)
 
 tpsi = MPS(ComplexF64,psi)
@@ -82,7 +82,7 @@ for i = 1:nsteps
 end
 
 true_exp = [exp(-(i-1)*DeltaT*energy) for i = 1:nsteps+1]
-=#
+
 #=
 using Plots
 plot(imag.(time_exp))
