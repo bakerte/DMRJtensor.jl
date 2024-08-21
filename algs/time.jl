@@ -202,7 +202,7 @@ end
     return contract(LenvD,(2,3),Renv,(2,1))
   end
   
-    function tdvp(psi::MPS,mpo::MPO;maxm::Integer=maximum([size(psi[w],3) for w = 1:length(psi)]),minm::Integer=2,cutoff::Real=0.,origj::Bool=true,maxiter::Integer=2,prefactor::Number=1.)
+    function tdvp(psi::MPS,mpo::MPO;m::Integer=maximum([size(psi[w],3) for w = 1:length(psi)]),minm::Integer=2,cutoff::Real=0.,origj::Bool=true,maxiter::Integer=2,prefactor::Number=1.)
 
       timestep = prefactor/length(psi)/2
       
@@ -237,7 +237,7 @@ end
           newpsi,En = krylovTimeEvol(psi[i],mpo[i],prefactor=timestep,maxiter=maxiter,updatefct=singlesite_update,Lenv=Lenv[i],Renv=Renv[i])
           norm!(newpsi)
 
-          psi[i],D,V = svd(newpsi,[[1,2],[3]],m=maxm,minm=minm,cutoff=cutoff)
+          psi[i],D,V = svd(newpsi,[[1,2],[3]],m=m,minm=minm,cutoff=cutoff)
           DV = D*V
           norm!(DV)
   
@@ -252,7 +252,7 @@ end
           newpsi,En = krylovTimeEvol(psi[i],mpo[i],prefactor=timestep,maxiter=maxiter,updatefct=singlesite_update,Lenv=Lenv[i],Renv=Renv[i])
           norm!(newpsi)
 
-          U,D,psi[i] = svd(newpsi,[[1],[2,3]],m=maxm,minm=minm,cutoff=cutoff)
+          U,D,psi[i] = svd(newpsi,[[1],[2,3]],m=m,minm=minm,cutoff=cutoff)
           UD = U*D
           norm!(UD)
   
@@ -279,7 +279,7 @@ end
     export tdvp
 
 
-    function tdvp_twosite(psi::MPS,mpo::MPO;maxm::Integer=maximum([size(psi[w],3) for w = 1:length(psi)]),minm::Integer=2,cutoff::Real=0.,origj::Bool=true,maxiter::Integer=2,prefactor::Number=1.)
+    function tdvp_twosite(psi::MPS,mpo::MPO;m::Integer=maximum([size(psi[w],3) for w = 1:length(psi)]),minm::Integer=2,cutoff::Real=0.,origj::Bool=true,maxiter::Integer=2,prefactor::Number=1.)
 
       timestep = prefactor/(length(psi)-1)/2 #divide by 2 from theory
       #divide by number of bonds because this is how many times each operator is applied
@@ -318,7 +318,7 @@ end
           newpsi,En = krylovTimeEvol(AA,ops[iL],prefactor=timestep,maxiter=maxiter,updatefct=joinedtwosite_update,Lenv=Lenv[iL],Renv=Renv[iR])
           norm!(newpsi)
 
-          psi[iL],D,V = svd(newpsi,[[1,2],[3,4]],m=maxm,minm=minm,cutoff=cutoff)
+          psi[iL],D,V = svd(newpsi,[[1,2],[3,4]],m=m,minm=minm,cutoff=cutoff)
           DV = D*V
   
           Lenv[iR] = Lupdate(Lenv[iL],psi[iL],psi[iL],mpo[iL])
@@ -331,7 +331,7 @@ end
           newpsi,En = krylovTimeEvol(AA,ops[iL],prefactor=timestep,maxiter=maxiter,updatefct=joinedtwosite_update,Lenv=Lenv[iL],Renv=Renv[iR])
           norm!(newpsi)
 
-          U,D,psi[iR] = svd(newpsi,[[1,2],[3,4]],m=maxm,minm=minm,cutoff=cutoff)
+          U,D,psi[iR] = svd(newpsi,[[1,2],[3,4]],m=m,minm=minm,cutoff=cutoff)
           UD = U*D
           norm!(UD)
   
