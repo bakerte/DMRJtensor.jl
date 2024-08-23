@@ -33,7 +33,7 @@ time_exp[1] = 1.
 energies[1] = energy #expect(psi,mpo)
 
 for i = 1:nsteps
-  tdvp_twosite(tpsi,tmpo,prefactor=DeltaT,maxm=100)
+  tdvp_twosite(tpsi,tmpo,prefactor=DeltaT,m=100)
   time_exp[i+1] = expect(tpsi,psi)
   energies[i+1] = expect(tpsi,tmpo)
   println(i," ",time_exp[i+1]," ",exp(-i*DeltaT*energy)," ",energies[i+1])
