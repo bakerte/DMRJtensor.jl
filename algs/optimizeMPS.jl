@@ -33,20 +33,20 @@ export TNparams
 
 Struct to hold variables for the MPS optimization function and others
 """
-mutable struct algvars{W <: Number,Q <: Qnum} <: TNparams
+mutable struct algvars{W <: Number, Q <: Qnum, X <: TensType, Y <: Env, Z <: Env} <: TNparams
   load::Bool
   method::String
   parallel_method::String
-  nsites::Integer
-  minm::Integer
-  maxm::Integer
+  nsites::intType
+  minm::intType
+  maxm::intType
   cutoff::Float64
 
-  sweeps::Integer
+  sweeps::intType
   halfsweep::Bool
 
-  maxiter::Integer
-  mincr::Integer
+  maxiter::intType
+  mincr::intType
   cvgE::Bool
   goal::W
   startnoise::Float64
@@ -55,18 +55,18 @@ mutable struct algvars{W <: Number,Q <: Qnum} <: TNparams
   noise_decay::Float64
   noise_incr::Float64
 
-  exnum::Integer
-  cushion::Integer
+  exnum::intType
+  cushion::intType
 
   shift::Bool
   fixD::Bool
 
   double::Bool
 
-  startoc::Integer
+  startoc::intType
   origj::Bool
 
-  maxshowD::Integer
+  maxshowD::intType
 
   storeD::Array{Float64,1}
   saveEnergy::Array{W,1}
@@ -79,27 +79,27 @@ mutable struct algvars{W <: Number,Q <: Qnum} <: TNparams
 
   truncerr::Float64
   maxtrunc::Float64
-  biggestm::Integer
-  savebiggestm::Integer
+  biggestm::intType
+  savebiggestm::intType
 
-  SvNbond::Union{Integer,Array{Integer,1}}
+  SvNbond::Union{intType,Array{intType,1}}
   allSvNbond::Bool
 
-  Lbound::TensType
-  Rbound::TensType
-  Lenv::Env
-  Renv::Env
+  Lbound::X
+  Rbound::X
+  Lenv::Y
+  Renv::Y
 
-  psiLenv::Env
-  psiRenv::Env
+  psiLenv::Array{Z,1}
+  psiRenv::Array{Z,1}
 
-  sparematrix::TensType
+  sparematrix::X
   saveQ::Array{Q,1}
 
   efficient::Bool
   silent::Bool
-  qselect::Array{Tuple{Integer,Q},1}
-  partitions::Integer
+  qselect::Array{Tuple{intType,Q},1}
+  partitions::intType
 end
 export algvars
 #=
@@ -108,8 +108,8 @@ function params(params::algvars{W,Q}) where {W <: Number, Q <: Qnum}
   return algvars{W,Q}(params.load,params.method,params.parallel_method,params.nsites,params.minm,params.maxm,params.cutoff,params.sweeps,params.halfsweep,params.maxiter,params.mincr,params.cvgE,params.goal,params.startnoise,params.noise,params.noise_goal,params.noise_decay,params.noise_incr,params.exnum,params.cushion,params.shift,params.fixD,params.startoc,params.origj,params.maxshowD,params.storeD,params.saveEnergy,params.energy,params.lastenergy,params.entropy,params.lastentropy,params.truncerr,params.maxtrunc,params.biggestm,params.savebiggestm,params.SvNbond,params.allSvNbond,params.Lbound,params.Rbound,params.Lenv,params.Renv,params.psiLenv,params.psiRenv,params.sparematrix,params.saveQ,params.efficient,params.silent,params.qselect,params.partitions)
 end
 =#
-function algvars(params::algvars{W,Q}) where {W <: Number, Q <: Qnum}
-  return algvars{W,Q}(params.load,params.method,params.parallel_method,params.nsites,params.minm,params.maxm,params.cutoff,params.sweeps,params.halfsweep,params.maxiter,params.mincr,params.cvgE,params.goal,params.startnoise,params.noise,params.noise_goal,params.noise_decay,params.noise_incr,params.exnum,params.cushion,params.shift,params.fixD,params.double,params.startoc,params.origj,params.maxshowD,params.storeD,params.saveEnergy,params.energy,params.lastenergy,params.entropy,params.lastentropy,params.truncerr,params.maxtrunc,params.biggestm,params.savebiggestm,params.SvNbond,params.allSvNbond,params.Lbound,params.Rbound,params.Lenv,params.Renv,params.psiLenv,params.psiRenv,params.sparematrix,params.saveQ,params.efficient,params.silent,params.qselect,params.partitions)
+function algvars(params::algvars{W,Q,X,Y,Z}) where {W <: Number, Q <: Qnum, X <: TensType, Y <: TensType, Z <: TensType}
+  return algvars{W,Q,X,Y,Z}(params.load,params.method,params.parallel_method,params.nsites,params.minm,params.maxm,params.cutoff,params.sweeps,params.halfsweep,params.maxiter,params.mincr,params.cvgE,params.goal,params.startnoise,params.noise,params.noise_goal,params.noise_decay,params.noise_incr,params.exnum,params.cushion,params.shift,params.fixD,params.double,params.startoc,params.origj,params.maxshowD,params.storeD,params.saveEnergy,params.energy,params.lastenergy,params.entropy,params.lastentropy,params.truncerr,params.maxtrunc,params.biggestm,params.savebiggestm,params.SvNbond,params.allSvNbond,params.Lbound,params.Rbound,params.Lenv,params.Renv,params.psiLenv,params.psiRenv,params.sparematrix,params.saveQ,params.efficient,params.silent,params.qselect,params.partitions)
 end
 
 import Base.println
@@ -189,7 +189,11 @@ end
 function setEnv(dualpsi::MPS,psi::MPS,mpo::MPO,params::TNparams,
                 prevpsi::MPS...;measfct::Function=startval,mover::Function=move!)
 
-  if params.Lenv == [0] && params.Renv == [0]
+  if !(sum(w->norm(params.Lenv[w]),length(params.Lenv)) == length(params.Lenv) &&
+    sum(w->norm(params.Renv[w]),length(params.Renv)) == length(params.Renv) &&
+    length(params.Lenv) == length(psi) && length(params.Renv) == length(mpo) && 
+    length(psi) == length(mpo))
+
     params.Lenv,params.Renv = makeEnv(dualpsi,psi,mpo,Lbound=params.Lbound,Rbound=params.Rbound)
   end
 
@@ -262,8 +266,8 @@ function setEnv(dualpsi::MPS,psi::MPS,mpo::MPO,params::TNparams,
       params.psiLenv[w],params.psiRenv[w] = largeenvironment(psiLenv[w],psiRenv[w],Ltag=thisLtag,Rtag=thisRtag)
     end
   else
-    params.psiLenv = environment(psiLenv)
-    params.psiRenv = environment(psiRenv)
+    params.psiLenv = [environment(psiLenv[w]) for w = 1:length(psiLenv)]
+    params.psiRenv = [environment(psiRenv[w]) for w = 1:length(psiRenv)]
   end
 
   return params.Lenv,params.Renv,params.psiLenv,params.psiRenv,Nsteps,j
@@ -357,9 +361,6 @@ function singlesite_update(Lenv::TensType,Renv::TensType,AA::TensType,optup::NTu
   LAA = contract(Lenv,(3,),AA,(1,))
   LopsAA = contract(LAA,(2,3),ops,(1,2))
   return contract(LopsAA,(2,4),Renv,(1,2))
-#  Hpsi = contract(ops,[2],AA,[2])
-#  LHpsi = contract(Lenv,[2,3],Hpsi,[1,4])
-#  return contract(LHpsi,[4,3],Renv,[1,2])
 end
 
 function singlesite_update(Lenv::TensType,Renv::TensType,AA::TensType,optup::TensType)# where {P <: TensType}
@@ -373,8 +374,8 @@ function singlesite_update(Lenv::TensType,Renv::TensType,AA::TensType,optup::Ten
 end
 export singlesite_update
 
-function algvars(Q::DataType) #where Qn <: Qnum
-  algvars{Float64,Q}(true, #load (loads variables from optional arguments or not)
+function algvars(Q::DataType, a::X, b::Y, c::Z) where {X <: TensType, Y <: Env, Z <: Env} #where Qn <: Qnum
+  algvars{Float64,Q,X,Y,Z}(true, #load (loads variables from optional arguments or not)
                       "", #method
                       "", #parallel_method
                       1, #nsites
@@ -417,15 +418,15 @@ function algvars(Q::DataType) #where Qn <: Qnum
                       0, #savebiggestm
                       1, #SvNbond
                       false, #allSvNbond
-                      [0], #Lbound
-                      [0], #Rbound
-                      [0], #Lenv
-                      [0], #Renv
+                      a, #Lbound  #default_boundary
+                      a, #Rbound  #default_boundary
+                      b, #Lenv  #default_Env
+                      b, #Renv  #default_Env
 
-                      [[0]], #psiLenv
-                      [[0]], #psiRenv
+                      Array{Z,1}(undef,1), #psiLenv #default_psiEnv
+                      Array{Z,1}(undef,1), #psiRenv #default_psiEnv
 
-                      [0],#spare matrix
+                      a, #default_boundary,#spare matrix
                       Q[],#saveQ
 
                       false, #efficient
@@ -436,14 +437,39 @@ function algvars(Q::DataType) #where Qn <: Qnum
 end
 
 function algvars()
-  return algvars(U1)
+
+#  println(typeof(default_boundary))
+#  println(typeof(default_Env))
+
+  return algvars(U1,default_boundary,default_Env,default_psiEnv)
+end
+
+function algvars(a,b,c)
+
+#  println(typeof(default_boundary))
+#  println(typeof(default_Env))
+
+  return algvars(U1,a,b,c)
+end
+
+function algvars(Q::DataType)
+
+#  println(typeof(default_boundary))
+#  println(typeof(default_Env))
+
+  return algvars(Q,default_boundary,default_Env,default_psiEnv)
 end
 
 function algvars(G::W) where W <: Union{MPS,MPO}
+
+  X = defaultBoundary(G[1])
+  Y = environment(G) #network([X]))
+  Z = Y
+
   if typeof(G[1]) <: densTensType
-    out = algvars()
+    out = algvars(X,Y,Z)
   else
-    out = algvars(typeof(G[1].flux))
+    out = algvars(typeof(G[1].flux),X,Y,Z)
   end
   out.SvNbond = cld(length(G),2)
   return out
@@ -543,8 +569,8 @@ function optimize(dualpsi::MPS,psi::MPS,mpo::MPO,beta::Array{P,1},prevpsi::MPS..
                   SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,efficient::Bool=false,
                   cvgE::Bool=true,maxiter::Integer=2,exnum::Integer=1,fixD::Bool=false,nsites::Integer=1,
                   noise::Number=1.0,noise_decay::Float64=0.9,noise_goal::Float64=0.3,noise_incr::Float64=0.01,
-                  saveEnergy::Array{R,1}=[0],halfsweep::Bool=false,Lbound::TensType=[0],Rbound::TensType=[0],
-                  Lenv::Env=[0],Renv::Env=[0],origj::Bool=true,maxshowD::Integer=8,
+                  saveEnergy::Array{R,1}=[0.],halfsweep::Bool=false,Lbound::TensType=default_boundary,Rbound::TensType=default_boundary,
+                  Lenv::Env=default_Env,Renv::Env=default_Env,origj::Bool=true,maxshowD::Integer=8,
                   storeD::Array{W,1}=[0.]) where {W <: Number, R <: Number,P <: Number}
   loadvars!(params,method,minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
             noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)
@@ -561,8 +587,8 @@ function Noptimize(dualpsi::MPS,psi::MPS,mpo::MPO,beta::Array{P,1},prevpsi::MPS.
                   SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,efficient::Bool=false,
                   cvgE::Bool=true,maxiter::Integer=2,exnum::Integer=1,fixD::Bool=false,nsites::Integer=2,
                   noise::Number=1.0,noise_decay::Float64=0.9,noise_goal::Float64=0.3,noise_incr::Float64=0.01,
-                  saveEnergy::Array{R,1}=[0],halfsweep::Bool=false,Lbound::TensType=[0],Rbound::TensType=[0],
-                  Lenv::Env=[0],Renv::Env=[0],origj::Bool=true,maxshowD::Integer=8,
+                  saveEnergy::Array{R,1}=[0.],halfsweep::Bool=false,Lbound::TensType=default_boundary,Rbound::TensType=default_boundary,
+                  Lenv::Env=default_Env,Renv::Env=default_Env,origj::Bool=true,maxshowD::Integer=8,
                   storeD::Array{W,1}=[0.]) where {W <: Number,R <: Number,P <: Number}
   loadvars!(params,method,minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
             noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)

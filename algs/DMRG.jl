@@ -184,7 +184,7 @@ function string(vect::Array{W,1}) where W <: Number
   return string(vect,1,length(vect))
 end
 
-function SvNcheck!(i::Integer,j::Integer,D::TensType,Ns::Integer,params::TNparams;alpha::Bool=true,rev::Bool=false)
+function SvNcheck!(i::Integer,j::Integer,D::Union{TensType,diagonal},Ns::Integer,params::TNparams;alpha::Bool=true,rev::Bool=false)
   if params.maxtrunc < params.truncerr
     params.maxtrunc = params.truncerr
   end
@@ -237,9 +237,9 @@ function setDMRG(psi::MPS,mpo::MPO,m::Integer,minm::Integer,Lenv::TensType,Renv:
   elseif length(boundary) == 1
     if LRbounds == "L"
       Lbound = boundary[1]
-      Rbound = [0]
+      Rbound = default_boundary
     elseif LRbounds == "R"
-      Lbound = [0]
+      Lbound = default_boundary
       Rbound = boundary[1]
     else
       error("in DMRG...can't determine LRbounds parameter (only defined for \"L\" and \"R\")")
@@ -315,6 +315,7 @@ function alpha_update(alpha::Float64,truncerr::Float64,cutoff::Float64,
   end
   return max(min(alpha,alpha_max),1E-42)
 end
+export alpha_update
 #=
 function Nsite_update(Lenv::TensType,Renv::TensType,psiops::TensType...)
   AA = psiops[1]
@@ -338,7 +339,6 @@ export Nsite_update
 function step3S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                 psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
                 
-#println(n," ",j," ",i," ",iL," ",iR)
   currops = mpo[i]
 
   outEnergy,AAvec = lanczos(psi[i],currops,maxiter=params.maxiter,updatefct=singlesite_update,Lenv=Lenv[i],Renv=Renv[i])
@@ -375,14 +375,38 @@ end
 function twostep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                   psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
 
+#println()
+#  println(n," ",j," ",i," ",iL," ",iR)
+#  println(norm(psi[iL])," ",norm(psi[iR]))
+
+#println(norm(psi[iL])," ",norm(psi[iR]))
+
   if j > 0
     psi[iL] = div!(psi[iL],norm(psi[iL]))
   else
     psi[iR] = div!(psi[iR],norm(psi[iR]))
   end
-  
+#=
+  1 1 1 1 2
+1.0 1.0
+1.7320508075688772 2.7386127875258306
+1.0 24.27575951437977
+=#  
+#  println(norm(mpo[iL])," ",norm(mpo[iR]))
+#  println(norm(Lenv[iL])," ",norm(Renv[iR]))
+#  println(norm(psi[iL])," ",norm(psi[iR])," ",norm(Lenv[iL])," ",norm(Renv[iR]))
 
   energy,AA = simplelanczos(Lenv[iL],Renv[iR],psi[iL],psi[iR],mpo[iL],mpo[iR])
+
+#  println(norm(AA))
+
+  inAA = psi[iL]*psi[iR]
+  checkAA = twosite_update(Lenv[iL],Renv[iR],inAA,mpo[iL],mpo[iR])
+
+#println(energy)
+#if isnan(energy)
+#  error()
+#end
 
   params.energy = energy
 
@@ -395,14 +419,19 @@ psi = MPS(tens{Float64}[tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 
 mpo = makeMPO(heisenbergMPO,2,100)
 dmrg(psi,mpo,cutoff=1E-9,sweeps=300,m=100,method="twosite",silent=true,goal=1E-8)
   =#
-  U,D,V,truncerr = svd(AA,[[1,2],[3,4]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
+
+#  println(norm(AA))
+
+U,D,V,truncerr = svd(AA,[[1,2],[3,4]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
+
+#  println(norm(U)," ",norm(D)," ",norm(V))
 
   if j < 0
-    psi[iL] = contract(U,(3,),D,(1,))
+    psi[iL] = U*D #contract(U,(3,),D,(1,))
     psi[iR] = V
   else
     psi[iL] = U
-    psi[iR] = contract(D,(2,),V,(1,))
+    psi[iR] = D*V #contract(D,(2,),V,(1,))
   end
 
   params.truncerr = truncerr
@@ -522,7 +551,7 @@ function dmrgNstep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dual
 end
 
 function dmrg(psi::MPS,mpo::MPO;params::TNparams = algvars(psi),
-                                m::Integer=params.maxm,minm::Integer=params.minm,
+                                m::Integer=params.maxm,minm::Integer=2,
                                 sweeps::Integer=params.sweeps,cutoff::Float64=params.cutoff,
                                 silent::Bool=params.silent,goal::Float64=params.goal,
                                 SvNbond::Integer=params.SvNbond,allSvNbond::Bool=params.allSvNbond,
@@ -663,10 +692,10 @@ export dmrg_twosite
 
 #  import ..optimizeMPS.NsiteOps
 function dmrg_Nsite(psi::MPS,mpo::MPO;m::Integer=0,minm::Integer=2,sweeps::Integer=1,cutoff::Float64=0.,silent::Bool=false,goal::Float64=0.,
-                  SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,nsites::Integer=2,efficient::Bool=false,params::TNparams = algvars(),
-                  cvgE::Bool=true,maxiter::Integer=2,mincr::Integer=2,mperiod::Integer=0,fixD::Bool=false,Lbound::TensType=[0],Rbound::TensType=[0],
+                  SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,nsites::Integer=2,efficient::Bool=false,params::TNparams = algvars(psi),
+                  cvgE::Bool=true,maxiter::Integer=2,mincr::Integer=2,mperiod::Integer=0,fixD::Bool=false,Lbound::TensType=default_boundary,Rbound::TensType=default_boundary,
                   noise::P=1.0,noise_goal::Float64=0.3,noise_incr::Float64=params.noise_incr,noise_decay::Float64=params.noise_decay,method::String="Nsite",shift::Bool=params.shift,
-                  saveEnergy::AbstractArray=[0],halfsweep::Bool=false,Lenv::Env=params.Lenv,Renv::Env=params.Renv,origj::Bool=true,maxshowD::Integer=params.maxshowD,
+                  saveEnergy::AbstractArray=[0.],halfsweep::Bool=false,Lenv::Env=params.Lenv,Renv::Env=params.Renv,origj::Bool=true,maxshowD::Integer=params.maxshowD,
                   storeD::Array{W,1}=params.storeD,alpha_decay::Float64=0.9,exnum::Integer=params.exnum) where {P <: Union{Number,Array{Float64,1}}, W <: Number}
   loadvars!(params,"DMRG-"*method*" (N=$nsites)",minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
       noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)

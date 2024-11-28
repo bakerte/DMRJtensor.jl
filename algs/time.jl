@@ -175,7 +175,7 @@ end
 
   function krylovTimeEvol(psiops::TensType...;prefactor::Number=1,lanczosfct::Function=lanczos,maxiter::Integer=2,updatefct::Function=makeHpsi,Lenv::TensType=eltype(psiops[1])[0],Renv::TensType=Lenv)
 
-    energies,psivec,alpha,beta = lanczosfct(psiops...,maxiter=maxiter,retnum=maxiter,updatefct=updatefct,Lenv=Lenv,Renv=Renv)
+    energies,psivec,alpha,beta = lanczosfct(psiops...,maxiter=maxiter,m=maxiter,updatefct=updatefct,Lenv=Lenv,Renv=Renv)
 
     M = LinearAlgebra.SymTridiagonal(alpha,beta)
     En,U = LinearAlgebra.eigen(M)
