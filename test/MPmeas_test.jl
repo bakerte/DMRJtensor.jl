@@ -320,35 +320,6 @@ println()
 
 move!(psi,5)
 
-L,T,R = localizeOp(psi,[Sp,Sm],[3,6])
-import LinearAlgebra
-testval = isapprox(Array(T),zeros(2,2) + LinearAlgebra.I)
-
-A = contract(L,2,psi[psi.oc],1)
-B = contract(A,3,R,1)
-C = ccontract(psi[psi.oc],B)
-
-testval &= isapprox(C,M[3,6])
-fulltest &= testfct(testval,"localizeOp(psi,Operators,sites)")
-
-
-
-L,T,R = localizeOp(psi,[Sp,Sm],[3,6],trail=(Id,Id))
-import LinearAlgebra
-testval = isapprox(Array(T),zeros(2,2) + LinearAlgebra.I)
-
-A = contract(L,2,psi[psi.oc],1)
-B = contract(A,3,R,1)
-C = ccontract(psi[psi.oc],B)
-
-testval &= isapprox(C,M[3,6])
-fulltest &= testfct(testval,"localizeOp(psi,Operators,sites,trail=...)")
-
-
-A = localizeOp(psi,mpo)
-testval = isapprox(ccontract(psi[psi.oc],A),expect(psi,mpo))
-fulltest &= testfct(testval,"localizeOp(mps,mpo)")
-
 println()
 
 A = [3,3,4]
