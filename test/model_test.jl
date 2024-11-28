@@ -185,7 +185,7 @@ fulltest &= testfct(sum(testvals)==length(testvals),"r-rainbow-neighbour models"
 #println()
 #println()
 
-lambda = exp(-1/2.)
+xlambda = exp(-1/2.)
 
 #println("Exponentials")
 
@@ -194,7 +194,7 @@ function xone(i)
           Sp/2 O O O O O;
           Sm/2 O O O O O;
           Sz O O O O O;
-          Sz O O O lambda*Id O;
+          Sz O O O xlambda*Id O;
           O Sm Sp Sz Sz Id]
 end
 
@@ -206,7 +206,7 @@ function xtwo(i)
           O O O Id O O O O O;
           Sz O O O O O O O O;
           O O O O O Id O O O;
-          Sz O O O O O O lambda*Id O;
+          Sz O O O O O O xlambda*Id O;
           O Sm Sm Sp Sp Sz Sz Sz Id]
 end
 
@@ -221,7 +221,7 @@ function xthree(i)
           Sz O O O O O O O O O O O;
           O O O O O O O Id O O O O;
           O O O O O O O O Id O O O;
-          Sz O O O O O O O O O lambda*Id O;
+          Sz O O O O O O O O O xlambda*Id O;
           O Sm O Sm Sp O Sp Sz O Sz Sz Id]
 end
 
@@ -239,7 +239,7 @@ function xfour(i)
           O O O O O O O O O Id O O O O O;
           O O O O O O O O O O Id O O O O;
           O O O O O O O O O O O Id O O O;
-          Sz O O O O O O O O O O O O lambda*Id O;
+          Sz O O O O O O O O O O O O xlambda*Id O;
           O Sm O O Sm Sp O O Sp Sz O O Sz Sz Id]
 end
 
@@ -263,7 +263,7 @@ for r = 1:length(mpos)
 
   function expSzSz(i)
     return [Id O O;
-            Sz lambda*Id O;
+            Sz xlambda*Id O;
             O Sz Id]
   end
 
@@ -284,7 +284,7 @@ for r = 1:length(mpos)
     end
   end
 
-  checkH += expMPO(lambda,Sz,Sz,Ns)
+  checkH += expMPO(xlambda,Sz,Sz,Ns)
   
   global D,U = eigen(H)
   global checkD,checkU = eigen(checkH)

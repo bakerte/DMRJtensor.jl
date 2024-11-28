@@ -10,6 +10,7 @@
 #
 
 const tests = [
+
 "MPtask_test.jl",
 "MPmeas_test.jl",
 "MPlarge_test.jl",
@@ -18,7 +19,9 @@ const tests = [
 ######
 ######
 ######
-"dmrg_test.jl"
+"dmrg_test.jl",
+
+"classicalTN_test.jl"
 ]
 
 function checkall(fulltestrecord::Array{Bool,1},i::Integer,fulltest::Bool)
@@ -39,7 +42,7 @@ Tests all functions in the files enumerated in `tests`. Default is to check all 
 
 See also: [`libdir`](@ref)
 """
-function libtest(;tests::Array{String,1}=tests,dir::String=libdir,path::String=dir*"/../test/")
+function libtest(;tests::Array{String,1}=tests,dir::String=libdir,path::String=dir*"/test/")
 
   fulltestrecord = Array{Bool,1}(undef,length(tests))
 

@@ -105,7 +105,7 @@ println()
 psi = randMPS(2,Ns)
 
 B = makeBoundary(psi,psi,mpo,mpo)
-testval = B.size == (1, 1, 1, 1)
+testval = B.size == [1, 1, 1, 1]
 testval &= B.T == [1.]
 fulltest &= testfct(testval,"makeBoundary(dualpsi,psi,mpo...)")
 
@@ -129,23 +129,23 @@ fulltest &= testfct(testval,"defaultBoundary(qarray)")
 println()
 
 B = DMRjulia.makeEdgeEnv(psi,psi,mpo,mpo)
-testval = B.size == (1, 1, 1, 1)
+testval = B.size == [1, 1, 1, 1]
 testval &= B.T == [1.]
 fulltest &= testfct(testval,"makeEdgeEnv(dualpsi,psi,mpo...)")
 
 println()
 
 B,C = makeEnds(psi,psi,mpo,mpo)
-testval = B.size == (1, 1, 1, 1)
+testval = B.size == [1, 1, 1, 1]
 testval &= B.T == [1.]
-testval &= C.size == (1, 1, 1, 1)
+testval &= C.size == [1, 1, 1, 1]
 testval &= C.T == [1.]
 fulltest &= testfct(testval,"makeEnds(dualpsi,psi,mpo...)")
 
 B,C = makeEnds(psi,psi,mpo,mpo)
-testval = B.size == (1, 1, 1, 1)
+testval = B.size == [1, 1, 1, 1]
 testval &= B.T == [1.]
-testval &= C.size == (1, 1, 1, 1)
+testval &= C.size == [1, 1, 1, 1]
 testval &= C.T == [1.]
 fulltest &= testfct(testval,"makeEnds(psi,mpo...)")
 
@@ -379,18 +379,18 @@ Qlabel = [test3(2),test3(-2)]
 qpsi,qmpo = MPS(Qlabel,psi,mpo)
 En = dmrg(qpsi,qmpo,sweeps=20,m=45,cutoff=1E-9,silent=true)
 
-lambda = 0.01
+xlambda = 0.01
 
-penalty!(mpo,lambda,psi,compress=false)
+penalty!(mpo,xlambda,psi,compress=false)
 shiftedEn = dmrg(psi,mpo,sweeps=20,m=45,cutoff=1E-9,silent=true)
-testval = abs(abs(En-shiftedEn) - lambda) < 1E-6
+testval = abs(abs(En-shiftedEn) - xlambda) < 1E-6
 fulltest &= testfct(testval,"penalty!(mpo,Real,mps)")
 
 En = expect(qpsi,qmpo)
 
-penalty!(qmpo,lambda,qpsi,compress=false)
+penalty!(qmpo,xlambda,qpsi,compress=false)
 shiftedEn = dmrg(qpsi,qmpo,sweeps=20,m=45,cutoff=1E-9,silent=true)
-testval = abs(abs(En-shiftedEn) - lambda) < 1E-6
+testval = abs(abs(En-shiftedEn) - xlambda) < 1E-6
 fulltest &= testfct(testval,"penalty!(mpo,Real,mps) [Quantum number types]")
 
 println()

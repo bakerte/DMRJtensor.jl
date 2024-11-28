@@ -11,8 +11,8 @@ fulltest &= testfct(testval,".dmrjulia")
 
 println()
 
-DMRjulia.tensor2disc("del",A)
-B = DMRjulia.tensorfromdisc("del")
+DMRjulia.tensor2disc("del",A,ext=DMRjulia.file_extension)
+B = DMRjulia.tensorfromdisc("del",ext=DMRjulia.file_extension)
 testval = isapprox(A,B)
 fulltest &= testfct(testval,"tensor2disc and tensorfromdisc")
 
@@ -260,16 +260,17 @@ fulltest &= testfct(testval,"copy(String,largeEnv)")
 
 
 
+rm("del"*DMRjulia.file_extension)
 for i = 1:Ns
-  rm("mps_$i.dmrjulia")
-  rm("mpo_$i.dmrjulia")
-  rm("Lenv_$i.dmrjulia")
-  rm("Renv_$i.dmrjulia")
+  rm("mps_$i"*DMRjulia.file_extension)
+  rm("mpo_$i"*DMRjulia.file_extension)
+  rm("Lenv_$i"*DMRjulia.file_extension)
+  rm("Renv_$i"*DMRjulia.file_extension)
 
-  rm("altLenv_$i.dmrjulia")
+  rm("altLenv_$i"*DMRjulia.file_extension)
 
-  rm("altmps_$i.dmrjulia")
-  rm("altmpo_$i.dmrjulia")
-  rm("altenv_$i.dmrjulia")
+  rm("altmps_$i"*DMRjulia.file_extension)
+  rm("altmpo_$i"*DMRjulia.file_extension)
+  rm("altenv_$i"*DMRjulia.file_extension)
 #  rm("altRenv_$i.dmrjulia")
 end
