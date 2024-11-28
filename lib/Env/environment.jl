@@ -59,8 +59,8 @@ Inputs tensors `P` representing an `MPO` into environment `V`
 
 See also: [`MPO`](@ref)
 """
-function environment(network::MPO)
-  return environment(copy(network.H.net))
+function environment(netvec::MPO)
+  return environment(copy(netvec.H.net))
 end
 
 """
@@ -70,8 +70,8 @@ Inputs tensors `P` representing a `network` into environment `V`
 
 See also: [`network`](@ref)
 """
-function environment(network::network{W}) where W <: TensType
-  return environment{W}(network(copy(network.net)))
+function environment(netvec::network{W}) where W <: TensType
+  return environment{W}(network(copy(netvec.net)))
 end
 
 """
@@ -81,6 +81,14 @@ Inputs tensors `P` representing an `Array` of tensors into environment `V`
 
 See also: [`Array`](@ref)
 """
-function environment(input::Array{W,1}) where W <: TensType
-  return environment{W}(network(copy(input)))
+function environment(netvec::Array{W,1}) where W <: TensType
+
+#  if typeof(W) <: Array
+#    X = typeof(netvec[1])
+#    out = environment{X}(network(copy(netvec)))
+#  else
+    out = environment{W}(network(copy(netvec)))
+#  end
+
+  return out
 end

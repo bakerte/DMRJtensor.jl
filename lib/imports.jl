@@ -46,7 +46,7 @@ import ..TENPACK: libmult,libsvd,libsvd!,libeigen,libeigen!,libqr,liblq,libqr!,l
 #contracions
 import ..TENPACK: contract,ccontract,contractc,ccontractc
 
-
+import ..TENPACK: default_boundary
 
 import ..TENPACK: dot,dmul!,diagcontract!
 
@@ -70,6 +70,7 @@ import ..TENPACK: largevector, tensor2disc, tensorfromdisc
 import ..TENPACK: stdavg,testfct
 
 
+import ..TENPACK: Qtens
 
 
 

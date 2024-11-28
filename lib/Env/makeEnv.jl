@@ -46,38 +46,46 @@ Current environment convention is
 
 See also: [`makeEnds`](@ref)
 """
-function makeBoundary(dualpsi::MPS,psi::MPS,mpovec::MPO...;left::Bool=true,rightind::Integer=3)
-  retType = elnumtype(dualpsi,psi,mpovec...)
+function makeBoundary(dualpsi::matrixproductstate{Qtens{W,Q}},psi::matrixproductstate{Qtens{W,Q}},mpovec::matrixproductoperator{Qtens{W,Q}}...;left::Bool=true,rightind::Integer=3) where {W <: Number, Q <: Qnum}
+#  retType = elnumtype(dualpsi,psi,mpovec...)
   nrank = 2 + length(mpovec)
-  boundary = ones(retType,ones(intType,nrank)...)
-  if typeof(psi[1]) <: qarray
+  boundary = ones(W,ntuple(a->1,nrank)...)
 
-    Q = typeof(psi[1].flux)
+  
 
-    qind = Array{Q,1}(undef,nrank)
-    Ns = length(psi)
-    site = left ? 1 : Ns
-    index = left ? 1 : rightind
-    qind[1] = -(getQnum(index,1,dualpsi[site]))
-    qind[end] = getQnum(index,1,psi[site])
-    for i = 1:length(mpovec)
-      index = left ? 1 : ndims(mpovec[i][Ns])
-      qind[i+1] = getQnum(index,1,mpovec[i][site])
-    end
+#  Q = typeof(psi[1].flux)
 
-    thisQnumMat = Array{Array{Q,1},1}(undef,nrank)
-    for j = 1:nrank
-      qn = qind[j]
-      thisQnumMat[j] = Q[qn]
-    end
-    return Qtens(boundary,thisQnumMat)
-  else
-    if typeof(psi[1]) <: denstens
-      return tens(boundary)
-    else
-      return boundary
-    end
+  qind = Array{Q,1}(undef,nrank)
+  Ns = length(psi)
+  site = left ? 1 : Ns
+  index = left ? 1 : rightind
+  qind[1] = -(getQnum(index,1,dualpsi[site]))
+  qind[end] = getQnum(index,1,psi[site])
+  for i = 1:length(mpovec)
+    index = left ? 1 : ndims(mpovec[i][Ns])
+    qind[i+1] = getQnum(index,1,mpovec[i][site])
   end
+
+  thisQnumMat = Array{Array{Q,1},1}(undef,nrank)
+  for j = 1:nrank
+    qn = qind[j]
+    thisQnumMat[j] = Q[qn]
+  end
+  return Qtens(boundary,thisQnumMat)
+end
+
+function makeBoundary(dualpsi::matrixproductstate{tens{W}},psi::matrixproductstate{tens{W}},mpovec::matrixproductoperator{tens{W}}...;left::Bool=true,rightind::Integer=3) where W <: Number
+#  retType = elnumtype(dualpsi,psi,mpovec...)
+  nrank = 2 + length(mpovec)
+  #    boundary = ones(W,ones(intType,nrank)...)
+  return tens{W}(ones(intType,nrank),W[1])
+end
+
+function makeBoundary(dualpsi::matrixproductstate{Array{W,G}},psi::matrixproductstate{Array{W,G}},mpovec::matrixproductoperator{Array{W,G}}...;left::Bool=true,rightind::Integer=3) where {W <: Number, G}
+#  retType = elnumtype(dualpsi,psi,mpovec...)
+  nrank = 2 + length(mpovec)
+  boundary = ones(W,ones(intType,nrank)...)
+  return boundary
 end
 export makeBoundary
 
@@ -86,13 +94,12 @@ export makeBoundary
 
 Creates a tensor `tensor` that has no elements for any input tensor `A` (both tensors of the same type)
 """
-function defaultBoundary(A::TensType)
-  if typeof(A) <: qarray
-    out = Qtens{eltype(A),typeof(A.flux)}()
-  else
-    out = tens{eltype(A)}()
-  end
-  return out
+function defaultBoundary(A::Union{tens{W},Array{W,G}}) where {W <: Number, G}
+  return tens{W}()
+end
+
+function defaultBoundary(A::Qtens{W,Q}) where {W <: Number, Q <: Qnum}
+  return Qtens{W,Q}()
 end
 
 """
@@ -183,6 +190,7 @@ Current environment convention is
    +-->-- 3          1 --->--+
 """
 function makeEnv(dualpsi::MPS,psi::MPS,mpo::MPO...;Lbound::TensType=defaultBoundary(psi[1]),Rbound::TensType=defaultBoundary(psi[1]),Llabel::String="Lenv_",Rlabel::String="Renv_")
+
   Ns = length(psi)
   numtype = elnumtype(dualpsi,psi,mpo...)
   C = psi[1]
@@ -204,8 +212,15 @@ function makeEnv(dualpsi::MPS,psi::MPS,mpo::MPO...;Lbound::TensType=defaultBound
     Rupdate!(i,Renv,dualpsi,psi,mpo...)
     Lenv[i] = Renv[Ns] #avoids any undefined elements
   end
+
   return Lenv,Renv
 end
+
+
+
+const default_Env = environment([tens()])
+const default_psiEnv = environment([[tens()]])
+
 
 """
     Lenv,Renv = makeEnv(psi,mpo[,Lbound=,Rbound=])
@@ -222,7 +237,11 @@ Current environment convention is
    |                         |
    +-->-- 3          1 --->--+
 """
-function makeEnv(psi::MPS,mpo::MPO;Lbound::TensType=[0],Rbound::TensType=[0])
+function makeEnv(psi::MPS,mpo::MPO;Lbound::TensType=default_boundary,Rbound::TensType=default_boundary)
   return makeEnv(psi,psi,mpo,Lbound=Lbound,Rbound=Rbound)
+end
+
+function makeEnv(psi::MPS;Lbound::TensType=default_boundary,Rbound::TensType=default_boundary)
+  return makeEnv(psi,psi,Lbound=Lbound,Rbound=Rbound)
 end
 export makeEnv

@@ -34,7 +34,7 @@ function qubitOps(;d::intType=2,angle::Number=pi/4)
 
   s = (d-1)/2
   O = zeros(Float64,d,d) #zero matrix
-  Id = Array(eye(d)) #identity matrix
+  Id = Array(tens(eye(d))) #identity matrix
   oz = copy(O) # z operator
   op = copy(O) # raising operator
   for (q,m) in enumerate(s:-1:-s) #counts from m to -m (all states)
@@ -142,7 +142,7 @@ Make fermion operators Cup,Cdn,F,Nup,Ndn,Ndens,O,Id
 function fermionOps()
   states = 4 #fock space size
   O = zeros(Float64,states,states) #zero matrix
-  Id = copy(O)+LinearAlgebra.I #identity
+  Id = Array(tens(eye(states))) #copy(O)+LinearAlgebra.I #identity
 
   Cup = copy(O) #annihilate (up)
   Cup[1,2] = 1.

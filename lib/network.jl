@@ -86,7 +86,7 @@ function network(input::TNnetwork...;groundlevel::intType=1)
 
     end
 
-    newnet = network(vcat([[nets[w][y] for y = 1:length(nets[w])] for w = 1:length(nets)]...))
+    newnet = network(vcat([[nametens(nets[w][y]) for y = 1:length(nets[w])] for w = 1:length(nets)]...))
 
   else
 

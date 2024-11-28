@@ -66,7 +66,7 @@ function mpoterm(val::Number,operator::Array{W,1},ind::Array{P,1},base::Array{X,
   if isdens
     opString = Array{tens{finalType},1}(undef,length(base))
     @inbounds for i = 1:length(base)
-      opString[i] = tens(base[i])
+      opString[i] = tens{finalType}(base[i])
     end
   else
     opString = Array{Array{finalType,2},1}(undef,length(base))
@@ -221,6 +221,18 @@ function prepare_autoInfo(opstring::MPOterm)
     base = [Qtens(Qnumvec[i],base[i]) for i = 1:Ns]
   end
 
+
+
+  w = 1
+  while physind[w] > 0 && w < length(physind)
+    if physind[w] == 0
+      error("Zero physical index specified on at least site $w in automatic MPO generator\n If providing operators not on every site in the lattice, use `mpoterm(...,base)` where `base` is a vector of identities; uniform example: `[eye(2) for w = 1:nsites]`")
+    end
+    w += 1
+  end
+
+
+
   return Ns,mpotype,base,Qnumvec,qarrayops,physind
 end
 
@@ -356,11 +368,11 @@ function MPO(opstring::MPOterm,reverse::Bool=true,countreduce::intType=100,sweep
         end
 
         counter[numthread] += 1
-  #=
+  
         if counter[numthread] % countreduce == 0
           compressMPO!(manyvec[numthread])
         end
-        =#
+        
       end
     end
 
@@ -880,7 +892,7 @@ export deparallelize
 
 Finds nearest factor of 2 to the magnitude of `D`
 """
-function invDfactor(D::TensType)
+function invDfactor(D::Union{TensType,diagonal})
   avgD = sum(D)
   avgD /= size(D,1)
   maxval = convert(intType,floor(log(2,avgD)))
