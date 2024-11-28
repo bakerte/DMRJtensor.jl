@@ -57,7 +57,6 @@ for w = 1:length(files)
   include(libpath*subdir*files[w])
 end
 
-
 files = ["MPS.jl","randMPS.jl","makeMPS.jl","makeqMPS.jl","fullpsi.jl","nameMPS.jl","largeMPS.jl"]
 subdir = "MPS/"
 for w = 1:length(files)
@@ -65,22 +64,21 @@ for w = 1:length(files)
 end
 
 
-files = ["MPO.jl","viewbulkMPO.jl","makeMPO.jl","makeqMPO.jl","fullmpo.jl","nameMPO.jl","largeMPO.jl","autoMPO.jl"]
+files = ["MPO.jl","viewbulkMPO.jl","makeMPO.jl","makeqMPO.jl","fullmpo.jl","nameMPO.jl","largeMPO.jl","applyMPO.jl","penalty.jl","autoMPO.jl"]
 subdir = "MPO/"
 for w = 1:length(files)
   include(libpath*subdir*files[w])
 end
 
-
-files = ["environment.jl","largeEnv.jl"]
-subdir = "Env/"
+files = ["boundaryMove.jl","correlation.jl","correlationmatrix.jl","expect.jl","Lupdate.jl","move.jl","Rupdate.jl","transfermatrix.jl"]
+subdir = "MPmeas/"
 for w = 1:length(files)
   include(libpath*subdir*files[w])
 end
 
 
-files = ["correlationmatrix.jl","applyMPO.jl","boundaryMove.jl","correlation.jl","expect.jl","localizeMPO.jl","Lupdate.jl","makeEnv.jl","move.jl","moveL.jl","moveR.jl","penalty.jl","Rupdate.jl","localF.jl","transfermatrix.jl"]
-subdir = "measure/"
+files = ["environment.jl","largeEnv.jl","makeEnv.jl"]
+subdir = "Env/"
 for w = 1:length(files)
   include(libpath*subdir*files[w])
 end
