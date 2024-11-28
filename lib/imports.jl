@@ -33,53 +33,55 @@ import .LinearAlgebra.norm
 
 
 
+using TensorPACK
 #using TensorPACK
-using ..TENPACK
 
 
-#import .TENPACK.TensType
 
-import ..TENPACK: undefMat,checkType,tensorcombination,tensorcombination!,permutedims,invmat!,reshape!,unreshape!,unreshape,get_denseranges,sub!,add!,mult!,div!,joinindex!,getindex!,searchindex,convertTens
 
-import ..TENPACK: libmult,libsvd,libsvd!,libeigen,libeigen!,libqr,liblq,libqr!,liblq!
+#import .TensorPACK.TensType
+
+import TensorPACK: undefMat,checkType,tensorcombination,tensorcombination!,permutedims,invmat!,reshape!,unreshape!,unreshape,get_denseranges,sub!,add!,mult!,div!,joinindex!,getindex!,searchindex,convertTens
+
+import TensorPACK: libmult,libsvd,libsvd!,libeigen,libeigen!,libqr,liblq,libqr!,liblq!
 
 #contracions
-import ..TENPACK: contract,ccontract,contractc,ccontractc
+import TensorPACK: contract,ccontract,contractc,ccontractc
 
-import ..TENPACK: default_boundary
+import TensorPACK: default_boundary
 
-import ..TENPACK: dot,dmul!,diagcontract!
-
-
-import ..TENPACK: permq,willperm,prepareT,getsizes,maincontractor,trace
+import TensorPACK: dot,dmul!,diagcontract!
 
 
-
-import ..TENPACK: sqrt!,defzero,basedims,makeHpsi,root
-
-
-import ..TENPACK: truncate,svd,svd!,getorder,findsize,svdvals,eigen,eigen!,eigvals,eigvals!,qr,qr!,lq,lq!,polar,eye
+import TensorPACK: permq,willperm,prepareT,getsizes,maincontractor,trace
 
 
-import ..TENPACK: network,TNnetwork
+
+import TensorPACK: sqrt!,defzero,basedims,makeHpsi,root
 
 
-import ..TENPACK: largevector, tensor2disc, tensorfromdisc
+import TensorPACK: truncate,svd,svd!,getorder,findsize,svdvals,eigen,eigen!,eigvals,eigvals!,qr,qr!,lq,lq!,polar,eye
 
 
-import ..TENPACK: stdavg,testfct
+import TensorPACK: network,TNnetwork
 
 
-import ..TENPACK: Qtens
+import TensorPACK: largevector, tensor2disc, tensorfromdisc
+
+
+import TensorPACK: stdavg,testfct
+
+
+import TensorPACK: Qtens
 
 
 
 #decompositions
-#import ..TENPACK.libsvd,libsvd!
+#import TensorPACK.libsvd,libsvd!
 
 
-#import ..TENPACK.libeigen
-#import ..TENPACK.libeigen!
+#import TensorPACK.libeigen
+#import TensorPACK.libeigen!
 
 #=
 import TensorPACK.undefMat,TensorPACK.makeArray,TensorPACK.checkType,TensorPACK.tensorcombination,TensorPACK.tensorcombination!
@@ -98,12 +100,12 @@ import TensorPACK.searchindex
 import TensorPACK.libmult,TensorPACK.libsvd,TensorPACK.libsvd!,TensorPACK.libeigen,TensorPACK.libeigen!,TensorPACK.libqr,TensorPACK.liblq,TensorPACK.libqr!,TensorPACK.liblq!
 =#
 
-#import .TENPACK.tens
+#import .TensorPACK.tens
 #export tens
 
 
 
 
 
-#import ..TENPACK.sin
-#import ..TENPACK.cos
+#import TensorPACK.sin
+#import TensorPACK.cos
