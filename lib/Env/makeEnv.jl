@@ -46,10 +46,12 @@ Current environment convention is
 
 See also: [`makeEnds`](@ref)
 """
-function makeBoundary(dualpsi::matrixproductstate{Qtens{W,Q}},psi::matrixproductstate{Qtens{W,Q}},mpovec::matrixproductoperator{Qtens{W,Q}}...;left::Bool=true,rightind::Integer=3) where {W <: Number, Q <: Qnum}
+function makeBoundary(dualpsi::matrixproductstate{Qtens{W,Q}},psi::matrixproductstate{Qtens{R,Q}},mpovec::MPO...;left::Bool=true,rightind::Integer=3) where {W <: Number, R <: Number, Q <: Qnum}
 #  retType = elnumtype(dualpsi,psi,mpovec...)
   nrank = 2 + length(mpovec)
-  boundary = ones(W,ntuple(a->1,nrank)...)
+
+  P = elnumtype(dualpsi,psi,mpovec...)
+  boundary = ones(P,ntuple(a->1,nrank)...)
 
   
 
@@ -74,17 +76,19 @@ function makeBoundary(dualpsi::matrixproductstate{Qtens{W,Q}},psi::matrixproduct
   return Qtens(boundary,thisQnumMat)
 end
 
-function makeBoundary(dualpsi::matrixproductstate{tens{W}},psi::matrixproductstate{tens{W}},mpovec::matrixproductoperator{tens{W}}...;left::Bool=true,rightind::Integer=3) where W <: Number
+function makeBoundary(dualpsi::matrixproductstate{tens{W}},psi::matrixproductstate{tens{R}},mpovec::MPO...;left::Bool=true,rightind::Integer=3) where {W <: Number, R <: Number}
 #  retType = elnumtype(dualpsi,psi,mpovec...)
   nrank = 2 + length(mpovec)
-  #    boundary = ones(W,ones(intType,nrank)...)
-  return tens{W}(ones(intType,nrank),W[1])
+
+  P = elnumtype(dualpsi,psi,mpovec...)
+  return tens{P}(ones(intType,nrank),P[1])
 end
 
-function makeBoundary(dualpsi::matrixproductstate{Array{W,G}},psi::matrixproductstate{Array{W,G}},mpovec::matrixproductoperator{Array{W,G}}...;left::Bool=true,rightind::Integer=3) where {W <: Number, G}
+function makeBoundary(dualpsi::matrixproductstate{Array{W,G}},psi::matrixproductstate{Array{R,G}},mpovec::MPO...;left::Bool=true,rightind::Integer=3) where {W <: Number, R <: Number, G}
 #  retType = elnumtype(dualpsi,psi,mpovec...)
   nrank = 2 + length(mpovec)
-  boundary = ones(W,ones(intType,nrank)...)
+  P = elnumtype(dualpsi,psi,mpovec...)
+  boundary = ones(P,ones(intType,nrank)...)
   return boundary
 end
 export makeBoundary
