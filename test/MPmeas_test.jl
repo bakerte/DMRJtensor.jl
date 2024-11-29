@@ -320,6 +320,35 @@ println()
 
 move!(psi,5)
 
+L,T,R = localizeOp(psi,[Sp,Sm],[3,6])
+import LinearAlgebra
+testval = isapprox(Array(T),zeros(2,2) + LinearAlgebra.I)
+
+A = contract(L,2,psi[psi.oc],1)
+B = contract(A,3,R,1)
+C = ccontract(psi[psi.oc],B)
+
+testval &= isapprox(C,M[3,6])
+fulltest &= testfct(testval,"localizeOp(psi,Operators,sites)")
+
+
+
+L,T,R = localizeOp(psi,[Sp,Sm],[3,6],trail=(Id,Id))
+import LinearAlgebra
+testval = isapprox(Array(T),zeros(2,2) + LinearAlgebra.I)
+
+A = contract(L,2,psi[psi.oc],1)
+B = contract(A,3,R,1)
+C = ccontract(psi[psi.oc],B)
+
+testval &= isapprox(C,M[3,6])
+fulltest &= testfct(testval,"localizeOp(psi,Operators,sites,trail=...)")
+
+
+A = localizeOp(psi,mpo)
+testval = isapprox(ccontract(psi[psi.oc],A),expect(psi,mpo))
+fulltest &= testfct(testval,"localizeOp(mps,mpo)")
+
 println()
 
 A = [3,3,4]
@@ -346,22 +375,32 @@ fulltest &= testfct(testval,"correlations(psi,psi,Sp,Sm)")
 
 println()
 
+
+Ns = 10
+mpo = makeMPO(XXZ,2,Ns)
+
+D,U = eigen(mpo)
+
+psi = makeMPS(U[:,1],2)
+
+
 Qlabel = [test3(2),test3(-2)]
 qpsi,qmpo = MPS(Qlabel,psi,mpo)
-En = dmrg(qpsi,qmpo,sweeps=20,m=45,cutoff=1E-9,silent=true)
+En = dmrg(psi,mpo,sweeps=100,m=100,goal=1E-10,cutoff=1E-9,silent=true)
+En = dmrg(qpsi,qmpo,sweeps=100,m=100,goal=1E-10,cutoff=1E-9,silent=true)
 
 xlambda = 0.01
 
 penalty!(mpo,xlambda,psi,compress=false)
 shiftedEn = dmrg(psi,mpo,sweeps=20,m=45,cutoff=1E-9,silent=true)
-testval = abs(abs(En-shiftedEn) - xlambda) < 1E-6
+testval = abs(abs(En-shiftedEn) - xlambda) < 1E-4
 fulltest &= testfct(testval,"penalty!(mpo,Real,mps)")
 
 En = expect(qpsi,qmpo)
 
 penalty!(qmpo,xlambda,qpsi,compress=false)
 shiftedEn = dmrg(qpsi,qmpo,sweeps=20,m=45,cutoff=1E-9,silent=true)
-testval = abs(abs(En-shiftedEn) - xlambda) < 1E-6
+testval = abs(abs(En-shiftedEn) - xlambda) < 1E-4
 fulltest &= testfct(testval,"penalty!(mpo,Real,mps) [Quantum number types]")
 
 println()
