@@ -82,13 +82,16 @@ Inputs tensors `P` representing an `Array` of tensors into environment `V`
 See also: [`Array`](@ref)
 """
 function environment(netvec::Array{W,1}) where W <: TensType
+  return environment(convert(Memory{W},netvec))
+end
 
-#  if typeof(W) <: Array
-#    X = typeof(netvec[1])
-#    out = environment{X}(network(copy(netvec)))
-#  else
-    out = environment{W}(network(copy(netvec)))
-#  end
+"""
+    V = environment(P)
 
-  return out
+Inputs tensors `P` representing an `Array` of tensors into environment `V`
+
+See also: [`Array`](@ref)
+"""
+function environment(netvec::Memory{W}) where W <: TensType
+  return environment{W}(network{W}(copy(netvec),0))
 end

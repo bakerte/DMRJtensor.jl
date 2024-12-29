@@ -14,7 +14,7 @@
 
 generates an MPS from a single vector (i.e., from exact diagonalization) for `Ns` sites and `physInd` size physical index at orthogonality center `oc`
 """
-function makeMPS(vect::Array{W,1},inputphysInd::Array{P,1};Ns::Integer=length(physInd),left2right::Bool=true,oc::Integer=left2right ? Ns : 1,regtens::Bool=false) where {W <: Number, P <: Integer}
+function makeMPS(vect::Union{Array{W,1},Memory{W}},inputphysInd::Array{P,1};Ns::Integer=length(physInd),left2right::Bool=true,oc::Integer=left2right ? Ns : 1,regtens::Bool=false) where {W <: Number, P <: Integer}
 
 
   hilbertspacesize = prod(inputphysInd)
@@ -30,10 +30,13 @@ function makeMPS(vect::Array{W,1},inputphysInd::Array{P,1};Ns::Integer=length(ph
     physInd = inputphysInd
   end
 
-  mps = Array{Array{W,3},1}(undef,Ns)
+  tvect = tens(vect)
+
+  mps = Array{tens{W},1}(undef,Ns)
   # MPS building loop
   if left2right
-    M = reshape(vect, physInd[1], div(length(vect),physInd[1]))
+    M = reshape(tvect, physInd[1], div(length(tvect),physInd[1]))
+
     Lindsize = 1 #current size of the left index
     for i=1:Ns-1
       U,DV = qr(M)
@@ -49,7 +52,7 @@ function makeMPS(vect::Array{W,1},inputphysInd::Array{P,1};Ns::Integer=length(ph
     end
     finalmps = MPS(mps,oc=Ns,regtens=regtens)
   else
-    M = reshape(vect, div(length(vect),physInd[end]), physInd[end])
+    M = reshape(tvect, div(length(tvect),physInd[end]), physInd[end])
     Rindsize = 1 #current size of the right index
     for i=Ns:-1:2
       UD,V = lq(M)
@@ -84,7 +87,7 @@ end
 
 generates an MPS from a single vector expressed as a `denstens` (i.e., from exact diagonalization) for `Ns` sites and `physInd` an integer that is equal on all sites for the size physical index at orthogonality center `oc`
 """
-function makeMPS(vect::Union{Array{W,1},tens{W}},physInd::Integer;Ns::Integer=convert(Int64,log(physInd,length(vect))),
+function makeMPS(vect::Union{Array{W,1},tens{W},Memory{W}},physInd::Integer;Ns::Integer=convert(Int64,log(physInd,length(vect))),
                   left2right::Bool=true,oc::Integer=left2right ? Ns : 1,regtens::Bool=false) where W <: Union{denstens,Number}
   vecPhysInd = [physInd for i = 1:Ns]
   return makeMPS(vect,vecPhysInd;Ns=Ns,oc=oc,left2right=left2right,regtens=regtens)

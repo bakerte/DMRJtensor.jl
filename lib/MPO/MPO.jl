@@ -14,7 +14,7 @@
 
 constructor for MPO with an array of `TensType` `H`; `regtens` outputs with the julia Array type
 """
-function MPO(H::Array{W,1};regtens::Bool=false) where W <: TensType
+function MPO(H::Union{Array{W,1},Memory{W}};regtens::Bool=false) where W <: TensType
   T = typeof(prod(a->eltype(H[a])(1),1:length(H)))
   if !regtens && (typeof(H[1]) <: Array)
     M = [tens{T}(H[a]) for a = 1:length(H)]
@@ -38,7 +38,7 @@ end
 
 constructor for MPO with an array of `TensType` `H`; can change the element type `T` for the tensors; `regtens` outputs with the julia Array type
 """
-function MPO(T::DataType,H::Array{W,1};regtens::Bool=false) where W <: TensType
+function MPO(T::DataType,H::Union{Array{W,1},Memory{W}};regtens::Bool=false) where W <: TensType
   if W <: AbstractArray
     newH = Array{Array{eltype(H[1]),4},1}(undef,size(H,1))
   else

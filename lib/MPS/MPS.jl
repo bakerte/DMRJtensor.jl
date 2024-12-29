@@ -14,7 +14,7 @@
 
 Constructs `psi` for MPS with tensors `A` (Array of tensors or MPS) with orthogonality center `oc`. `regtens` avoids conversion to `denstens` type (defaulted to perform the conversion for efficiency); `type` defaults to the input type of the tensors in `psi`
 """
-function MPS(psi::Array{W,1};regtens::Bool=false,oc::Integer=1,type::DataType=eltype(psi[1])) where W <: Union{TensType,TNobj}
+function MPS(psi::Union{Array{W,1},Memory{W}};regtens::Bool=false,oc::Integer=1,type::DataType=eltype(psi[1])) where W <: Union{TensType,TNobj}
   if W <: densTensType
     if eltype(psi[1]) != type && !regtens
       MPSvec = network([tens(type, copy(psi[i])) for i = 1:length(psi)])
