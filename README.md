@@ -17,7 +17,7 @@ Then, typing `using DMRJtensor` will give you access to all the functions in the
   
 Troubleshooting? Email: bakerte@uvic.ca
 
-If you're just starting out, I recommend reading the introduction article at listed below (available in French or English) and beginning in the /examples folder.
+If you're just starting out, I recommend reading the introduction article at listed below (available in French or English) and beginning in the `/examples` folder.
 
 If you want to view documentation in the code, open the Julia terminal, type `?` and type the name of the function. For example,
 ```
