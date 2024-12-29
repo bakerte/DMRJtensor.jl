@@ -422,7 +422,7 @@ dmrg(psi,mpo,cutoff=1E-9,sweeps=300,m=100,method="twosite",silent=true,goal=1E-8
 
 #  println(norm(AA))
 
-U,D,V,truncerr = svd(AA,[[1,2],[3,4]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
+U,D,V,truncerr = fsvd!(AA,[[1,2],[3,4]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
 
 #  println(norm(U)," ",norm(D)," ",norm(V))
 
