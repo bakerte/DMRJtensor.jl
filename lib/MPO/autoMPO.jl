@@ -409,7 +409,7 @@ function MPO(A::MPOterm,base::Array{W}) where W <: Any #TensType
     paulistring[x] = (w == 1 ? A.val : 1.0) * A.T[w] * paulistring[x]
     if length(A.trail) != 0
   
-      error("NOT DEBUGGED...yet...beware...")
+#      println("NOT DEBUGGED...yet...beware...")
   
       firstindex = minimum(A.ind)
       for z = 1:firstindex
