@@ -295,3 +295,13 @@ function tjMPO(i::intType;t::Number=1.0,mu::Number=0.0,J::Number=1.0#=,Ops::Tupl
             onsite -t*F*Cup conj(t)*F*Cup' -t*F*Cdn conj(t)*F*Cdn' J*Sm J*Sp J*Sz -J*Ndens/4 Id]
 end
 export tjMPO
+
+"""
+    tJMPO(i[,t=1.0,mu=0.0,J=1.0])
+
+Creates a bulk MPO of the t-J model for uniform kinetic energy `t`, onsite energy `mu`, and spin coupling `J`
+
+See also: [`XXZ`](@ref)
+"""
+tJMPO = tjMPO
+export tJMPO

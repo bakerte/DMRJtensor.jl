@@ -28,6 +28,10 @@ export leftnormalize,leftnormalize!
 export rightnormalize,rightnormalize!
 
 
+
+export mpoterm
+
+
 export half
 
 
