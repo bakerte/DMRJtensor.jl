@@ -117,10 +117,21 @@ Note: Calls `add!` so will run `compressMPO!` on the result
 
 See also: [`deparallelization`](@ref) [`add!`](@ref) [`mult!`](@ref)
 """
+#=
 function +(X::MPO...)
   finalMPO = *(X...,fct=add!)
   return finalMPO
 end
+=#
+
+function +(X::MPO...;fct::Function=add!)
+  finalMPO = add!(X[1],X[2])
+  for w = 3:length(X)
+    finalMPO = add!(finalMPO,X[w])
+  end
+  return finalMPO
+end
+
 
 #=
 """
@@ -244,13 +255,7 @@ function *(X::MPO...;fct::Function=mult!)
   return finalMPO
 end
 
-function +(X::MPO...;fct::Function=add!)
-  finalMPO = add!(X[1],X[2])
-  for w = 3:length(X)
-    finalMPO = add!(finalMPO,X[w])
-  end
-  return finalMPO
-end
+
 
 #import Base.-
 """
