@@ -409,8 +409,10 @@ end
 
 function MPO(A::MPOterm,base::Array{W}) where W <: Any #TensType
   paulistring = copy(base)
+
   for w = 1:length(A)
     x = A.ind[w]
+
     paulistring[x] = (w == 1 ? A.val : 1.0) * A.T[w] * paulistring[x]
     if length(A.trail) != 0
   
@@ -437,7 +439,7 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
   regularterms = findall(w->length(terms[w]) == 2,1:length(terms))
   for a in regularterms
     mpo += MPO(terms[a],base)
-    deparallelize!(mpo)
+#    deparallelize!(mpo)
   end
 
 
@@ -452,7 +454,12 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
       Id = Array(base[i])
       O = zero(Id)
       if terms[a].ind[1] == i
-        singleterms[i] = mpotype[Id O; Array(terms[a].T[1]) Id]
+        if isapprox(terms[a].val,1.)
+          onsite = Array(terms[a].T[1])
+        else
+          onsite = terms[a].val*Array(terms[a].T[1])
+        end
+        singleterms[i] = mpotype[Id O; onsite Id]
       else
         singleterms[i] = mpotype[Id O; O Id]
       end
