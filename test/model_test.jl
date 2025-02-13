@@ -77,11 +77,13 @@ for r = 1:length(mpos)
   rangevec = unique([1,r])
   for w in rangevec
     for i = 1:Ns-w
-      checkH += mpoterm(0.5,[Sp,Sm],[i,i+w],base)
-      checkH += mpoterm(0.5,[Sm,Sp],[i,i+w],base)
-      checkH += mpoterm([Sz,Sz],[i,i+w],base)
+      checkH += mpoterm(0.5,Sp,i,Sm,i+w)#mpoterm(0.5,[Sp,Sm],[i,i+w],base)
+      checkH += mpoterm(0.5,Sm,i,Sp,i+w)#mpoterm(0.5,[Sm,Sp],[i,i+w],base)
+      checkH += mpoterm(Sz,i,Sz,i+w)#mpoterm([Sz,Sz],[i,i+w],base)
     end
   end
+
+  checkH = MPO(checkH)
   
   global D,U = eigen(H)
   global checkD,checkU = eigen(checkH)
@@ -161,11 +163,13 @@ for r = 1:length(mpos)
   rangevec = unique([1,r])
   for w = 1:r #in rangevec
     for i = 1:Ns-w
-      checkH += mpoterm(0.5,[Sp,Sm],[i,i+w],base)
-      checkH += mpoterm(0.5,[Sm,Sp],[i,i+w],base)
-      checkH += mpoterm([Sz,Sz],[i,i+w],base)
+      checkH += mpoterm(0.5,Sp,i,Sm,i+w)
+      checkH += mpoterm(0.5,Sm,i,Sp,i+w)
+      checkH += mpoterm(Sz,i,Sz,i+w)
     end
   end
+
+  checkH = MPO(checkH)
   
   global D,U = eigen(H)
   global checkD,checkU = eigen(checkH)
@@ -255,11 +259,13 @@ for r = 1:length(mpos)
   rangevec = unique([1,r])
   for w in rangevec #1:r #
     for i = 1:Ns-w
-      doublecheckH += mpoterm(0.5,[Sp,Sm],[i,i+w],base)
-      doublecheckH += mpoterm(0.5,[Sm,Sp],[i,i+w],base)
-      doublecheckH += mpoterm([Sz,Sz],[i,i+w],base)
+      doublecheckH += mpoterm(0.5,Sp,i,Sm,i+w)
+      doublecheckH += mpoterm(0.5,Sm,i,Sp,i+w)
+      doublecheckH += mpoterm(Sz,i,Sz,i+w)
     end
   end
+
+  doublecheckH = MPO(doublecheckH)
 
   function expSzSz(i)
     return [Id O O;
@@ -278,13 +284,17 @@ for r = 1:length(mpos)
   rangevec = unique([1,r])
   for w in rangevec #1:r #
     for i = 1:Ns-w
-      checkH += mpoterm(0.5,[Sp,Sm],[i,i+w],base)
-      checkH += mpoterm(0.5,[Sm,Sp],[i,i+w],base)
-      checkH += mpoterm([Sz,Sz],[i,i+w],base)
+      checkH += mpoterm(0.5,Sp,i,Sm,i+w)
+      checkH += mpoterm(0.5,Sm,i,Sp,i+w)
+      checkH += mpoterm(Sz,i,Sz,i+w)
     end
   end
 
+  checkH = MPO(checkH)
+
   checkH += expMPO(xlambda,Sz,Sz,Ns)
+
+
   
   global D,U = eigen(H)
   global checkD,checkU = eigen(checkH)

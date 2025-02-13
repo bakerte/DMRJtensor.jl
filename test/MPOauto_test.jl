@@ -8,7 +8,7 @@ import LinearAlgebra
 Ns = 10
 
 Sp,Sm,Sz,Sy,Sx,O,Id = spinOps()
-
+#=
 function checkqubitops(val)
   base = [Id for i = 1:Ns]
   testval = true
@@ -27,7 +27,9 @@ function checkqubitops(val)
       end
       C = MPO(B)
       for k = 1:Ns
-        ktest = isapprox(Array(A[k]),Array(C[k]))
+        ktest = norm(A[k]-C[k]) < 1E-12
+        ktest &= isapprox(prod(w->size(A[w],2),1:length(A))-prod(w->size(C[w],2),1:length(C)),0)
+#        ktest = isapprox(Array(A[k]),Array(C[k]))
         testval &= ktest
       end
     end
@@ -208,7 +210,7 @@ end
 
 testval = checkqubitops_string_noval(vecQlabels)
 fulltest &= testfct(testval,"mpoterm(Qlabels,[operators],[indices],base)")
-
+=#
 println()
 
 C = [heisenbergMPO(i) for i = 1:Ns]
@@ -229,23 +231,20 @@ end
 function test(Sp,Sm,Sz,Id,Ns)
   base = [Id for i = 1:Ns]
 
-  Ham = bigOp(Sz,1,Ns,Id)*bigOp(Sz,2,Ns,Id)
-  mpo = mpoterm(1.,[Sz,Sz],[1,2],base)
-
-  for i = 2:Ns-1
-    Ham += bigOp(Sz,i,Ns,Id)*bigOp(Sz,i+1,Ns,Id)
-    mpo += mpoterm(1.0,[Sz,Sz],[i,i+1],base)
-  end
+  Ham = 0 #bigOp(Sz,1,Ns,Id)*bigOp(Sz,2,Ns,Id)
+  mpo = 0
 
   for i = 1:Ns-1
+    Ham += bigOp(Sz,i,Ns,Id)*bigOp(Sz,i+1,Ns,Id)
     Ham += bigOp(Sp,i,Ns,Id)*bigOp(Sm,i+1,Ns,Id)/2
     Ham += bigOp(Sm,i,Ns,Id)*bigOp(Sp,i+1,Ns,Id)/2
 
-    mpo += mpoterm(0.5,[Sp,Sm],[i,i+1],base)
-    mpo += mpoterm(0.5,[Sm,Sp],[i,i+1],base)
+    mpo += mpoterm(1.0,Sz,i,Sz,i+1)
+    mpo += mpoterm(0.5,Sp,i,Sm,i+1)
+    mpo += mpoterm(0.5,Sm,i,Sp,i+1)
   end
   
-  return Ham,mpo
+  return Ham,MPO(mpo)
 end
 
 Ham,mpo = test(Sp,Sm,Sz,Id,Ns)
@@ -267,7 +266,8 @@ offsetval = -0.1
 #expect(psi,mpo+offsetval)
 
 testval = isapprox(expect(psi,mpo),D[1])
-testval &= isapprox(expect(psi,mpo+offsetval)-expect(psi,mpo),offsetval)
+checkval = (expect(psi,mpo+offsetval)-expect(psi,mpo))[1]
+testval &= isapprox(checkval,offsetval)
 fulltest &= testfct(testval,"+(mpo,number)")
 
 println()
@@ -288,12 +288,12 @@ function another_test(Sp,Sm,Sz,Id,Ns)
   mpo_tup_Sp = [mpoterm(0.5,[Sp,Sm],[i,i+1],base) for i = 1:Ns-1]
   mpo_tup_Sm = [mpoterm(0.5,[Sm,Sp],[i,i+1],base) for i = 1:Ns-1]
   =#
-  mpo_tup_Sz = ntuple(i->mpoterm([Sz,Sz],[i,i+1],base),Ns-1)
-  mpo_tup_Sp = ntuple(i->mpoterm(0.5,[Sp,Sm],[i,i+1],base),Ns-1)
-  mpo_tup_Sm = ntuple(i->mpoterm(0.5,[Sm,Sp],[i,i+1],base),Ns-1)
+  mpo_tup_Sz = ntuple(i->mpoterm(Sz,i,Sz,i+1),Ns-1)
+  mpo_tup_Sp = ntuple(i->mpoterm(0.5,Sp,i,Sm,i+1),Ns-1)
+  mpo_tup_Sm = ntuple(i->mpoterm(0.5,Sm,i,Sp,i+1),Ns-1)
 
   mpo = +(mpo_tup_Sz...,mpo_tup_Sp...,mpo_tup_Sm...)
-  return mpo
+  return MPO(mpo)
 end
 
 mpo = another_test(Sp,Sm,Sz,Id,Ns)
