@@ -431,15 +431,24 @@ end
 
 
 
-function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps::intType=2) where W <: MPOterm
+function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps::intType=2,compresscheck::Integer=20) where W <: MPOterm
 
   Ns,mpotype,base,Qnumvec,qarrayops,physind = prepare_autoInfo(terms)
 
-  mpo = 0
+  numthreads = Threads.nthreads()
+  mpovec = Any[0. for w = 1:numthreads]
+
   regularterms = findall(w->length(terms[w]) == 2,1:length(terms))
-  for a in regularterms
-    mpo += MPO(terms[a],base)
-#    deparallelize!(mpo)
+  Threads.@threads for a in regularterms
+    thisthread = Threads.threadid()
+    mpovec[thisthread] += MPO(terms[a],base)
+    deparallelize!(mpovec[thisthread])
+  end
+
+  mpo = 0
+  for w = 1:length(mpovec)
+    mpo += mpovec[w]
+    deparallelize!(mpo)
   end
 
 
@@ -477,13 +486,29 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
 #  deparallelize!(mpo)
 
 
+
+  mpovec = Any[0. for w = 1:numthreads]
   manympo = 0
 
   manyterms = findall(w->length(terms[w]) > 2,1:length(terms))
+  counter = zeros(Int64,numthreads)
   for a in manyterms
-    manympo += MPO(terms[a],base)
+    thisthread = Threads.threadid()
+    mpovec[thisthread] += MPO(terms[a],base)
+    counter[thisthread] += 1
+    if counter[thisthread] % compresscheck == 0
+      compressMPO!(mpovec[thisthread])
+    end
   end
-  if length(manyterms) > 0
+  if length(mpovec) > 1
+    for w = 1:length(mpovec)
+      compressMPO!(mpovec[w])
+      manympo += mpovec[w]
+    end
+  else
+    manympo = mpovec[1]
+  end
+  if !isapprox(manympo,0)
     compressMPO!(manympo)
     mpo += manympo
   end
