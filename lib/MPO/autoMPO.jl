@@ -117,13 +117,6 @@ Note: Calls `add!` so will run `compressMPO!` on the result
 
 See also: [`deparallelization`](@ref) [`add!`](@ref) [`mult!`](@ref)
 """
-#=
-function +(X::MPO...)
-  finalMPO = *(X...,fct=add!)
-  return finalMPO
-end
-=#
-
 function +(X::MPO...;fct::Function=add!)
   finalMPO = add!(X[1],X[2])
   for w = 3:length(X)
@@ -131,6 +124,13 @@ function +(X::MPO...;fct::Function=add!)
   end
   return finalMPO
 end
+#=
+function +(X::MPO...)
+  finalMPO = *(X...,fct=add!)
+  return finalMPO
+end
+=#
+
 
 
 #=
@@ -175,7 +175,7 @@ Adds a constant `c` to a Hamiltonian `H` (commutative)
 """
 function +(H::MPO,c::Number;pos::Integer=1)
   if !isapprox(c,0)
-    const_term = MPO([i == pos ? add!(c,eye(H[i],[2]))  : eye(H[i],[2]) for i = 1:length(H)])
+    const_term = MPO([i == pos ? c*eye(H[i],[2])  : eye(H[i],[2]) for i = 1:length(H)])
     return copy(H) + const_term
   else
     return H
