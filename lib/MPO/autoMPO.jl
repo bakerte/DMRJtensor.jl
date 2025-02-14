@@ -48,7 +48,7 @@ function mpoterm(val::Number,Op1::TensType,i::Integer,other...)# where U <: Unio
   else
     vecOps = [Op1]
     vecinds = [i]
-    trail = Diagonal[]
+    trail = [Diagonal[]]
   end
 
   return mpoterm(val,vecOps,vecinds,trail)
