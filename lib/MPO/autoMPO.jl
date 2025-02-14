@@ -446,12 +446,12 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
   end
 
   mpo = 0
-  if length(regularterms) > 0
+#  if length(regularterms) > 0
     for w = 1:length(mpovec)
       mpo += mpovec[w]
       deparallelize!(mpo)
     end
-  end
+#  end
 
 
 
@@ -1028,6 +1028,10 @@ function deparallelize!(M::densTensType;left::Bool=true,zero::Float64=0.)
     newK = tens(reshape!(newK,size(newK,1),sizeM[2:4]...))
     return outT,newK
   end
+end
+
+function deparallelize!(x::Number)
+  return x
 end
 
 function deparallelize!(M::Qtens{W,Q};left::Bool=true,zero::Float64=0.) where {W <: Number, Q <: Qnum}
