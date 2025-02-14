@@ -446,9 +446,11 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
   end
 
   mpo = 0
-  for w = 1:length(mpovec)
-    mpo += mpovec[w]
-    deparallelize!(mpo)
+  if length(regularterms) > 0
+    for w = 1:length(mpovec)
+      mpo += mpovec[w]
+      deparallelize!(mpo)
+    end
   end
 
 
