@@ -40,7 +40,7 @@ function mpoterm(val::Number,Op1::TensType,i::Integer,other...)# where U <: Unio
       trail = Diagonal[]
     else
       endother = length(other)-1
-      trail = other[end]
+      trail = [other[end]]
     end
 
     vecOps = vcat([Op1],[other[w] for w = 1:2:endother])
@@ -48,7 +48,7 @@ function mpoterm(val::Number,Op1::TensType,i::Integer,other...)# where U <: Unio
   else
     vecOps = [Op1]
     vecinds = [i]
-    trail = [Diagonal[]]
+    trail = Diagonal[]
   end
 
   return mpoterm(val,vecOps,vecinds,trail)
