@@ -2,7 +2,7 @@
 
 # DMRjulia (DMRJtensor.jl)
 
-*We are beta-testing the full release of v1.0 which will contain all algorithms needed for cutting edge research. Please let us know if you see anything you feel could improve or any bugs!*
+*We are currently in an extended beta-testing phase for the full release of v1.0 which will contain all algorithms needed for cutting edge research. Please let us know if you see anything you feel could improve or any bugs!*
 
 Hello! Welcome to the site of DMRjulia, a library for quantum information-based physics computations written in Julia. All algorithms fall under the umbrella of entanglement renormalization and seek to optimize the density matrix or quantum entanglement directly. Very frequently, these algorithms are most easily expressed as a tensor network but these are markedly different from machine learning and some algorithms in quantum chemistry, which fall under the broad category of "tensor networks" as well. 
 
