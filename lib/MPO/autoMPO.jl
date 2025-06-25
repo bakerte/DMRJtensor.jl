@@ -413,13 +413,12 @@ function MPO(A::MPOterm,base::Array{W}) where W <: Any #TensType
   for w = 1:length(A)
     x = A.ind[w]
 
-    paulistring[x] = (w == 1 ? A.val : 1.0) * A.T[w] * paulistring[x]
+    paulistring[x] = A.T[w]*paulistring[x]
+    if w == 1
+      mult!(paulistring[x],A.val)
+    end
     if length(A.trail) != 0
-  
-#      println("NOT DEBUGGED...yet...beware...")
-  
-      firstindex = minimum(A.ind)
-      for z = 1:firstindex
+      for z = 1:x-1 #firstindex
         loopindex = (z-1) % length(A.trail) + 1
         paulistring[z] = contract(A.trail[loopindex],2,paulistring[z],1)
       end
@@ -446,12 +445,12 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
   end
 
   mpo = 0
-#  if length(regularterms) > 0
+  if length(regularterms) > 0
     for w = 1:length(mpovec)
       mpo += mpovec[w]
       deparallelize!(mpo)
     end
-#  end
+  end
 
 
 
@@ -510,10 +509,12 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
   else
     manympo = mpovec[1]
   end
-  if !isapprox(manympo,0)
+
+  if manympo != 0 #!isapprox(manympo,0)
     compressMPO!(manympo)
     mpo += manympo
   end
+  
 
 
 
