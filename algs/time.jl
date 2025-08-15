@@ -58,7 +58,7 @@
       else
         ops = tensorcombination!((prefactor,),convertTens(retType,ops))
       end
-#      ops *= prefactor
+      ops *= prefactor
       ops = exp(ops)
       expgates[j] = reshape(ops,sizegates[1],sizegates[2],sizegates[3],sizegates[4])
     end
