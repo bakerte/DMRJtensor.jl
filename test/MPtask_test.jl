@@ -423,3 +423,5 @@ for i = 1:length(A)
 end
 fulltest &= testfct(testvalvec[1],"makeqMPO(vector,Vector{Vector{Qnum}})")
 =#
+
+fulltest

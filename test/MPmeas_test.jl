@@ -209,43 +209,43 @@ println()
 
 Lenv,Renv = makeEnv(psi,mpo)
 
-boundaryMove!(psi,4,Lenv,Renv,mpo)
+boundaryMove!(4,Lenv,Renv,psi,mpo)
 
 B = contract(Lenv[psi.oc],3,psi[psi.oc],1)
 B = contract(B,[2,3],mpo[psi.oc],[1,2])
 B = contract(B,[2,4],Renv[psi.oc],[1,2])
 C = ccontract(psi[psi.oc],B)
 testval = isapprox(expect(psi,mpo),C)
-fulltest &= testfct(testval,"boundaryMove!(psi,integer,Env,Env,mpo...)")
+fulltest &= testfct(testval,"boundaryMove!(integer,Env,Env,psi,mpo...)")
 
-boundaryMove!(psi,6,Lenv,Renv,mpo)
+boundaryMove!(6,Lenv,Renv,psi,mpo)
 
 B = contract(Lenv[psi.oc],3,psi[psi.oc],1)
 B = contract(B,[2,3],mpo[psi.oc],[1,2])
 B = contract(B,[2,4],Renv[psi.oc],[1,2])
 C = ccontract(psi[psi.oc],B)
 testval = isapprox(expect(psi,mpo),C)
-fulltest &= testfct(testval,"boundaryMove!(dualpsi,psi,integer,Env,Env,mpo...)")
+fulltest &= testfct(testval,"boundaryMove!(integer,Env,Env,dualpsi,psi,mpo...)")
 
 println()
 
-psi,Lenv,Renv = boundaryMove(psi,4,Lenv,Renv,mpo)
+psi,Lenv,Renv = boundaryMove(4,Lenv,Renv,psi,mpo)
 
 B = contract(Lenv[psi.oc],3,psi[psi.oc],1)
 B = contract(B,[2,3],mpo[psi.oc],[1,2])
 B = contract(B,[2,4],Renv[psi.oc],[1,2])
 C = ccontract(psi[psi.oc],B)
 testval = isapprox(expect(psi,mpo),C)
-fulltest &= testfct(testval,"boundaryMove(psi,integer,Env,Env,mpo...)")
+fulltest &= testfct(testval,"boundaryMove(integer,Env,Env,psi,mpo...)")
 
-psi,Lenv,Renv = boundaryMove(psi,6,Lenv,Renv,mpo)
+psi,Lenv,Renv = boundaryMove(6,Lenv,Renv,psi,mpo)
 
 B = contract(Lenv[psi.oc],3,psi[psi.oc],1)
 B = contract(B,[2,3],mpo[psi.oc],[1,2])
 B = contract(B,[2,4],Renv[psi.oc],[1,2])
 C = ccontract(psi[psi.oc],B)
 testval = isapprox(expect(psi,mpo),C)
-fulltest &= testfct(testval,"boundaryMove(dualpsi,psi,integer,Env,Env,mpo...)")
+fulltest &= testfct(testval,"boundaryMove(integer,Env,Env,dualpsi,psi,mpo...)")
 
 println()
 
@@ -318,10 +318,6 @@ fulltest &= testfct(testval,"correlationmatrix(psi,psi,Sp,Sm)")
 
 println()
 
-move!(psi,5)
-
-println()
-
 A = [3,3,4]
 B = [4,4,4]
 DMRjulia.operator_in_order!(A,B)
@@ -383,3 +379,4 @@ testval = ndims(transfermatrix(psi,psi,2,5)) == 4
 fulltest &= testfct(testval,"transfermatrix(psi,psi,integer,integer)")
 
 
+fulltest

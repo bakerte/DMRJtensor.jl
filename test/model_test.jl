@@ -364,3 +364,4 @@ QNenergy = dmrg(qpsi,qmpo,m=45,sweeps=20,cutoff=1E-9,method="twosite",silent=tru
 testval = abs(QNenergy-(-25.380567747816)) < 1E-4
 fulltest &= testfct(testval,"Hubbard model")
 
+fulltest

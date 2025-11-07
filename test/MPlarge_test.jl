@@ -274,3 +274,5 @@ for i = 1:Ns
   rm("altenv_$i"*DMRjulia.file_extension)
 #  rm("altRenv_$i.dmrjulia")
 end
+
+fulltest

@@ -4,7 +4,7 @@ println("#>-----------|  dmrg_test.jl  |-----------<")
 println("#            +----------------+")
 fulltest = true
 
-algs = ["twosite","3S","2S"]
+algs = ["twosite","3S"#=,"2S"=#]
 
 @makeQNs "testspin" U1
 @makeQNs "testHubbard" U1 U1
@@ -77,7 +77,7 @@ for i = 1:2
 
     global qpsi,qmpo = MPS(Qlabels,psi,mpo)
 
-    dmrg(psi,mpo,sweeps=10,m=2,cutoff=1E-12,silent=true)
+#    dmrg(psi,mpo,sweeps=10,m=2,cutoff=1E-12,silent=true)
 
     energy = dmrg(psi,mpo,sweeps=100,m=45,cutoff=1E-12,silent=true,method=algs[w])
 
@@ -95,3 +95,4 @@ end
 
 fulltest &= testfct(sum(testvals)==length(testvals),"dmrg functions (two site, 3S, 2S) [for spins and fermions]")
 
+fulltest

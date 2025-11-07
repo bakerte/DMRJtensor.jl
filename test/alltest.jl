@@ -16,10 +16,13 @@ const tests = [
 "MPlarge_test.jl",
 "MPOauto_test.jl",
 "model_test.jl",
+
 ######
 ######
 ######
 "dmrg_test.jl",
+
+#"timemethods.jl",
 
 #"classicalTN_test.jl"
 ]
@@ -47,7 +50,7 @@ function libtest(;tests::Array{String,1}=tests,dir::String=libdir,path::String=d
   fulltestrecord = Array{Bool,1}(undef,length(tests))
 
   for i = 1:length(tests)
-    @time include(path*tests[i])
+    @time fulltest = include(path*tests[i])
     checkall(fulltestrecord,i,fulltest)
   end
 

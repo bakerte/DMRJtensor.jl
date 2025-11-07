@@ -343,3 +343,5 @@ answer = contract(G)
 
 testval = abs(true_energy - answer.N.T[1]) < 1E-6
 fulltest &= testfct(testval,"contract(network)")
+
+fulltest
