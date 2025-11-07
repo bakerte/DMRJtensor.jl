@@ -9,43 +9,17 @@
 # This code is native to the julia programming language (v1.10.0+)
 #
 
-#=
-import LinearAlgebra
-import Printf
-import Serialization
+"""
+    H = trace(mpo)
 
-import Distributed
-=#
-
-export makeMPS
-
-
-#export applylocalF,applylocalF!
-
-
-export move
-export leftnormalize,leftnormalize!
-export rightnormalize,rightnormalize!
-
-
-
-export mpoterm
-
-
-export half
-
-
-
-export makeMPO
-
-
-export TRG_square
-
-
-
-export makeqMPS
-
-
-export randMPS
-
-export movecenter!
+Takes the trace of the full MPO representation of the Hamiltonian
+"""
+function trace(mpo::MPO)
+  tr = trace(mpo[1],[2,3])
+  for w = 2:Ns
+    tr *= mpo[w]
+    tr = trace(tr,[2,3])
+  end
+  return trace(tr)
+end
+#export fullH

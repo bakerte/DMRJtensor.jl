@@ -9,6 +9,8 @@
 # This code is native to the julia programming language (v1.10.0+)
 #
 
+const defZerocompress = 1E-14
+
 #       +---------------------------------------+
 #>------+    Automatic determination of MPO     +---------<
 #       +---------------------------------------+
@@ -375,10 +377,9 @@ function prepare_autoInfo(terms::Vector{W}) where W <: Any #MPOterm
   end
   mpotype = typeof(valtype)
 
+  base = [eye(mpotype,physind[w],physind[w]) for w = 1:Ns]
   if qarrayops
     base = [Qtens(Qnumvec[i],base[i]) for i = 1:Ns]
-  else
-    base = [eye(mpotype,physind[w],physind[w]) for w = 1:Ns]
   end
 
 #println("JUST BEFORE")
@@ -410,7 +411,7 @@ end
 function MPO(A::MPOterm,base::Array{W}) where W <: Any #TensType
   paulistring = copy(base)
 
-  for w = 1:length(A)
+  for w = length(A):-1:1#1:length(A)
     x = A.ind[w]
 
     paulistring[x] = A.T[w]*paulistring[x]
@@ -437,28 +438,61 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
   numthreads = Threads.nthreads()
   mpovec = Any[0. for w = 1:numthreads]
 
+  notrail = true
+  w = 0
+  while notrail && w < length(terms)
+    w += 1
+    notrail &= length(terms[w].trail) > 0
+  end
+
+  counts = intType[0 for w = 1:numthreads]
+
   regularterms = findall(w->length(terms[w]) == 2,1:length(terms))
   Threads.@threads for a in regularterms
-    thisthread = Threads.threadid()
+    thisthread = Threads.threadid()-1
+
     mpovec[thisthread] += MPO(terms[a],base)
-    deparallelize!(mpovec[thisthread])
+    counts[thisthread] += 1
+    if counts[thisthread] % compresscheck == 0 #&& notrail
+#      deparallelize!(mpovec[thisthread])
+#    else
+      compressMPO!(mpovec[thisthread])
+    end
   end
 
   mpo = 0
   if length(regularterms) > 0
     for w = 1:length(mpovec)
+#      compressMPO!(mpovec[w])
       mpo += mpovec[w]
-      deparallelize!(mpo)
+#      if notrail
+#        deparallelize!(mpo)
+#      else
+#        compressMPO!(mpo)
+#      end
     end
   end
+
+  compressMPO!(mpo)
 
 
 
 
   singlesiteterms = findall(w->length(terms[w]) == 1,1:length(terms))
   singlempo = 0
+  zerobase = [Array(zero(base[i])) for i = 1:length(base)]
+  if length(singlesiteterms) > 0
   for a in singlesiteterms
 
+
+    if isapprox(terms[a].val,1.)
+      onsite = Array(terms[a].T[1])
+    else
+      onsite = terms[a].val*Array(terms[a].T[1])
+    end
+    i = terms[a].ind[1]
+    zerobase[i] += onsite
+#=
     singleterms = Array{Array{mpotype,2},1}(undef,Ns)
     for i = 1:Ns
       Id = Array(base[i])
@@ -476,15 +510,45 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
     end
 
     onempo = makeMPO(singleterms,physind)
-    if qarrayops
-      onempo = makeqMPO(Qnumvec,onempo)
-    end
+#    if qarrayops
+#      onempo = makeqMPO(Qnumvec,onempo)
+#    end
 
     singlempo += onempo #MPO(terms[a],base)
+    =#
   end
 
-  mpo += singlempo
-#  deparallelize!(mpo)
+#  for i = 1:Ns
+    singleterms = Array{Array{mpotype,2},1}(undef,Ns)
+    for i = 1:Ns
+      Id = Array(base[i])
+      O = zero(Id)
+      #=
+      if terms[a].ind[1] == i
+        if isapprox(terms[a].val,1.)
+          onsite = Array(terms[a].T[1])
+        else
+          onsite = terms[a].val*Array(terms[a].T[1])
+        end
+        =#
+#        println(typeof(Id)," ",typeof(O)," ",typeof(zerobase[i]))
+        singleterms[i] = mpotype[Id O; Array(zerobase[i]) Id]
+#      else
+#        singleterms[i] = mpotype[Id O; O Id]
+#      end
+    end
+#  end
+    
+     singlempo = makeMPO(singleterms,physind)
+     if qarrayops
+       singlempo = makeqMPO(Qnumvec,singlempo)
+     end
+
+   end
+
+   mpo += singlempo
+
+#  compressMPO!(mpo)
 
 
 
@@ -493,8 +557,8 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
 
   manyterms = findall(w->length(terms[w]) > 2,1:length(terms))
   counter = zeros(Int64,numthreads)
-  for a in manyterms
-    thisthread = Threads.threadid()
+  Threads.@threads for a in manyterms
+    thisthread = Threads.threadid()-1
     mpovec[thisthread] += MPO(terms[a],base)
     counter[thisthread] += 1
     if counter[thisthread] % compresscheck == 0
@@ -503,7 +567,7 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
   end
   if length(mpovec) > 1
     for w = 1:length(mpovec)
-      compressMPO!(mpovec[w])
+#      compressMPO!(mpovec[w])
       manympo += mpovec[w]
     end
   else
@@ -511,7 +575,7 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
   end
 
   if manympo != 0 #!isapprox(manympo,0)
-    compressMPO!(manympo)
+#    compressMPO!(manympo)
     mpo += manympo
   end
   
@@ -674,7 +738,7 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
     end
   end
 =#
-  return mpo #compressMPO!(mpo)
+  return compressMPO!(mpo) #mpo
 end
 
 
@@ -1289,46 +1353,84 @@ export invDfactor
 const forwardshape = Array{intType,1}[intType[1,2,3],intType[4]]
 const backwardshape = Array{intType,1}[intType[1],intType[2,3,4]]
 
+function cleantensor!(A)
+  for w = 1:length(A)
+    if abs(A[w]) < 1E-32
+      A[w] = 0.
+    end
+  end
+end
+
 """
   compressMPO!(W[,sweeps=,cutoff=,deltam=,minsweep=,nozeros=])
 
 compresses MPO (`W`; or several `M`) with SVD compression for `sweeps` sweeps, `cutoff` applied to the SVD, `deltam` target for teh bond dimension compression, and `nozeros` defaulted to true to eliminate all zeros in the SVD
 """
-function compressMPO!(W::MPO,M::MPO...;sweeps::Integer=100,cutoff::Float64=0.,
+function compressMPO!(mpo::MPO,M::MPO...;sweeps::Integer=1000,cutoff::Float64=defZerocompress,
                     deltam::Integer=0,minsweep::Integer=1,nozeros::Bool=true)
   for a = 1:length(M)
-    W = add!(W,M[a])
+    mpo = add!(mpo,M[a])
   end
   n = 0
+  Ns = length(mpo)
   mchange = 1000
-  lastmdiff = [size(W[i],4) for i = 1:length(W)-1]
+  lastmdiff = [size(mpo[i],4) for i = 1:length(mpo)-1]
   while (n < sweeps && mchange > deltam) || (n < minsweep)
     n += 1
-    for i = 1:length(W)-1
-      U,D,V = svd(W[i],forwardshape,cutoff=cutoff,nozeros=nozeros)
-      scaleD = invDfactor(D)
 
-      U = mult!(U,scaleD)
-      W[i] = U
+#    if Ns > 50
+      for w = 1:Ns-1
+        double_mpo = contract(mpo[w],4,mpo[w+1],1)
+        U,D,V = svd(double_mpo,[[1,2,3],[4,5,6]],nozeros=true,cutoff=cutoff)
 
-      scaleDV = contract(D,2,V,1,alpha=1/scaleD)
-      W[i+1] = contract(scaleDV,2,W[i+1],1)
+        mpo[w] = U*D
+        mpo[w+1] = V
+      end
+      for w = Ns:-1:2
+        double_mpo = contract(mpo[w-1],4,mpo[w],1)
+        U,D,V = svd(double_mpo,[[1,2,3],[4,5,6]],nozeros=true,cutoff=cutoff)
+
+        mpo[w-1] = U
+        mpo[w] = D*V
+      end
+#=
+    else
+
+      Threads.@threads for w = 1:2:Ns-1
+        double_mpo = contract(mpo[w],4,mpo[w+1],1)
+        U,D,V = svd(double_mpo,[[1,2,3],[4,5,6]],nozeros=true,cutoff=cutoff)
+
+        mpo[w] = U*D
+        mpo[w+1] = V
+      end
+      Threads.@threads for w = 2:2:Ns-1
+        double_mpo = contract(mpo[w],4,mpo[w+1],1)
+        U,D,V = svd(double_mpo,[[1,2,3],[4,5,6]],nozeros=true,cutoff=cutoff)
+
+        mpo[w] = U*D
+        mpo[w+1] = V
+      end
+      Threads.@threads for w = Ns:-2:2
+        double_mpo = contract(mpo[w-1],4,mpo[w],1)
+        U,D,V = svd(double_mpo,[[1,2,3],[4,5,6]],nozeros=true,cutoff=cutoff)
+
+        mpo[w-1] = U
+        mpo[w] = D*V
+      end
+      Threads.@threads for w = Ns-1:-2:2
+        double_mpo = contract(mpo[w-1],4,mpo[w],1)
+        U,D,V = svd(double_mpo,[[1,2,3],[4,5,6]],nozeros=true,cutoff=cutoff)
+
+        mpo[w-1] = U
+        mpo[w] = D*V
+      end
     end
-    for i = length(W):-1:2
-      U,D,V = svd(W[i],backwardshape,cutoff=cutoff,nozeros=nozeros)
-      scaleD = invDfactor(D)
-      
-      V = mult!(V,scaleD)
-      W[i] = V
-
-      scaleUD = contract(U,2,D,1,alpha=1/scaleD)
-      W[i-1] = contract(W[i-1],4,scaleUD,1)
-    end
-    thismdiff = intType[size(W[i],4) for i = 1:length(W)-1]
+    =#
+    thismdiff = intType[size(mpo[i],4) for i = 1:length(mpo)-1]
     mchange = sum(a->lastmdiff[a]-thismdiff[a],1:length(thismdiff))
     lastmdiff = copy(thismdiff)
   end
-  return W
+  return mpo
 end
 
 function compressMPO!(w::Number)
@@ -1340,7 +1442,7 @@ end
 
 compresses an array of MPOs (`W`) in parallel with SVD compression for `sweeps` sweeps, `cutoff` applied to the SVD, `deltam` target for teh bond dimension compression, and `nozeros` defaulted to true to eliminate all zeros in the SVD
 """
-function compressMPO!(W::Array{MPO,1};sweeps::Integer=1000,cutoff::Float64=1E-16,
+function compressMPO!(W::Array{MPO,1};sweeps::Integer=1000,cutoff::Float64=defZerocompress,
                     deltam::Integer=0,minsweep::Integer=1,nozeros::Bool=true)
   nlevels = floor(intType,log(2,length(W)))
   active = Bool[true for i = 1:length(W)]
@@ -1371,7 +1473,7 @@ Same as `compressMPO!` but a copy is made of the original vector of MPOs
 
 See also: [`compressMPO!`](@ref)
 """
-  function compressMPO(W::Array{MPO,1};sweeps::Integer=1000,cutoff::Float64=1E-16,deltam::Integer=0,minsweep::Integer=1,nozeros::Bool=true)
+  function compressMPO(W::Array{MPO,1};sweeps::Integer=1000,cutoff::Float64=defZerocompress,deltam::Integer=0,minsweep::Integer=1,nozeros::Bool=true)
   M = copy(W)
   return compressMPO!(M;sweeps=sweeps,cutoff=cutoff,deltam=deltam,minsweep=minsweep,nozeros=nozeros)
 end

@@ -49,6 +49,86 @@ function MPO(T::DataType,H::Union{Array{W,1},Memory{W}};regtens::Bool=false) whe
     if ndims(H[a]) == 2
       rP = reshape(H[a],size(H[a],1),size(H[a],2),1,1)
       newH[a] = permutedims(rP,[4,1,2,3])
+
+      if W <: qarray
+        Q = typeof(newH[1].flux)
+        zeroQN = Q()
+        w = a
+        if w > 1 && newH[w-1].QnumSum[end][1] != zeroQN
+          newH[w].QnumSum[1][1] = -newH[w-1].QnumSum[end][1]
+#          newH[w].Qblocksum[1] -= newH[w].flux
+#=
+          for z = 1:length(newH[w].Qblocksum)
+            newH[w].Qblocksum[z] = (newH[w].Qblocksum[z][1],newH[w].Qblocksum[z][2] + newH[w-1].QnumSum[end][1])
+#            newH[w].Qblocksum[z][2] -= newH[w-1].QnumSum[end][1]
+          end
+=#
+        end
+
+#        println("START:")
+#        println(w," ",newH[w].Qblocksum)
+        if newH[w].flux != zeroQN
+          newH[w].QnumSum[end][1] = -newH[w].flux - newH[w].QnumSum[1][1]
+#          newH[w].Qblocksum[2] -= newH[w].flux
+
+
+    Qt = newH[w]
+
+    numQNs = length(Qt.T)
+    LQNs = Array{Q,1}(undef,numQNs)
+    RQNs = Array{Q,1}(undef,numQNs)
+
+for q = 1:numQNs
+    LQNs[q] = Q()
+    for w = 1:length(Qt.currblock[1])
+      thispos = Qt.currblock[1][w]
+      thisdim = Qt.ind[q][1][w,1] + 1
+      LQNs[q] += getQnum(thispos,thisdim,Qt)
+    end
+
+    RQNs[q] = Q()
+    for w = 1:length(Qt.currblock[2])
+      thispos = Qt.currblock[2][w]
+      thisdim = Qt.ind[q][2][w,1] + 1
+      RQNs[q] += getQnum(thispos,thisdim,Qt)
+    end
+
+      newH[w].Qblocksum[q] = (LQNs[q],RQNs[q])
+    end
+
+
+
+#=
+          for z = 1:length(newH[w].Qblocksum)
+            newH[w].Qblocksum[z] = (newH[w].Qblocksum[z][1],newH[w].Qblocksum[z][2] - newH[w].flux)
+          end
+=#
+          newH[w].flux = zeroQN
+#=
+          println(w," ",newH[w].Qblocksum)
+          R = [recoverQNs(x,newH[w]) for x = 1:ndims(newH[w])]
+          QNsummary = multi_indexsummary(R,newH[w].currblock[1])
+          leftSummary,rightSummary = TENPACK.LRsummary_invQ(QNsummary,newH[w].flux)
+          newQblocksum = Array{NTuple{2,Q},1}(undef,length(QNsummary))
+          @inbounds for q = 1:length(QNsummary)
+            newQblocksum[q] = (leftSummary[q],rightSummary[q])
+          end
+          newH[w].Qblocksum = newQblocksum
+          println(newH[w].Qblocksum)
+=#
+#=
+          R = [recoverQNs(x,newH[w]) for x = 1:ndims(newH[w])]
+          QNsummary = multi_indexsummary(R,newH[w].currblock[1])
+          leftSummary,rightSummary = TENPACK.LRsummary_invQ(QNsummary,newH[w].flux)
+          newQblocksum = Array{NTuple{2,Q},1}(undef,length(QNsummary))
+          @inbounds for q = 1:length(QNsummary)
+            newQblocksum[q] = (leftSummary[q],rightSummary[q])
+          end
+          newH[w].Qblocksum = newQblocksum
+          =#
+        end
+      end
+
     else
       newH[a] = H[a]
     end

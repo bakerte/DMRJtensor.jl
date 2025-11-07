@@ -234,12 +234,12 @@ Creates a bulk MPO of the Heisenberg model for uniform coupling `J`, spin magnit
 
 See also: [`XXZ`](@ref)
 """
-function heisenbergMPO(i::intType;spinmag::Number=0.5,J::Number=0.5#=,Ops::Tuple=spinOps(spinmag)=#)
+function heisenbergMPO(i::intType;spinmag::Number=0.5,J::Number=1.0)
   Sp,Sm,Sz,Sy,Sx,O,Id = spinOps(spinmag)
   return [Id O O O O;
-          J*Sm O O O O;
-          J*Sp O O O O;
-          Sz O O O O;
+          J*0.5*Sm O O O O;
+          J*0.5*Sp O O O O;
+          J*Sz O O O O;
           O Sp Sm Sz Id]
 end
 export heisenbergMPO
@@ -288,11 +288,11 @@ function tjMPO(i::intType;t::Number=1.0,mu::Number=0.0,J::Number=1.0#=,Ops::Tupl
             Cup  O O O O O O O O O;
             Cdn' O O O O O O O O O;
             Cdn  O O O O O O O O O;
-            Sp  O O O O O O O O O;
-            Sm  O O O O O O O O O;
-            Sz  O O O O O O O O O;
-            Ndens O O O O O O O O O;
-            onsite -t*F*Cup conj(t)*F*Cup' -t*F*Cdn conj(t)*F*Cdn' J*Sm J*Sp J*Sz -J*Ndens/4 Id]
+            J*Sp  O O O O O O O O O;
+            J*Sm  O O O O O O O O O;
+            J*Sz  O O O O O O O O O;
+            J*Ndens O O O O O O O O O;
+            onsite -t*F*Cup conj(t)*F*Cup' -t*F*Cdn conj(t)*F*Cdn' 0.5*Sm 0.5*Sp Sz -Ndens/4 Id]
 end
 export tjMPO
 

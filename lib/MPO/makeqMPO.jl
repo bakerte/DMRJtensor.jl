@@ -9,6 +9,8 @@
 # This code is native to the julia programming language (v1.10.0+)
 #
 
+#const mpoval_cutoff = 1E-16
+
 """
     mpo = makeqMPO(Qlabels,mpo)
 
@@ -32,21 +34,46 @@ function makeqMPO(Qlabels::Array{Array{Q,1},1},mpo::MPO) where Q <: Qnum
     theseQN = Qlabels[(i-1) % size(Qlabels,1) + 1]
     QnumMat[2] = inv.(theseQN)
     QnumMat[3] = theseQN
-    storeVal = -ones(Float64,size(mpo[i],4))
-    for a = 1:size(mpo[i],1)
-      for b = 1:size(mpo[i],2)
-        for c = 1:size(mpo[i],3)
-          @inbounds for d = 1:size(mpo[i],4)
-            absval = abs(mpo[i][a,b,c,d])
-            if absval > storeVal[d]
-              storeVal[d] = absval
-              tempQN = QnumMat[1][a] + QnumMat[2][b] + QnumMat[3][c]
-              QnumMat[4][d] = -(tempQN)
-            end
+
+    numthreads = Threads.nthreads()
+
+    storeQN = [Array{Q,3}(undef,size(mpo[i],1),size(mpo[i],2),size(mpo[i],3)) for w = 1:numthreads]
+    storeVal = [Array{Float64,3}(undef,size(mpo[i],1),size(mpo[i],2),size(mpo[i],3)) for w = 1:numthreads]
+    totsize = prod(w->size(mpo[i],w),1:3)
+
+    #=Threads.@threads=# for d = 1:size(mpo[i],4)
+      thisthread = Threads.threadid()
+      for c = 1:size(mpo[i],3)
+        @inbounds for b = 1:size(mpo[i],2)
+          tempQN = QnumMat[3][c] + QnumMat[2][b]
+          @inbounds for a = 1:size(mpo[i],1)
+            storeQN[thisthread][a,b,c] = QnumMat[1][a] + tempQN
+
+            storeVal[thisthread][a,b,c] = abs2(mpo[i][a,b,c,d])
           end
         end
       end
+
+      sumQNs = unique(reshape(storeQN[thisthread],totsize))
+      totVals = zeros(Float64,length(sumQNs))
+
+      for w = 1:length(storeVal[thisthread])
+        x = 1
+        while storeQN[thisthread][w] != sumQNs[x] #&& !isapprox(storeVal[thisthread][w],0)
+          x += 1
+        end
+        totVals[x] += abs2(storeVal[thisthread][w])
+      end
+
+      maxval = 1
+      for p = 2:length(totVals)
+        if totVals[p] > totVals[maxval]
+          maxval = p
+        end
+      end
+      QnumMat[4][d] = isapprox(totVals[maxval],0) ? Q() : -(sumQNs[maxval])
     end
+
     storeQnumMat = QnumMat[4]
     baseQtens = Qtens(QnumMat,currblock=[[1,2],[3,4]])
     QtensVec[i] = Qtens(mpo[i],baseQtens)
