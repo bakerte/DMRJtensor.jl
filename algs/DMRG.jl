@@ -14,44 +14,29 @@
   
 Functions for the density matrix renormalization group
 """
-#=
-module DMRG
-using ..tensor
-using ..QN
-using ..Qtensor
-using ..Qtask
-using ..MPutil
-using ..MPmaker
-using ..contractions
-using ..decompositions
-using ..Krylov
-using ..optimizeMPS
-=#
+
+
+
+
+
 
 function twosite_update(Lenv::TensType,Renv::TensType,tensors::TensType...)
 
-  AA = tensors[1]
-  #=
-  psiL = tensors[2]
-  psiR = tensors[3]
-  mpoL = tensors[4]
-  mpoR = tensors[5]
-  =#
-  mpoL = tensors[2]
-  mpoR = tensors[3]
+  psiL = tensors[1]
+  psiR = tensors[2]
+  mpoL = tensors[3]
+  mpoR = tensors[4]
 
+  AA = psiL*psiR
   ops = contract([1,3,5,6,2,4],mpoL,4,mpoR,1)
-#=
-AA = tensors[1]
-ops = tensors[2]
-=#
+
   Hpsi = contract(ops,(5,6),AA,(2,3))
   LHpsi = contract(Lenv,(2,3),Hpsi,(1,5))
   temp = contract(LHpsi,(5,4),Renv,(1,2))
 
   return temp
 end
-export twosite_update
+#export twosite_update
 
 
 
@@ -82,16 +67,16 @@ function simplelanczos(Lenv::TensType,Renv::TensType,psiL::TensType,psiR::TensTy
     psi2 = div!(psi2, beta1)
 
     Hpsi2 = contract(Lenv,3,psi2,1)
-    if true
+#    if true
       ops = contract(mpoL,4,mpoR,1)
       Hpsi2 = contract(Hpsi2,[2,3,4],ops,[1,2,4])
       Hpsi2 = contract(Hpsi2,[2,5],Renv,[1,2])
-    else
+#=    else
       Hpsi2 = contract(Hpsi2,(2,3),mpoL,(1,2))
       Hpsi2 = contract(Hpsi2,(5,2),mpoR,(1,2))
       Hpsi2 = contract(Hpsi2,(2,5),Renv,(1,2))
     end
-
+=#
     alpha2 = real(ccontract(psi2,Hpsi2))
     M = Float64[alpha1 beta1; beta1 alpha2]
     D, U = eigen(M)
@@ -133,21 +118,21 @@ function simplelanczos(Lenv::TensType,Renv::TensType,psivec::MPS,mpovec::MPO,iL:
     psi2 = div!(psi2, beta1)
 
     Hpsi2 = contract(Lenv,3,psi2,1)
-    if true
+#    if true
       ops = mpovec[iL]
       for w = iL+1:iR
         ops = contract(ops,ndims(ops),mpovec[w],1)
       end
       Hpsi2 = contract(Hpsi2,[p for p = 2:ndims(Hpsi2)-1],ops,vcat([1],[w for w = 2:2:ndims(Hpsi2)]))
       Hpsi2 = contract(Hpsi2,[2,ndims(Hpsi2)],Renv,[1,2])
-    else
-    end
+#    else
+#    end
 
     alpha2 = real(ccontract(psi2,Hpsi2))
     M = Float64[alpha1 beta1; beta1 alpha2]
     D, U = eigen(M)
     energy = D[1,1]
-    outAA = conj(U[1,1])*AA + conj(U[2,1])*psi2
+    outAA = tensorcombination!((conj(U[1,1]),conj(U[2,1])),AA,psi2)
   else
     energy = alpha1
     outAA = AA
@@ -341,8 +326,10 @@ function step3S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi
                 
   currops = mpo[i]
 
-  outEnergy,AAvec = lanczos(psi[i],currops,maxiter=params.maxiter,updatefct=singlesite_update,Lenv=Lenv[i],Renv=Renv[i])
+  outEnergy,AAvec,alpha,beta,savepsi = lanczos(psi[i],currops,maxiter=params.maxiter,m=1,updatefct=singlesite_update,Lenv=Lenv[i],Renv=Renv[i])
   noise = params.noise
+
+  AAvec = AAvec[:,:,:,1] #savepsi[1]
 
   params.energy = outEnergy[1]
   alpha_condition = noise[1] > params.noise_incr
@@ -352,10 +339,10 @@ function step3S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi
   cutoff = params.cutoff
 
   if j > 0
-    tempL = (alpha_condition ? Lexpand(AAvec[1],currops,Lenv[iL],noise) : AAvec[1])
+    tempL = (alpha_condition ? Lexpand(AAvec,currops,Lenv[iL],noise) : AAvec)
     psi[iL],psi[iR],D,truncerr = moveR!(tempL,psi[iR],cutoff=cutoff,m=maxm,minm=minm,condition=alpha_condition)
   else
-    tempR = (alpha_condition ? Rexpand(AAvec[1],currops,Renv[iR],noise) : AAvec[1])
+    tempR = (alpha_condition ? Rexpand(AAvec,currops,Renv[iR],noise) : AAvec)
     psi[iL],psi[iR],D,truncerr = moveL!(psi[iL],tempR,cutoff=cutoff,m=maxm,minm=minm,condition=alpha_condition)
   end
 
@@ -375,63 +362,36 @@ end
 function twostep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                   psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
 
-#println()
-#  println(n," ",j," ",i," ",iL," ",iR)
-#  println(norm(psi[iL])," ",norm(psi[iR]))
-
-#println(norm(psi[iL])," ",norm(psi[iR]))
-
   if j > 0
     psi[iL] = div!(psi[iL],norm(psi[iL]))
   else
     psi[iR] = div!(psi[iR],norm(psi[iR]))
   end
-#=
-  1 1 1 1 2
-1.0 1.0
-1.7320508075688772 2.7386127875258306
-1.0 24.27575951437977
-=#  
-#  println(norm(mpo[iL])," ",norm(mpo[iR]))
-#  println(norm(Lenv[iL])," ",norm(Renv[iR]))
-#  println(norm(psi[iL])," ",norm(psi[iR])," ",norm(Lenv[iL])," ",norm(Renv[iR]))
 
   energy,AA = simplelanczos(Lenv[iL],Renv[iR],psi[iL],psi[iR],mpo[iL],mpo[iR])
 
-#  println(norm(AA))
-
-  inAA = psi[iL]*psi[iR]
-  checkAA = twosite_update(Lenv[iL],Renv[iR],inAA,mpo[iL],mpo[iR])
-
-#println(energy)
-#if isnan(energy)
-#  error()
-#end
+#  inAA = psi[iL]*psi[iR]
+  checkAA = twosite_update(Lenv[iL],Renv[iR],psi[iL],psi[iR],mpo[iL],mpo[iR])
 
   params.energy = energy
 
-  #svd! throws error v1.9.1
-  #=
+#  println(n," ",i," ",energy)
 
-include("/Users/bakerte/DMRjulia/DMRjulia.jl")
-
-psi = MPS(tens{Float64}[tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [0.0, 1.0]), tens{Float64}([1, 2, 1], [1.0, 0.0]), tens{Float64}([1, 2, 1], [0.0, 1.0])])
-mpo = makeMPO(heisenbergMPO,2,100)
-dmrg(psi,mpo,cutoff=1E-9,sweeps=300,m=100,method="twosite",silent=true,goal=1E-8)
+#=
+  @time if j > 0
+    res = ccontract(AA,(1,2,3),AA,(1,2,3))
+    D,U = eigen(res)
+  end
   =#
 
-#  println(norm(AA))
-
-U,D,V,truncerr = fsvd!(AA,[[1,2],[3,4]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
-
-#  println(norm(U)," ",norm(D)," ",norm(V))
+  U,D,V,truncerr = fsvd!(AA,[[1,2],[3,4]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
 
   if j < 0
-    psi[iL] = U*D #contract(U,(3,),D,(1,))
+    psi[iL] = U*D
     psi[iR] = V
   else
     psi[iL] = U
-    psi[iR] = D*V #contract(D,(2,),V,(1,))
+    psi[iR] = D*V
   end
 
   params.truncerr = truncerr
@@ -457,7 +417,7 @@ function step2S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi
 
   params.energy = energy
 
-  noise = params.noise
+  noise = typeof(AA) <: qarray ? 0. : params.noise
   minm = params.minm
   maxm = params.maxm
   cutoff = params.cutoff
@@ -468,7 +428,8 @@ function step2S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi
     rho = ccontract(AA,(1,2),AA,(1,2))
   end
 
-  if params.noise > 0.
+  #adds noise after first sweep to ensure large enough bond dimension on quantum number version. Some issues for spin-half, m=45 runs with quantum numbers (truncation of full tensor)
+  if noise > 1E-12#&& n > 2
     if j > 0
       temp = contract(Lenv[iL],(3,),AA,(1,))
       randrho = contractc(temp,(2,4,5),temp,(2,4,5))
@@ -477,9 +438,47 @@ function step2S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi
       randrho = ccontract(temp,(1,2,4),temp,(1,2,4))
     end
     rho = add!(rho,randrho,params.noise)
+#    if !isapprox(norm(prop_rho),0)
+#      rho = prop_rho
+#    end
   end
 
+
+
+  println()
+  println(n," ",j," ",i," ",iL," ",iR," ",norm(rho)," ",params.noise," ",energy)
+
+
+
+#  if length(rho) == 0
+#    rho = rand(rho)
+#  end
+
+#  println(size(rho))
+#  println(norm(rho))
+
+
+
+#  println(params.cutoff," ",params.maxm," ",params.minm)
+
+#  prho = reshape(rho,[[1,2],[3,4]],merge=true)
+#  println("check = ",norm(Array(prho)-Array(prho)'))
+
   D,U,truncerr,sumD = eigen(rho,[[1,2],[3,4]],cutoff=params.cutoff,m=params.maxm,minm=params.minm,transpose = j < 0)
+
+#  println(norm(D))
+
+#  if j < 0
+#    checkAA = ccontract(U,1,D*U,1)
+#  else
+#    checkAA = contractc(U*D,ndims(U),U,ndims(U))
+#  end
+#  println(size(rho)," ",size(checkAA))
+#  println("diff = ",norm(rho-checkAA))
+
+#    pcheckAA = reshape(checkAA,[[1,2],[3,4]],merge=true)
+#  println("check check = ",norm(Array(pcheckAA)-Array(pcheckAA)'))
+
 
   if j > 0
     psi[iL] = U
@@ -502,10 +501,9 @@ function step2S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi
 end
 
 
-#  import ..optimizeMPS.Nstep
 function dmrgNstep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi::MPS,psi::MPS,mpo::MPO,Lenv::Env,Renv::Env,
                     psiLenv::Env,psiRenv::Env,beta::Array{Y,1},prevpsi::MPS...;params::TNparams=params()) where Y <: Number
-#println("IN HERE?")
+
   if j > 0
     psi[iL] = div!(psi[iL],norm(psi[iL]))
   else
@@ -515,23 +513,21 @@ function dmrgNstep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dual
   energy,AA = simplelanczos(Lenv[iL],Renv[iR],psi,mpo,iL,iR)
   params.energy = energy
 
-#  println(energy)
-
   truncerr = 0.
   D = 0
 
   if j > 0
-    for p = 1:iR-iL-1#iR:-1:iL
+    for p = 1:iR-iL-1
       U,D,psi[iR-p+1],truncerr = svd!(AA,[[w for w = 1:ndims(AA)-2],[ndims(AA)-1,ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
       AA = U*D
     end
 
     psi[iL],D,V,truncerr = svd!(AA,[[w for w = 1:ndims(AA)-2],[ndims(AA)-1,ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
 
-    psi[iL+1] = D*V #contract(U,(3,),D,(1,))
+    psi[iL+1] = D*V
 
   else
-    for p = 1:iR-iL-1#iR:-1:iL
+    for p = 1:iR-iL-1
       psi[iL+p],D,V,truncerr = svd!(AA,[[1,2],[p for p = 3:ndims(AA)]],m=params.maxm,minm=params.minm,cutoff=params.cutoff,mag=1.)
       AA = D*V
     end
@@ -715,7 +711,9 @@ function dmrg2S(psi::MPS,mpo::MPO;params::TNparams = algvars(psi),
                   saveEnergy::AbstractArray=params.saveEnergy,halfsweep::Bool=params.halfsweep,Lenv::Env=params.Lenv,Renv::Env=params.Renv,origj::Bool=params.origj,maxshowD::Integer=params.maxshowD,
                   storeD::Array{W,1}=params.storeD,exnum::Integer=params.exnum) where {P <: Union{Number,Array{Float64,1}}, W <: Number}
 
-  #swapflux!(psi[end])                  
+  if eltype(psi) <: qarray
+    error("deprecated DMRG-2S for quantum numbers")
+  end
   loadvars!(params,"DMRG-"*method,minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
       noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)
   return optmps(psi,psi,mpo,[1.],params=params,stepfct=step2S,#=makeOps=NsiteOps,=#cvgfct=dmrgcvg,displayfct=dmrginformation)

@@ -26,13 +26,13 @@
     gates = Array{thistype,1}(undef,length(H)-1)
     for i = 1:length(H)-1
       ops = H[i]*H[i+1] #contract(H.H[i],ndims(H.H[i]),H.H[i+1],1)
-      if 1 < i < length(H)-1
+#      if i > 1 #1 < i <= length(H)-1
         tops = ops[size(ops,1),:,:,:,:,1]
-      elseif i == 1
-        tops = ops[1,:,:,:,:,1]
-      elseif i == length(H)-1
-        tops = ops[size(ops,1),:,:,:,:,1]
-      end
+#      else #i == 1
+#        tops = ops[1,:,:,:,:,1]
+#      elseif i == length(H)-1
+#        tops = ops[size(ops,1),:,:,:,:,1]
+#      end
       gates[i] = permutedims(tops,[1,3,2,4])
     end
     return gates

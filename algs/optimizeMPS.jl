@@ -666,11 +666,7 @@ function optmps(dualpsi::MPS,psi::MPS,mpo::MPO,beta::Array{P,1},prevpsi::MPS...;
         end
 
         ##reverse direction if we hit the edge
-        if psi.oc == Ns - (range-1) && j > 0
-#          boundarymover(psi,Ns,params.Lenv,params.Renv,mpo)
-          j *= -1
-        elseif psi.oc == 1 + (range-1) && j < 0
-#          boundarymover(psi,1,params.Lenv,params.Renv,mpo)
+        if (psi.oc == Ns && j > 0) || (psi.oc == 1 && j < 0)
           j *= -1
         end
 #        for b = 1:length(prevpsi)
