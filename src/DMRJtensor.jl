@@ -64,7 +64,7 @@ for w = 1:length(files)
 end
 
 
-files = ["MPO.jl","viewbulkMPO.jl","makeMPO.jl","makeqMPO.jl","fullmpo.jl","nameMPO.jl","largeMPO.jl","penalty.jl","autoMPO.jl"#=,"trace.jl"=#]
+files = ["MPO.jl","viewbulkMPO.jl","makeMPO.jl","makeqMPO.jl","fullmpo.jl","nameMPO.jl","largeMPO.jl","penalty.jl","autoMPO.jl","trace.jl"]
 subdir = "MPO/"
 for w = 1:length(files)
   include(libpath*subdir*files[w])
