@@ -16,7 +16,7 @@ Takes the trace of the full MPO representation of the Hamiltonian
 """
 function trace(mpo::MPO)
   tr = trace(mpo[1],[2,3])
-  for w = 2:Ns
+  for w = 2:length(mpo)
     tr *= mpo[w]
     tr = trace(tr,[2,3])
   end
