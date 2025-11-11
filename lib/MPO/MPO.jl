@@ -14,7 +14,7 @@
 
 constructor for MPO with an array of `TensType` `H`; `regtens` outputs with the julia Array type
 """
-function MPO(H::Union{Array{W,1},Memory{W}};regtens::Bool=false) where W <: TensType
+function MPO(H::Union{Array{W,1},Memory{W}};regtens::Bool=false) where W <: Union{TensType,diagonal}
   T = typeof(prod(a->eltype(H[a])(1),1:length(H)))
   if !regtens && (typeof(H[1]) <: Array)
     M = [tens{T}(H[a]) for a = 1:length(H)]
@@ -38,8 +38,8 @@ end
 
 constructor for MPO with an array of `TensType` `H`; can change the element type `T` for the tensors; `regtens` outputs with the julia Array type
 """
-function MPO(T::DataType,H::Union{Array{W,1},Memory{W}};regtens::Bool=false) where W <: TensType
-  if W <: AbstractArray
+function MPO(T::DataType,H::Union{Array{W,1},Memory{W}};regtens::Bool=false) where W <: Union{TensType,diagonal}
+  if W <: AbstractArray || W <: Diagonal
     newH = Array{Array{eltype(H[1]),4},1}(undef,size(H,1))
   else
     newH = Array{W,1}(undef,size(H,1))
@@ -192,6 +192,19 @@ Creates a quantum number MPO `qmpo` from input `mpo` and `Qlabels`, a vector of 
 See also: [`Qnum`](@ref)
 """
 function MPO(Qlabels::Array{Array{Q,1},1},mpo::MPO) where Q <: Qnum
+  qmpo = makeqMPO(Qlabels,mpo)
+  return qmpo
+end
+
+"""
+    qmpo = MPO(Qlabels,mpovec[,regtens=false])
+
+Creates a quantum number MPO `qmpo` from input `mpo` and `Qlabels`, a vector of `Qnum`
+
+See also: [`Qnum`](@ref)
+"""
+function MPO(Qlabels::Array{Array{Q,1},1},mpovec::Union{Array{W,1},Memory{W}}) where {Q <: Qnum, W <: Union{TensType,diagonal}}
+  mpo = MPO(mpovec)
   qmpo = makeqMPO(Qlabels,mpo)
   return qmpo
 end

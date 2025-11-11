@@ -9,7 +9,7 @@
 # This code is native to the julia programming language (v1.10.0+)
 #
 
-const defZerocompress = 1E-14
+const defZerocompress = 1E-15
 
 #       +---------------------------------------+
 #>------+    Automatic determination of MPO     +---------<
@@ -177,7 +177,26 @@ Adds a constant `c` to a Hamiltonian `H` (commutative)
 """
 function +(H::MPO,c::Number;pos::Integer=1)
   if !isapprox(c,0)
-    const_term = MPO([i == pos ? c*eye(H[i],[2])  : eye(H[i],[2]) for i = 1:length(H)])
+
+    toteltype = prod(w->typeof(H[w][1])(1),1:length(H))
+    mpotype = typeof(toteltype)
+    eyevec = Array{Array{mpotype,2},1}(undef,length(H))
+    for w = 1:length(eyevec)
+      Id = Array(eye(size(H[w],2)))
+      O = zero(Id)
+      if w == pos
+        corner = c*Id
+      else
+        corner = Id
+      end
+      eyevec[w] = corner #mpotype[Id O; corner Id]
+    end
+
+    const_term = MPO(eyevec)
+    if typeof(H[1]) <: qarray
+      Qlabels = [recoverQNs(3,H[w]) for w = 1:length(H)]
+      const_term = MPO(Qlabels,const_term)
+    end
     return copy(H) + const_term
   else
     return H
@@ -408,10 +427,10 @@ end
 
 
 
-function MPO(A::MPOterm,base::Array{W}) where W <: Any #TensType
+function MPO(A::MPOterm,base::Array{W}) where W <: Any
   paulistring = copy(base)
 
-  for w = length(A):-1:1#1:length(A)
+  for w = length(A):-1:1
     x = A.ind[w]
 
     paulistring[x] = A.T[w]*paulistring[x]
@@ -471,9 +490,8 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
 #        compressMPO!(mpo)
 #      end
     end
+    compressMPO!(mpo)
   end
-
-  compressMPO!(mpo)
 
 
 
@@ -544,11 +562,12 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
        singlempo = makeqMPO(Qnumvec,singlempo)
      end
 
-   end
 
    mpo += singlempo
 
-#  compressMPO!(mpo)
+     compressMPO!(mpo)
+
+   end
 
 
 
