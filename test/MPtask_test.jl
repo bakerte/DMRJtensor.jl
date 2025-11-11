@@ -424,4 +424,23 @@ end
 fulltest &= testfct(testvalvec[1],"makeqMPO(vector,Vector{Vector{Qnum}})")
 =#
 
+println()
+
+Ns = 10
+mpo = makeMPO(XXZ,2,Ns)
+@makeQNs "tester" U1
+Qlabels = [tester(1),tester(-1)]
+qmpo = MPO(Qlabels,mpo)
+fulltest &= testfct(isapprox(trace(mpo),trace(Array(fullH(mpo)))),"trace(MPO)")
+fulltest &= testfct(isapprox(trace(qmpo),trace(Array(fullH(qmpo)))),"trace(MPO) [quantum symmetries]")
+
+println()
+
+cfactor = 10
+mpo += cfactor
+fulltest &= testfct(isapprox(trace(mpo),prod(w->size(mpo[w],2),1:length(mpo))*cfactor),"trace(MPO + constant)")
+
+qmpo += cfactor
+fulltest &= testfct(isapprox(trace(qmpo),prod(w->size(mpo[w],2),1:length(mpo))*cfactor),"trace(MPO + constant) [quantum symmetries]")
+
 fulltest
