@@ -1,7 +1,7 @@
 name = "DMRJtensor"
 uuid = "5b179a51-5399-4802-8f6e-f7014fc12e6f"
 authors = ["Thomas E. Baker"]
-version = "0.17.0"
+version = "0.17.1"
 
 [compat]
 julia = "1.12.1"
