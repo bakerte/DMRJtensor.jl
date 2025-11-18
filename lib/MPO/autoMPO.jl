@@ -472,9 +472,7 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
 
     mpovec[thisthread] += MPO(terms[a],base)
     counts[thisthread] += 1
-    if counts[thisthread] % compresscheck == 0 #&& notrail
-#      deparallelize!(mpovec[thisthread])
-#    else
+    if counts[thisthread] % compresscheck == 0
       compressMPO!(mpovec[thisthread])
     end
   end
@@ -482,13 +480,7 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
   mpo = 0
   if length(regularterms) > 0
     for w = 1:length(mpovec)
-#      compressMPO!(mpovec[w])
       mpo += mpovec[w]
-#      if notrail
-#        deparallelize!(mpo)
-#      else
-#        compressMPO!(mpo)
-#      end
     end
     compressMPO!(mpo)
   end
@@ -497,77 +489,34 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
 
 
   singlesiteterms = findall(w->length(terms[w]) == 1,1:length(terms))
-  singlempo = 0
-  zerobase = [Array(zero(base[i])) for i = 1:length(base)]
   if length(singlesiteterms) > 0
-  for a in singlesiteterms
-
-
-    if isapprox(terms[a].val,1.)
-      onsite = Array(terms[a].T[1])
-    else
-      onsite = terms[a].val*Array(terms[a].T[1])
-    end
-    i = terms[a].ind[1]
-    zerobase[i] += onsite
-#=
-    singleterms = Array{Array{mpotype,2},1}(undef,Ns)
-    for i = 1:Ns
-      Id = Array(base[i])
-      O = zero(Id)
-      if terms[a].ind[1] == i
-        if isapprox(terms[a].val,1.)
-          onsite = Array(terms[a].T[1])
-        else
-          onsite = terms[a].val*Array(terms[a].T[1])
-        end
-        singleterms[i] = mpotype[Id O; onsite Id]
+    singlempo = 0
+    zerobase = [Array(zero(base[i])) for i = 1:length(base)]
+    for a in singlesiteterms
+      if isapprox(terms[a].val,1.)
+        onsite = Array(terms[a].T[1])
       else
-        singleterms[i] = mpotype[Id O; O Id]
+        onsite = terms[a].val*Array(terms[a].T[1])
       end
+      i = terms[a].ind[1]
+      zerobase[i] += onsite
     end
-
-    onempo = makeMPO(singleterms,physind)
-#    if qarrayops
-#      onempo = makeqMPO(Qnumvec,onempo)
-#    end
-
-    singlempo += onempo #MPO(terms[a],base)
-    =#
-  end
 
 #  for i = 1:Ns
     singleterms = Array{Array{mpotype,2},1}(undef,Ns)
     for i = 1:Ns
       Id = Array(base[i])
       O = zero(Id)
-      #=
-      if terms[a].ind[1] == i
-        if isapprox(terms[a].val,1.)
-          onsite = Array(terms[a].T[1])
-        else
-          onsite = terms[a].val*Array(terms[a].T[1])
-        end
-        =#
-#        println(typeof(Id)," ",typeof(O)," ",typeof(zerobase[i]))
-        singleterms[i] = mpotype[Id O; Array(zerobase[i]) Id]
-#      else
-#        singleterms[i] = mpotype[Id O; O Id]
-#      end
+      singleterms[i] = mpotype[Id O; Array(zerobase[i]) Id]
     end
-#  end
     
-     singlempo = makeMPO(singleterms,physind)
-     if qarrayops
-       singlempo = makeqMPO(Qnumvec,singlempo)
-     end
+    singlempo = makeMPO(singleterms,physind)
+    if qarrayops
+      singlempo = makeqMPO(Qnumvec,singlempo)
+    end
 
-
-   mpo += singlempo
-
-     compressMPO!(mpo)
-
-   end
+    mpo += singlempo
+  end
 
 
 
@@ -598,165 +547,6 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
     mpo += manympo
   end
   
-
-
-
-
-  #=
-  singlempo = 0
-  manympo = 0
-
-  singlesite = [length(terms[w]) == 1 for w = 1:length(terms)]
-  nosingles = findfirst(singlesite)
-  if typeof(nosingles) <: Integer
-
-    singleterms = Array{Array{mpotype,2},1}(undef,Ns)
-    for i = 1:Ns
-      Id = Array(base[i])
-      O = zero(Id)
-      singleterms[i] = mpotype[Id O; O Id]
-    end
-
-    singlempo = makeMPO(singleterms,physind)
-
-    if qarrayops
-      singlempo = makeqMPO(Qnumvec,singlempo)
-    end
-
-    singleterms = findall(singlesite)
-    for a in singleterms
-      ind = terms[a].ind[1]
-      value = terms[a].val
-      operator = terms[a].T[1]
-
-      if !isapprox(value,0)
-        singlempo[ind][end,:,:,1] += operator * value
-
-        trailon = length(terms[a].trail) != 0
-
-        if trailon
-          trailvec = terms[a].trail
-          for g = 1:ind-1
-            checkzero = true
-            y = 0
-            while checkzero && y < physind[ind]
-              y += 1
-              x = 0
-              while checkzero && x < physind[ind]
-                x += 1
-                checkzero = searchindex(size(singleterms[g],1),x,y,1) == 0
-              end
-            end
-            if checkzero
-              singlempo[g][end,:,:,1] = trailvec[g]
-            else
-              singlempo[g][end,:,:,1] = contract(trailvec[g],2,singlempo[g][end,:,:,1],1)
-            end
-          end
-        end
-      end
-    end
-  end
-
-  =#
-
-
-
-
-#=
-  regularterms = findall(w->length(terms[w]) == 2,1:length(terms))
-  mpovec = Array{Any,1}(undef,Threads.nthreads())
-  value_mpo_vec = Array{Any,1}(undef,Threads.nthreads())
-  for i = 1:length(mpovec)
-    mpovec[i] = 0
-    value_mpo_vec[i] = 0
-  end
-
-  #=Threads.@threads=# for a in regularterms
-
-#    numthread = Threads.threadid()
-
-    if length(terms) == 1
-      value_mpo_vec[numthread] += terms[1]
-    else
-
-      value = terms[a][1]
-      Opvec = [terms[a][x] for x = 2:2:length(terms[a])]
-      posvec = [terms[a][x] for x = 3:2:length(terms[a])]
-
-      if !isapprox(value,0)
-
-        trailon = length(terms[a]) % 2 == 0
-        if trailon
-          mpovec[numthread] += mpoterm(value,Opvec,posvec,base,terms[a][end])
-        else
-          mpovec[numthread] += mpoterm(value,Opvec,posvec,base)
-        end
-      end
-    end
-  end
-  for i = 1:length(mpovec)
-    mpo += mpovec[i]
-    mpo += value_mpo_vec[i]
-  end
-=#
-
-#  mpo *= singlempo
-
-#=
-
-  manysite = [length(terms[w]) > 6 for w = 1:length(terms)]
-  manysiteterms = findall(manysite)
-  if sum(manysite) > 0
-
-    manyvec = Array{Any,1}(undef,Threads.nthreads())
-    for w = 1:length(manyvec)
-      manyvec[w] = 0
-    end
-
-    counter = zeros(Int64,length(manyvec))
-
-    Threads.@threads for a in manysiteterms
-
-      numthread = Threads.threadid()
-
-      value = terms[a][1]
-      Opvec = [terms[a][x] for x = 2:2:length(terms[a])]
-      posvec = [terms[a][x] for x = 3:2:length(terms[a])]
-
-      if !isapprox(value,0)
-
-        trailon = length(terms[a]) % 2 == 0
-        if trailon
-          manyvec[numthread] *= mpoterm(value,Opvec,posvec,base,terms[a][end])
-        else
-          manyvec[numthread] *= mpoterm(value,Opvec,posvec,base)
-        end
-
-        counter[numthread] += 1
-  
-        if counter[numthread] % countreduce == 0
-          compressMPO!(manyvec[numthread])
-        end
-        
-      end
-    end
-
-    for i = 1:length(manyvec)
-      manympo *= manyvec[i]
-    end
-
-    if !isapprox(sum(p->norm(manympo[p]),1:length(manympo)),0)
-      mpo *= manympo
-    end
-  end
-
-  if reverse
-    for a = 1:length(mpo)
-      mpo[a] = permutedims!(mpo[a],[1,3,2,4])
-    end
-  end
-=#
   return compressMPO!(mpo) #mpo
 end
 
@@ -1398,19 +1188,23 @@ function compressMPO!(mpo::MPO,M::MPO...;sweeps::Integer=1000,cutoff::Float64=de
     n += 1
 
 #    if Ns > 50
-      for w = 1:Ns-1
+      for w = 1:2:Ns-1
         double_mpo = contract(mpo[w],4,mpo[w+1],1)
         U,D,V = svd(double_mpo,[[1,2,3],[4,5,6]],nozeros=true,cutoff=cutoff)
 
-        mpo[w] = U*D
-        mpo[w+1] = V
+        scaleD = invDfactor(D)
+
+        mpo[w] = U*D/scaleD
+        mpo[w+1] = V*scaleD
       end
-      for w = Ns:-1:2
+      for w = Ns:-2:2
         double_mpo = contract(mpo[w-1],4,mpo[w],1)
         U,D,V = svd(double_mpo,[[1,2,3],[4,5,6]],nozeros=true,cutoff=cutoff)
 
-        mpo[w-1] = U
-        mpo[w] = D*V
+        scaleD = invDfactor(D)
+
+        mpo[w-1] = U*scaleD
+        mpo[w] = D*V/scaleD
       end
 #=
     else
