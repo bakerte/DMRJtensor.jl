@@ -108,7 +108,7 @@ function params(params::algvars{W,Q}) where {W <: Number, Q <: Qnum}
   return algvars{W,Q}(params.load,params.method,params.parallel_method,params.nsites,params.minm,params.maxm,params.cutoff,params.sweeps,params.halfsweep,params.maxiter,params.mincr,params.cvgE,params.goal,params.startnoise,params.noise,params.noise_goal,params.noise_decay,params.noise_incr,params.exnum,params.cushion,params.shift,params.fixD,params.startoc,params.origj,params.maxshowD,params.storeD,params.saveEnergy,params.energy,params.lastenergy,params.entropy,params.lastentropy,params.truncerr,params.maxtrunc,params.biggestm,params.savebiggestm,params.SvNbond,params.allSvNbond,params.Lbound,params.Rbound,params.Lenv,params.Renv,params.psiLenv,params.psiRenv,params.sparematrix,params.saveQ,params.efficient,params.silent,params.qselect,params.partitions)
 end
 =#
-function algvars(params::algvars{W,Q,X,Y,Z}) where {W <: Number, Q <: Qnum, X <: TensType, Y <: TensType, Z <: TensType}
+function algvars(params::algvars{W,Q,X,Y,Z}) where {W <: Number, Q <: Qnum, X <: TensType, Y <: Env, Z <: Env}
   return algvars{W,Q,X,Y,Z}(params.load,params.method,params.parallel_method,params.nsites,params.minm,params.maxm,params.cutoff,params.sweeps,params.halfsweep,params.maxiter,params.mincr,params.cvgE,params.goal,params.startnoise,params.noise,params.noise_goal,params.noise_decay,params.noise_incr,params.exnum,params.cushion,params.shift,params.fixD,params.double,params.startoc,params.origj,params.maxshowD,params.storeD,params.saveEnergy,params.energy,params.lastenergy,params.entropy,params.lastentropy,params.truncerr,params.maxtrunc,params.biggestm,params.savebiggestm,params.SvNbond,params.allSvNbond,params.Lbound,params.Rbound,params.Lenv,params.Renv,params.psiLenv,params.psiRenv,params.sparematrix,params.saveQ,params.efficient,params.silent,params.qselect,params.partitions)
 end
 
@@ -189,10 +189,75 @@ end
 function setEnv(dualpsi::MPS,psi::MPS,mpo::MPO,params::TNparams,
                 prevpsi::MPS...;measfct::Function=startval,mover::Function=move!)
 
-  if !(sum(w->norm(params.Lenv[w]),length(params.Lenv)) == length(params.Lenv) &&
-    sum(w->norm(params.Renv[w]),length(params.Renv)) == length(params.Renv) &&
+  Ns = length(params.Lenv)
+
+
+  psirange = psi.oc + (params.origj ? 1 : -1) * (params.nsites-1)
+  Lsite = max(1,min(psi.oc,psirange))
+  Rsite = min(length(psi),max(psi.oc,psirange))
+
+#  println(Lsite," ",Rsite)
+
+
+  Lnums = Array{Bool,1}(undef,Ns)
+#  println("LEFT")
+  @inbounds for w = 1:Lsite
+#    println(w," ",!isapprox(norm(params.Lenv[w]),0)," ",[size(dualpsi[w],1),size(mpo[w],1),size(psi[w],1)] == size(params.Lenv[w]))
+#    println([size(dualpsi[w],1),size(mpo[w],1),size(psi[w],1)]," ",size(params.Lenv[w]))
+    Lnums[w] = !isapprox(norm(params.Lenv[w]),0)
+    Lnums[w] &= size(dualpsi[w],1) == size(params.Lenv[w],1)
+    Lnums[w] &= size(mpo[w],1) == size(params.Lenv[w],2)
+    Lnums[w] &= size(psi[w],1) == size(params.Lenv[w],3)
+  end
+  for w = Lsite+1:length(psi)
+    Lnums[w] = true
+  end
+
+#  println("CHECK HERE:")
+#  println(params.nsites)
+#  println(params.origj)
+
+#  println("RIGHT")
+  Rnums = Array{Bool,1}(undef,Ns)
+  for w = 1:Rsite-1
+    Rnums[w] = true
+  end
+  @inbounds for w = Rsite:length(psi)
+#    println(w," ",!isapprox(norm(params.Renv[w]),0)," ",[size(psi[w],3),size(mpo[w],4),size(dualpsi[w],3)] == size(params.Renv[w]))
+#    println([size(psi[w],3),size(mpo[w],4),size(dualpsi[w],3)]," ",size(params.Renv[w]))
+    Rnums[w] = !isapprox(norm(params.Renv[w]),0)
+    Rnums[w] &= size(psi[w],3) == size(params.Renv[w],1)
+    Rnums[w] &= size(mpo[w],4) == size(params.Renv[w],2)
+    Rnums[w] &= size(dualpsi[w],3) == size(params.Renv[w],3)
+  end
+
+#  Lnums = [!isapprox(norm(params.Lenv[w]),0) && (size(dualpsi[w],1),size(mpo[w],1),size(psi[w],1)) == size(params.Lenv[w]) for w = 1:Ns]
+#  Rnums = [!isapprox(norm(params.Renv[w]),0) && (size(dualpsi[w],3),size(mpo[w],4),size(psi[w],3)) == size(params.Renv[w]) for w = 1:Ns]
+#=
+  println(sum(Lnums) == length(params.Lenv))
+    println(sum(Rnums) == length(params.Renv))
+    println(length(params.Lenv) == length(psi) && length(params.Renv) == length(mpo))
+    println(length(psi) == length(mpo))
+
+    println()
+    println(size.(params.Lenv.V.net))
+    println(size.(params.Renv.V.net))
+
+    println()
+    println(norm.(params.Lenv.V.net))
+    println(norm.(params.Renv.V.net))
+=#
+
+#println(length(params.Lenv) == length(psi))
+#println(length(params.Renv) == length(mpo))
+#println(length(psi) == length(mpo))
+
+  if !(sum(Lnums) == length(Lnums) &&
+    sum(Rnums) == length(Rnums) &&
     length(params.Lenv) == length(psi) && length(params.Renv) == length(mpo) && 
     length(psi) == length(mpo))
+
+#    println("IN HERE")
 
     params.Lenv,params.Renv = makeEnv(dualpsi,psi,mpo,Lbound=params.Lbound,Rbound=params.Rbound)
   end
@@ -358,9 +423,10 @@ end
 
 function singlesite_update(Lenv::TensType,Renv::TensType,AA::TensType,optup::NTuple{G,P}) where {G, P <: TensType}
   ops = optup[1]
-  LAA = contract(Lenv,(3,),AA,(1,))
-  LopsAA = contract(LAA,(2,3),ops,(1,2))
-  return contract(LopsAA,(2,4),Renv,(1,2))
+  return singlesite_update(Lenv,Renv,AA,ops)
+#  LAA = contract(Lenv,(3,),AA,(1,))
+#  LopsAA = contract(LAA,(2,3),ops,(1,2))
+#  return contract(LopsAA,(2,4),Renv,(1,2))
 end
 
 function singlesite_update(Lenv::TensType,Renv::TensType,AA::TensType,optup::TensType)# where {P <: TensType}
@@ -465,6 +531,22 @@ function algvars(G::W) where W <: Union{MPS,MPO}
   X = defaultBoundary(G[1])
   Y = environment(G) #network([X]))
   Z = Y
+
+  if typeof(G[1]) <: densTensType
+    out = algvars(X,Y,Z)
+  else
+    out = algvars(typeof(G[1].flux),X,Y,Z)
+  end
+  out.SvNbond = cld(length(G),2)
+  return out
+end
+
+function algvars(G::MPS,R::MPO) #where W <: Union{MPS,MPO}
+
+  X = defaultBoundary(G[1])
+  Y,Z = makeEnv(G,R)
+#  Y = environment(G) #network([X]))
+#  Z = Y
 
   if typeof(G[1]) <: densTensType
     out = algvars(X,Y,Z)
