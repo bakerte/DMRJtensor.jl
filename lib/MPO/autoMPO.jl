@@ -543,7 +543,7 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
   end
 
   if manympo != 0 #!isapprox(manympo,0)
-#    compressMPO!(manympo)
+    compressMPO!(manympo)
     mpo += manympo
   end
   
@@ -1188,24 +1188,31 @@ function compressMPO!(mpo::MPO,M::MPO...;sweeps::Integer=1000,cutoff::Float64=de
     n += 1
 
 #    if Ns > 50
+#println()
       #=Threads.@threads=# for w = 1:2:Ns-1
+#        println(w," ",w+1)
         double_mpo = mpo[w] * mpo[w+1] #contract(mpo[w],4,mpo[w+1],1)
         U,D,V = svd(double_mpo,[[1,2,3],[4,5,6]],nozeros=true,cutoff=cutoff)
 
-        scaleD = invDfactor(D)
+#        scaleD = invDfactor(D)
+        sqD = sqrt(D)
 
-        mpo[w] = U*D/scaleD
-        mpo[w+1] = V*scaleD
+        mpo[w] = U*sqD#/scaleD
+        mpo[w+1] = sqD*V#*scaleD
       end
-      #=Threads.@threads=# for w = Ns:-2:2
+#      println()
+      #=Threads.@threads=# for w = Ns-1:-2:2
+#        println(w-1," ",w)
         double_mpo = mpo[w-1] * mpo[w] #contract(mpo[w-1],4,mpo[w],1)
         U,D,V = svd(double_mpo,[[1,2,3],[4,5,6]],nozeros=true,cutoff=cutoff)
 
-        scaleD = invDfactor(D)
+#        scaleD = invDfactor(D)
+        sqD = sqrt(D)
 
-        mpo[w-1] = U*scaleD
-        mpo[w] = D*V/scaleD
+        mpo[w-1] = U*sqD#*scaleD
+        mpo[w] = sqD*V#/scaleD
       end
+#      println()
 #=
     else
 
