@@ -22,7 +22,7 @@ function expect(dualpsi::MPS,psi::MPS,H::MPO...;Lbound::TensType=defaultBoundary
   nLsize = nMPOs+2
   nRsize = nLsize+1
 
-  move!(dualpsi,psi.oc)
+#  move!(dualpsi,psi.oc)
 
   Lenv,Renv = makeEnds(dualpsi,psi,H...,Lbound=Lbound,Rbound=Rbound)
 

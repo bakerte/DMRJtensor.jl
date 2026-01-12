@@ -33,43 +33,44 @@ import .LinearAlgebra.norm
 
 
 
-using TensorPACK
+#using TensorPACK
+using ..TENPACK
 
 
-#import .TensorPACK.TensType
+#import .TENPACK.TensType
 
-import ..TensorPACK: undefMat,checkType,tensorcombination,tensorcombination!,permutedims,invmat!,reshape!,unreshape!,unreshape,get_denseranges,sub!,add!,mult!,div!,joinindex!,getindex!,searchindex,convertTens
+import ..TENPACK: undefMat,checkType,tensorcombination,tensorcombination!,permutedims,invmat!,reshape!,unreshape!,unreshape,get_denseranges,sub!,add!,mult!,div!,joinindex!,getindex!,searchindex,convertTens
 
-import ..TensorPACK: libmult,libsvd,libsvd!,libfsvd,libfsvd!,libeigen,libeigen!,libqr,liblq,libqr!,liblq!
+import ..TENPACK: libmult,libsvd,libsvd!,libfsvd,libfsvd!,libeigen,libeigen!,libqr,liblq,libqr!,liblq!
 
 #contracions
-import ..TensorPACK: contract,ccontract,contractc,ccontractc
+import ..TENPACK: contract,ccontract,contractc,ccontractc
 
-import ..TensorPACK: default_boundary
+import ..TENPACK: default_boundary
 
-import ..TensorPACK: dot,dmul!,diagcontract!
-
-
-import ..TensorPACK: permq,willperm,prepareT,getsizes,maincontractor,trace
+import ..TENPACK: dot,dmul!,diagcontract!
 
 
-
-import ..TensorPACK: sqrt!,defzero,basedims,makeHpsi,root
-
-
-import ..TensorPACK: truncate,svd,svd!,fsvd,fsvd!,getorder,findsize,svdvals,eigen,eigen!,eigvals,eigvals!,qr,qr!,lq,lq!,polar,eye
+import ..TENPACK: permq,willperm,prepareT,getsizes,maincontractor,trace
 
 
-import ..TensorPACK: network,TNnetwork
+
+import ..TENPACK: sqrt!,defzero,basedims,makeHpsi,root
 
 
-import ..TensorPACK: largevector, tensor2disc, tensorfromdisc
+import ..TENPACK: truncate,svd,svd!,fsvd,fsvd!,getorder,findsize,svdvals,eigen,eigen!,eigvals,eigvals!,qr,qr!,lq,lq!,polar,eye
 
 
-import ..TensorPACK: stdavg,testfct
+import ..TENPACK: network,TNnetwork
 
 
-import ..TensorPACK: Qtens
+import ..TENPACK: largevector, tensor2disc, tensorfromdisc
+
+
+import ..TENPACK: stdavg,testfct
+
+
+import ..TENPACK: Qtens
 
 
 

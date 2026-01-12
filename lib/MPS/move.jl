@@ -43,7 +43,7 @@ in-place move orthgononality center of `psi` to a new site, `newoc`, with a maxi
 
 See also: [`move`](@ref)
 """
- function move!(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=0.,minm::Integer=0)
+function move!(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=0.,minm::Integer=0)
   movecenter!(mps,pos,cutoff=cutoff,m=m,minm=minm)
   nothing
 end
@@ -56,7 +56,7 @@ same as `move!` but makes a copy of `psi`
 
 See also: [`move!`](@ref)
 """
- function move(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=1E-12,minm::Integer=0)
+function move(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=1E-12,minm::Integer=0)
   newmps = copy(mps)
   movecenter!(newmps,pos,cutoff=cutoff,m=m,minm=minm)
   return newmps
