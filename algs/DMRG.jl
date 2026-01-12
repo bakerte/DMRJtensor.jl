@@ -326,7 +326,7 @@ function step3S(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi
                 
   currops = mpo[i]
 
-  outEnergy,AAvec,alpha,beta,savepsi = lanczos(psi[i],currops,maxiter=params.maxiter,m=1,updatefct=singlesite_update,Lenv=Lenv[i],Renv=Renv[i])
+  outEnergy,AAvec,alpha,beta,savepsi = lanczos(psi[i],currops,r=params.r,m=1,updatefct=singlesite_update,Lenv=Lenv[i],Renv=Renv[i])
   noise = params.noise
 
   AAvec = AAvec[:,:,:,1] #savepsi[1]
@@ -552,7 +552,8 @@ function dmrg(psi::MPS,mpo::MPO;params::TNparams = algvars(psi),
                                 silent::Bool=params.silent,goal::Float64=params.goal,
                                 SvNbond::Integer=params.SvNbond,allSvNbond::Bool=params.allSvNbond,
                                 nsites::Integer=params.nsites,efficient::Bool=params.efficient,
-                                cvgE::Bool=params.cvgE,maxiter::Integer=params.maxiter,
+                                g::Integer=params.g,
+                                cvgE::Bool=params.cvgE,r::Integer=params.r,
                                 mincr::Integer=params.mincr,fixD::Bool=params.fixD,Lbound::TensType=params.Lbound,Rbound::TensType=params.Rbound,
                                 noise::P=params.noise,noise_goal::Float64=params.noise_goal,noise_incr::Float64=params.noise_incr,noise_decay::Float64=params.noise_decay,method::String="twosite",shift::Bool=params.shift,
                                 saveEnergy::AbstractArray=params.saveEnergy,halfsweep::Bool=params.halfsweep,Lenv::Env=params.Lenv,Renv::Env=params.Renv,origj::Bool=params.origj,maxshowD::Integer=params.maxshowD,
@@ -562,23 +563,23 @@ function dmrg(psi::MPS,mpo::MPO;params::TNparams = algvars(psi),
   end
   if params.method == "3S"
     return dmrg3S(psi,mpo,method=method,m=m,minm=minm,sweeps=sweeps,cutoff=cutoff,silent=silent,goal=goal,params=params,
-                  SvNbond=SvNbond,allSvNbond=allSvNbond,efficient=efficient,cvgE=cvgE,maxiter=maxiter,exnum=exnum,fixD=fixD,nsites=1,
+                  SvNbond=SvNbond,allSvNbond=allSvNbond,efficient=efficient,cvgE=cvgE,r=r,exnum=exnum,fixD=fixD,nsites=1,
                   noise=noise,noise_decay=noise_decay,noise_goal=noise_goal,noise_incr=noise_incr,shift=shift,saveEnergy=saveEnergy,
                   halfsweep=halfsweep,Lbound=Lbound,Rbound=Rbound,Lenv=Lenv,Renv=Renv,origj=origj,maxshowD=maxshowD,storeD=storeD)
   elseif params.method == "Nsite" #|| nsites > 2
     return dmrg_Nsite(psi,mpo,method=method,m=m,minm=minm,sweeps=sweeps,cutoff=cutoff,silent=silent,goal=goal,params=params,
-                  SvNbond=SvNbond,allSvNbond=allSvNbond,efficient=efficient,cvgE=cvgE,maxiter=maxiter,exnum=exnum,fixD=fixD,nsites=nsites,
+                  SvNbond=SvNbond,allSvNbond=allSvNbond,efficient=efficient,cvgE=cvgE,r=r,exnum=exnum,fixD=fixD,nsites=nsites,
                   noise=noise,noise_decay=noise_decay,noise_goal=noise_goal,noise_incr=noise_incr,shift=shift,saveEnergy=saveEnergy,
                   halfsweep=halfsweep,Lbound=Lbound,Rbound=Rbound,Lenv=Lenv,Renv=Renv,origj=origj,maxshowD=maxshowD,storeD=storeD)
   elseif params.method == "twosite"
     return dmrg_twosite(psi,mpo,method=method,m=m,minm=minm,sweeps=sweeps,cutoff=cutoff,silent=silent,goal=goal,params=params,
-                  SvNbond=SvNbond,allSvNbond=allSvNbond,efficient=efficient,cvgE=cvgE,maxiter=maxiter,exnum=exnum,fixD=fixD,nsites=2#=nsites=#,
+                  SvNbond=SvNbond,allSvNbond=allSvNbond,efficient=efficient,cvgE=cvgE,r=r,exnum=exnum,fixD=fixD,nsites=2#=nsites=#,
                   noise=noise,noise_decay=noise_decay,noise_goal=noise_goal,noise_incr=noise_incr,shift=shift,saveEnergy=saveEnergy,
                   halfsweep=halfsweep,Lbound=Lbound,Rbound=Rbound,Lenv=Lenv,Renv=Renv,origj=origj,maxshowD=maxshowD,storeD=storeD)
 #    elseif method == "zero" || method == "0"
   elseif params.method == "2S"
     return dmrg2S(psi,mpo,method=method,m=m,minm=minm,sweeps=sweeps,cutoff=cutoff,silent=silent,goal=goal,params=params,
-                  SvNbond=SvNbond,allSvNbond=allSvNbond,efficient=efficient,cvgE=cvgE,maxiter=maxiter,exnum=exnum,fixD=fixD,nsites=2,
+                  SvNbond=SvNbond,allSvNbond=allSvNbond,efficient=efficient,cvgE=cvgE,r=r,exnum=exnum,fixD=fixD,nsites=2,
                   noise=noise,noise_decay=noise_decay,noise_goal=noise_goal,noise_incr=noise_incr,shift=shift,saveEnergy=saveEnergy,
                   halfsweep=halfsweep,Lbound=Lbound,Rbound=Rbound,Lenv=Lenv,Renv=Renv,origj=origj,maxshowD=maxshowD,storeD=storeD)
   else
@@ -595,7 +596,7 @@ function dmrginformation(params::TNparams)
     println("  minimum bond dimension = ",params.minm)
     println("  maximum bond dimension = ",params.maxm)
     println("  number of sweeps = ",params.sweeps)
-    println("  Lanczos iterations = ",params.maxiter)
+    println("  Lanczos iterations = ",params.r)
     println("  cutoff = ",params.cutoff)
     println("  converge in energy? ",params.cvgE," (otherwise, entropy)")
     println("  specified goal = ",params.goal)
@@ -657,12 +658,14 @@ function dmrg3S(psi::MPS,mpo::MPO;params::TNparams = algvars(psi),
                                   silent::Bool=params.silent,goal::Float64=params.goal,
                                   SvNbond::Integer=params.SvNbond,allSvNbond::Bool=params.allSvNbond,
                                   nsites::Integer=params.nsites,efficient::Bool=params.efficient,
-                                  cvgE::Bool=params.cvgE,maxiter::Integer=params.maxiter,
+                                  cvgE::Bool=params.cvgE,
+                                  r::Integer=params.r,
+                                  g::Integer=params.g,
                                   mincr::Integer=params.mincr,fixD::Bool=params.fixD,Lbound::TensType=params.Lbound,Rbound::TensType=params.Rbound,
                                   noise::P=params.noise,noise_goal::Float64=params.noise_goal,noise_incr::Float64=params.noise_incr,noise_decay::Float64=params.noise_decay,method::String="3S",shift::Bool=params.shift,
                                   saveEnergy::AbstractArray=params.saveEnergy,halfsweep::Bool=params.halfsweep,Lenv::Env=params.Lenv,Renv::Env=params.Renv,origj::Bool=params.origj,maxshowD::Integer=params.maxshowD,
                                   storeD::Array{W,1}=params.storeD,exnum::Integer=params.exnum) where {P <: Union{Number,Array{Float64,1}}, W <: Number}
-  loadvars!(params,"DMRG-"*method,minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
+  loadvars!(params,"DMRG-"*method,minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,r,fixD,nsites,
       noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)
   return optmps(psi,psi,mpo,[1.],params=params,stepfct=step3S,cvgfct=dmrgcvg,displayfct=dmrginformation)
 end
@@ -674,13 +677,15 @@ function dmrg_twosite(psi::MPS,mpo::MPO;params::TNparams = algvars(psi),
                                         sweeps::Integer=params.sweeps,cutoff::Float64=params.cutoff,
                                         silent::Bool=params.silent,goal::Float64=params.goal,
                                         SvNbond::Integer=params.SvNbond,allSvNbond::Bool=params.allSvNbond,
+                                        r::Integer=params.r,
+                                        g::Integer=param.g,
                                         nsites::Integer=2,#=params.nsites,=#efficient::Bool=params.efficient,
-                                        cvgE::Bool=params.cvgE,maxiter::Integer=params.maxiter,
+                                        cvgE::Bool=params.cvgE,
                                         mincr::Integer=params.mincr,fixD::Bool=params.fixD,Lbound::TensType=params.Lbound,Rbound::TensType=params.Rbound,
                                         noise::P=params.noise,noise_goal::Float64=params.noise_goal,noise_incr::Float64=params.noise_incr,noise_decay::Float64=params.noise_decay,method::String="twosite",shift::Bool=params.shift,
                                         saveEnergy::AbstractArray=params.saveEnergy,halfsweep::Bool=params.halfsweep,Lenv::Env=params.Lenv,Renv::Env=params.Renv,origj::Bool=params.origj,maxshowD::Integer=params.maxshowD,
                                         storeD::Array{W,1}=params.storeD,exnum::Integer=params.exnum) where {P <: Union{Number,Array{Float64,1}}, W <: Number}
-  loadvars!(params,"DMRG-"*method,minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
+  loadvars!(params,"DMRG-"*method,minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,r,fixD,nsites,
       noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)
   return optmps(psi,psi,mpo,[1.],params=params,measfct=startval,stepfct=twostep,#=makeOps=twositeOps,=#cvgfct=dmrgcvg,displayfct=dmrginformation)
 end
@@ -689,11 +694,13 @@ export dmrg_twosite
 #  import ..optimizeMPS.NsiteOps
 function dmrg_Nsite(psi::MPS,mpo::MPO;m::Integer=0,minm::Integer=2,sweeps::Integer=1,cutoff::Float64=0.,silent::Bool=false,goal::Float64=0.,
                   SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,nsites::Integer=2,efficient::Bool=false,params::TNparams = algvars(psi),
-                  cvgE::Bool=true,maxiter::Integer=2,mincr::Integer=2,mperiod::Integer=0,fixD::Bool=false,Lbound::TensType=default_boundary,Rbound::TensType=default_boundary,
+                  cvgE::Bool=true,mincr::Integer=2,mperiod::Integer=0,fixD::Bool=false,Lbound::TensType=default_boundary,Rbound::TensType=default_boundary,
+                  r::Integer=params.r,
+                  g::Integer=param.g,
                   noise::P=1.0,noise_goal::Float64=0.3,noise_incr::Float64=params.noise_incr,noise_decay::Float64=params.noise_decay,method::String="Nsite",shift::Bool=params.shift,
                   saveEnergy::AbstractArray=[0.],halfsweep::Bool=false,Lenv::Env=params.Lenv,Renv::Env=params.Renv,origj::Bool=true,maxshowD::Integer=params.maxshowD,
                   storeD::Array{W,1}=params.storeD,alpha_decay::Float64=0.9,exnum::Integer=params.exnum) where {P <: Union{Number,Array{Float64,1}}, W <: Number}
-  loadvars!(params,"DMRG-"*method*" (N=$nsites)",minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
+  loadvars!(params,"DMRG-"*method*" (N=$nsites)",minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,r,fixD,nsites,
       noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)
   return optmps(psi,psi,mpo,[1.],params=params,measfct=startval,stepfct=dmrgNstep,#=makeOps=NsiteOps,=#cvgfct=dmrgcvg,displayfct=dmrginformation)
 end
@@ -705,7 +712,9 @@ function dmrg2S(psi::MPS,mpo::MPO;params::TNparams = algvars(psi),
                   silent::Bool=params.silent,goal::Float64=params.goal,
                   SvNbond::Integer=params.SvNbond,allSvNbond::Bool=params.allSvNbond,
                   nsites::Integer=params.nsites,efficient::Bool=params.efficient,
-                  cvgE::Bool=params.cvgE,maxiter::Integer=params.maxiter,
+                  cvgE::Bool=params.cvgE,
+                  r::Integer=params.r,
+                  g::Integer=param.g,
                   mincr::Integer=params.mincr,fixD::Bool=params.fixD,Lbound::TensType=params.Lbound,Rbound::TensType=params.Rbound,
                   noise::P=params.noise,noise_goal::Float64=params.noise_goal,noise_incr::Float64=params.noise_incr,noise_decay::Float64=params.noise_decay,method::String="2S",shift::Bool=params.shift,
                   saveEnergy::AbstractArray=params.saveEnergy,halfsweep::Bool=params.halfsweep,Lenv::Env=params.Lenv,Renv::Env=params.Renv,origj::Bool=params.origj,maxshowD::Integer=params.maxshowD,
@@ -714,7 +723,7 @@ function dmrg2S(psi::MPS,mpo::MPO;params::TNparams = algvars(psi),
   if eltype(psi) <: qarray
     error("deprecated DMRG-2S for quantum numbers")
   end
-  loadvars!(params,"DMRG-"*method,minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
+  loadvars!(params,"DMRG-"*method,minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,r,fixD,nsites,
       noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)
   return optmps(psi,psi,mpo,[1.],params=params,stepfct=step2S,#=makeOps=NsiteOps,=#cvgfct=dmrgcvg,displayfct=dmrginformation)
 end

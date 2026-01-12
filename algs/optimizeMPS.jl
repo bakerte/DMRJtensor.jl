@@ -55,12 +55,15 @@ mutable struct algvars{W <: Number, Q <: Qnum, X <: TensType, Y <: Env, Z <: Env
   noise_decay::Float64
   noise_incr::Float64
 
+  r::intType
+  g::intType
   exnum::intType
   cushion::intType
 
   shift::Bool
   fixD::Bool
 
+  reorth::Bool
   double::Bool
 
   startoc::intType
@@ -109,7 +112,74 @@ function params(params::algvars{W,Q}) where {W <: Number, Q <: Qnum}
 end
 =#
 function algvars(params::algvars{W,Q,X,Y,Z}) where {W <: Number, Q <: Qnum, X <: TensType, Y <: Env, Z <: Env}
-  return algvars{W,Q,X,Y,Z}(params.load,params.method,params.parallel_method,params.nsites,params.minm,params.maxm,params.cutoff,params.sweeps,params.halfsweep,params.maxiter,params.mincr,params.cvgE,params.goal,params.startnoise,params.noise,params.noise_goal,params.noise_decay,params.noise_incr,params.exnum,params.cushion,params.shift,params.fixD,params.double,params.startoc,params.origj,params.maxshowD,params.storeD,params.saveEnergy,params.energy,params.lastenergy,params.entropy,params.lastentropy,params.truncerr,params.maxtrunc,params.biggestm,params.savebiggestm,params.SvNbond,params.allSvNbond,params.Lbound,params.Rbound,params.Lenv,params.Renv,params.psiLenv,params.psiRenv,params.sparematrix,params.saveQ,params.efficient,params.silent,params.qselect,params.partitions)
+  return algvars{W,Q,X,Y,Z}(params.load,
+                            params.method,
+                            params.parallel_method,
+                            params.nsites,
+                            params.minm,
+                            params.maxm,
+                            params.cutoff,
+
+                            params.sweeps,
+                            params.halfsweep,
+                            
+                            params.maxiter,
+                            params.mincr,
+                            params.cvgE,
+                            params.goal,
+                            params.startnoise,params.noise,
+                            params.noise_goal,
+                            params.noise_decay,
+                            params.noise_incr,
+
+                            params.r,
+                            params.g,
+                            params.exnum,
+                            params.cushion,
+
+                            params.shift,
+                            params.fixD,
+
+                            params.reorth,
+                            params.double,
+
+                            params.startoc,
+                            params.origj,
+
+                            params.maxshowD,
+
+                            params.storeD,
+                            params.saveEnergy,
+
+                            params.energy,
+                            params.lastenergy,
+
+                            params.entropy,
+                            params.lastentropy,
+
+                            params.truncerr,
+                            params.maxtrunc,
+                            params.biggestm,
+                            params.savebiggestm,
+
+                            params.SvNbond,
+                            params.allSvNbond,
+
+                            params.Lbound,
+                            params.Rbound,
+                            params.Lenv,
+                            params.Renv,
+
+                            params.psiLenv,
+                            params.psiRenv,
+
+                            params.sparematrix,
+                            params.saveQ,
+                            
+                            params.efficient,
+                            params.silent,
+                            params.qselect,
+                            params.partitions)
 end
 
 import Base.println
@@ -123,13 +193,14 @@ function println(params::TNparams)
   println("cutoff = ",params.cutoff)
   println("sweeps = ",params.sweeps)
   println("halfsweeps = ",params.halfsweep)
-  println("maxiter = ",params.maxiter)
+  println("maxiter = ",params.r)
   println("goal = ",params.goal)
   println("startnoise = ",params.startnoise)
   println("noise = ",params.noise)
   println("noise_goal = ",params.noise_goal)
   println("noise_decay = ",params.noise_decay)
   println("noise_incr = ",params.noise_incr)
+  println("g = ",params.g)
   println("exnum = ",params.exnum)
   println("cushion = ",params.cushion)
   println("shift = ",params.shift)
@@ -170,7 +241,7 @@ function optinformation(params::TNparams)
     println("  minimum bond dimension = ",params.minm)
     println("  maximum bond dimension = ",params.maxm)
     println("  number of sweeps = ",params.sweeps)
-    println("  Krylov iterations = ",params.maxiter)
+    println("  Krylov iterations = ",params.r)
     println("  cutoff = ",params.cutoff)
     println("  converge in energy? ",params.cvgE," (otherwise, entropy)")
     println("  converging first ",params.exnum-params.cushion," values")
@@ -459,11 +530,14 @@ function algvars(Q::DataType, a::X, b::Y, c::Z) where {X <: TensType, Y <: Env, 
                       0.3, #noise_goal
                       0.9, #noise_decay
                       0.01, #noise_incr
+                      2, #r
+                      1, #g
                       1, #exnum
                       0, #cushion
                       false, #shift
                       false, #fixD
 
+                      false, #reorth
                       false, #double
 
                       1, #startoc
@@ -600,7 +674,7 @@ function Nstep(n::Integer,j::Integer,i::Integer,iL::Integer,iR::Integer,dualpsi:
 end
 
 function loadvars!(params::TNparams,method::String,minm::Integer,m::Integer,sweeps::Integer,cutoff::Float64,silent::Bool,goal::Float64,
-                  SvNbond::Integer,allSvNbond::Bool,efficient::Bool,cvgE::Bool,maxiter::Integer,fixD::Bool,nsites::Integer,
+                  SvNbond::Integer,allSvNbond::Bool,efficient::Bool,cvgE::Bool,r::Integer,fixD::Bool,nsites::Integer,
                   noise::Union{Float64,Array{Float64,1}},noise_decay::Float64,noise_goal::Float64,noise_incr::Float64,saveEnergy::W,halfsweep::Bool,Lbound::TensType,Rbound::TensType,
                   Lenv::Env,Renv::Env,psioc::Integer,origj::Bool,maxshowD::Integer,storeD::Array{Float64,1},exnum::Integer) where W <: Union{R,Array{R,1}} where R <: Number
 
@@ -616,7 +690,7 @@ function loadvars!(params::TNparams,method::String,minm::Integer,m::Integer,swee
     params.allSvNbond = allSvNbond
     params.efficient = efficient
     params.cvgE = cvgE
-    params.maxiter = maxiter
+    params.r = r
     params.exnum = exnum
     params.fixD = fixD
     params.nsites = nsites
@@ -649,12 +723,12 @@ function optimize(dualpsi::MPS,psi::MPS,mpo::MPO,beta::Array{P,1},prevpsi::MPS..
                   method::String="optimize",m::Integer=0,minm::Integer=2,sweeps::Integer=1,
                   cutoff::Float64=0.,silent::Bool=false,goal::Float64=0.,infovals::Array{Float64,1}=zeros(5),
                   SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,efficient::Bool=false,
-                  cvgE::Bool=true,maxiter::Integer=2,exnum::Integer=1,fixD::Bool=false,nsites::Integer=1,
+                  cvgE::Bool=true,r::Integer=2,exnum::Integer=1,fixD::Bool=false,nsites::Integer=1,
                   noise::Number=1.0,noise_decay::Float64=0.9,noise_goal::Float64=0.3,noise_incr::Float64=0.01,
                   saveEnergy::Array{R,1}=[0.],halfsweep::Bool=false,Lbound::TensType=default_boundary,Rbound::TensType=default_boundary,
                   Lenv::Env=default_Env,Renv::Env=default_Env,origj::Bool=true,maxshowD::Integer=8,
                   storeD::Array{W,1}=[0.]) where {W <: Number, R <: Number,P <: Number}
-  loadvars!(params,method,minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
+  loadvars!(params,method,minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,r,fixD,nsites,
             noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)
   return optmps(dualpsi,psi,mpo,beta,prevpsi...,params=params)
 end
@@ -667,12 +741,12 @@ function Noptimize(dualpsi::MPS,psi::MPS,mpo::MPO,beta::Array{P,1},prevpsi::MPS.
                   method::String="optimize",m::Integer=0,minm::Integer=2,sweeps::Integer=1,
                   cutoff::Float64=0.,silent::Bool=false,goal::Float64=0.,infovals::Array{Float64,1}=zeros(5),
                   SvNbond::Integer=fld(length(psi),2),allSvNbond::Bool=false,efficient::Bool=false,
-                  cvgE::Bool=true,maxiter::Integer=2,exnum::Integer=1,fixD::Bool=false,nsites::Integer=2,
+                  cvgE::Bool=true,r::Integer=2,exnum::Integer=1,fixD::Bool=false,nsites::Integer=2,
                   noise::Number=1.0,noise_decay::Float64=0.9,noise_goal::Float64=0.3,noise_incr::Float64=0.01,
                   saveEnergy::Array{R,1}=[0.],halfsweep::Bool=false,Lbound::TensType=default_boundary,Rbound::TensType=default_boundary,
                   Lenv::Env=default_Env,Renv::Env=default_Env,origj::Bool=true,maxshowD::Integer=8,
                   storeD::Array{W,1}=[0.]) where {W <: Number,R <: Number,P <: Number}
-  loadvars!(params,method,minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,maxiter,fixD,nsites,
+  loadvars!(params,method,minm,m,sweeps,cutoff,silent,goal,SvNbond,allSvNbond,efficient,cvgE,r,fixD,nsites,
             noise,noise_decay,noise_goal,noise_incr,saveEnergy,halfsweep,Lbound,Rbound,Lenv,Renv,psi.oc,origj,maxshowD,storeD,exnum)
   return optmps(dualpsi,psi,mpo,beta,prevpsi...,params=params,stepfct=Nstep,#=makeOps=NsiteOps,=#cvgfct=nullcvg)
 end
