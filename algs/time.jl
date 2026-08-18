@@ -28,12 +28,12 @@
       ops = H[i]*H[i+1] #contract(H.H[i],ndims(H.H[i]),H.H[i+1],1)
 #      if i > 1 #1 < i <= length(H)-1
         tops = ops[size(ops,1),:,:,:,:,1]
-#      else #i == 1
+#      elseif i == 1
 #        tops = ops[1,:,:,:,:,1]
 #      elseif i == length(H)-1
 #        tops = ops[size(ops,1),:,:,:,:,1]
 #      end
-      gates[i] = permutedims(tops,[1,3,2,4])
+      gates[i] = permutedims(tops,[2,4,1,3])
     end
     return gates
   end
@@ -58,10 +58,16 @@
       else
         ops = tensorcombination!((prefactor,),convertTens(retType,ops))
       end
-      ops *= prefactor
+#      println("prefactor: ",prefactor)
+#      ops *= prefactor
       ops = exp(ops)
       expgates[j] = reshape(ops,sizegates[1],sizegates[2],sizegates[3],sizegates[4])
     end
+
+    for w = 1:length(expgates)
+      expgates[w] = reshape(expgates[1],2,2,2,2)
+    end
+
     return expgates
   end
 
