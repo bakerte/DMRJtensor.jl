@@ -49,6 +49,7 @@ function randMPS(T::DataType,physindvec::Array{W,1};oc::Integer=1,m::Integer=1) 
     move!(psi,1)
     move!(psi,Ns)
     move!(psi,1)
+    move!(psi,oc)
     psi[oc] /= expect(psi)
   end
   return psi
@@ -141,10 +142,11 @@ function randMPS(Qlabels::Array{Array{Q,1},1},Ns::Integer;m::Integer=2,type::Dat
   end
 
   mps = makeqMPS(Qlabels,A,flux=flux)
+  oc = mps.oc
 
   move!(mps,Ns)
   move!(mps,1)
-#  move!(mps,oc)
+  move!(mps,oc)
 
   mps[mps.oc] /= norm(mps[mps.oc])
 
