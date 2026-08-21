@@ -16,7 +16,7 @@ movement function to move `psi` to a new site, `newoc` with `Lfct` and `Rfct`, w
 
 See also: [`move!`](@ref) [`move`](@ref)
 """
- function movecenter!(psi::MPS,pos::Integer;cutoff::Float64=1E-12,m::Integer=0,minm::Integer=0,Lfct::Function=moveR,Rfct::Function=moveL)
+ function movecenter!(psi::MPS,pos::Integer;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,Lfct::Function=moveR,Rfct::Function=moveL)
   if m == 0
     m = maximum([maximum(size(psi[i])) for i = 1:length(psi)])
   end
@@ -55,7 +55,7 @@ same as `move!` but makes a copy of `psi`
 
 See also: [`move!`](@ref)
 """
-function move(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=1E-12,minm::Integer=0)
+function move(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=0.,minm::Integer=0)
   newmps = copy(mps)
   movecenter!(newmps,pos,cutoff=cutoff,m=m,minm=minm)
   return newmps
