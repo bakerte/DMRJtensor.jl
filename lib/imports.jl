@@ -31,7 +31,15 @@ import .Base: getindex,setindex!,copy,size,conj,conj!,eltype,lastindex,sum,permu
 
 import .LinearAlgebra.norm
 
+#      +----------------+
+#>-----|  SparseArrays  |---------<
+#      +----------------+
 
+using SparseArrays
+
+#      +----------------+
+#>-----|  Tensor PACK   |---------<
+#      +----------------+
 
 #using TensorPACK
 using ..TENPACK

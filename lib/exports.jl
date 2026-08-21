@@ -23,7 +23,9 @@ export makeMPS
 #export applylocalF,applylocalF!
 
 
-export move
+export move,move!
+export moveL,moveL!
+export moveR,moveR!
 export leftnormalize,leftnormalize!
 export rightnormalize,rightnormalize!
 
@@ -49,3 +51,8 @@ export makeqMPS
 export randMPS
 
 export movecenter!
+
+
+export paulidecomposition
+
+export SvN,SvN!

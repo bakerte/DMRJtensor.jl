@@ -47,7 +47,6 @@ function move!(mps::MPS,pos::Integer;m::Integer=0,cutoff::Float64=0.,minm::Integ
   movecenter!(mps,pos,cutoff=cutoff,m=m,minm=minm)
   nothing
 end
-export move!
 
 """
     move(psi,newoc[,m=,cutoff=,minm=])
@@ -124,7 +123,7 @@ See also: [`moveL!`](@ref)
 """
  function moveL!(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
                 fast::Bool=true,lqfct::Function=lq!,svdfct::Function=svd)
-  if (min(size(Rpsi,1),size(Rpsi,2)*size(Rpsi,3)) <= m || m == 0) && !isapprox(cutoff,0.) && fast
+  if (min(size(Rpsi,1),size(Rpsi,2)*size(Rpsi,3)) <= m || m == 0) && isapprox(cutoff,0.) && fast
     modU,Rtens = lqfct(Rpsi,[[1],[2,3]])
 
     UD = (condition ? getindex!(modU,1:size(Lpsi,3),:) : modU)
@@ -150,7 +149,6 @@ See also: [`moveL!`](@ref)
   fast::Bool=true,lqfct::Function=lq,svdfct::Function=svd)
   return moveL!(Lpsi,Rpsi,cutoff=cutoff,m=m,minm=minm,condition=condition,mag=mag,lqfct=lq,svdfct=svd)
 end
-export moveL
 
 """
     moveL!(psi[,cutoff=,m=,minm=,condition=])
@@ -166,7 +164,6 @@ See also: [`moveL`](@ref)
   psi.oc -= 1
   return D,truncerr
 end
-export moveL!
 
 """
     D,truncerr = moveR!(Lpsi,Rpsi[,cutoff=,m=,minm=,condition=])
@@ -177,7 +174,7 @@ See also: [`moveR!`](@ref)
 """
  function moveR!(Lpsi::TensType,Rpsi::TensType;cutoff::Float64=0.,m::Integer=0,minm::Integer=0,condition::Bool=false,mag::Number=0.,
                 fast::Bool=true,qrfct::Function=qr!,svdfct::Function=svd)
-  if (min(size(Lpsi,1)*size(Lpsi,2),size(Lpsi,3)) <= m || m == 0) && !isapprox(cutoff,0.) && fast
+  if (min(size(Lpsi,1)*size(Lpsi,2),size(Lpsi,3)) <= m || m == 0) && isapprox(cutoff,0.) && fast
     Ltens,modV = qrfct(Lpsi,[[1,2],[3]])
 
     DV = (condition ? getindex!(modV,:,1:size(Rpsi,1)) : modV)
@@ -205,7 +202,6 @@ See also: [`moveR!`](@ref)
                 fast::Bool=true,qrfct::Function=qr!,svdfct::Function=svd)
   return moveR!(Lpsi,Rpsi,cutoff=cutoff,m=m,minm=minm,condition=condition,mag=mag,qrfct=qr,svdfct=svd)
 end
-export moveR
 
 """
     D,truncerr = moveR!(psi[,cutoff=,m=,minm=,condition=])
@@ -221,4 +217,3 @@ See also: [`moveR`](@ref)
   psi.oc += 1
   return D,truncerr
 end
-export moveR!

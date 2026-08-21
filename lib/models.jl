@@ -10,7 +10,7 @@
 #
 
 """
-    ox,oy,oz,op,om,Rx,Ry,Rz,H,O,Id = qubits([,d=2,angle=pi/4])
+    ox,oy,oz,Id,op,om,Rx,Ry,Rz,H,O = qubits([,d=2,angle=pi/4])
 
 Creates a set of Pauli operators for a certain number of states `d` and angle for a rotation gate `angle`
 
@@ -18,6 +18,7 @@ Creates a set of Pauli operators for a certain number of states `d` and angle fo
   + `ox`: Pauli-x operator
   + `oy`: Pauli-y operator
   + `oz`: Pauli-z operator
+  + `Id`: identity matrix
   + `op`: raising operator
   + `om`: lowering operator
   + `Rx`: rotation of x-axis operator
@@ -25,7 +26,6 @@ Creates a set of Pauli operators for a certain number of states `d` and angle fo
   + `Rz`: rotation of z-axis operator
   + `H`: Hadamard gate
   + `O`: zero matrix
-  + `Id`: identity matrix
 """
 function qubitOps(;d::intType=2,angle::Number=pi/4)
 #  if d != 2
@@ -51,11 +51,11 @@ function qubitOps(;d::intType=2,angle::Number=pi/4)
   Rx = exp(-im*angle/2*ox)
   Ry = exp(-im*angle/2*oy)
   Rz = exp(-im*angle/2*oz)
-  return ox,oy,oz,op,om,Rx,Ry,Rz,H,O,Id
+  return ox,oy,oz,Id,op,om,Rx,Ry,Rz,H,O
 end
 
 """
-    ox,oy,oz,op,om,Rx,Ry,Rz,H,O,Id = qubits(d[,angle=pi/4])
+    ox,oy,oz,Id,op,om,Rx,Ry,Rz,H,O = qubits(d[,angle=pi/4])
 
 Creates a set of Pauli operators for a certain number of states `d` and angle for a rotation gate `angle`
 
@@ -63,6 +63,7 @@ Creates a set of Pauli operators for a certain number of states `d` and angle fo
   + `ox`: Pauli-x operator
   + `oy`: Pauli-y operator
   + `oz`: Pauli-z operator
+  + `Id`: identity matrix
   + `op`: raising operator
   + `om`: lowering operator
   + `Rx`: rotation of x-axis operator
@@ -70,7 +71,6 @@ Creates a set of Pauli operators for a certain number of states `d` and angle fo
   + `Rz`: rotation of z-axis operator
   + `H`: Hadamard gate
   + `O`: zero matrix
-  + `Id`: identity matrix
 """
 function qubitOps(d::intType;angle::W=pi/4) where W <: Number
   return qubitOps(d=d,angle=angle)
@@ -95,7 +95,7 @@ Generates operators for a heisenberg model (spin-`s`, default 1/2)
 function spinOps(;s=0.5)
   states = convert(Int64,2*s+1) #number of quantum states
 
-  ox,oy,oz,op,om,Rx,Ry,Rz,H,O,Id = qubitOps(d=states)
+  ox,oy,oz,Id,op,om,Rx,Ry,Rz,H,O = qubitOps(d=states)
 
   sz = oz * s
   sx = ox * s
