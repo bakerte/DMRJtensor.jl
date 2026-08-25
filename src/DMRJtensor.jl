@@ -75,7 +75,7 @@ for w = 1:length(files)
   include(libpath*subdir*files[w])
 end
 
-files = ["boundaryMove.jl","correlation.jl","correlationmatrix.jl","expect.jl","Lupdate.jl","Rupdate.jl","transfermatrix.jl","applyMPO.jl"]
+files = ["boundaryMove.jl","correlation.jl","correlationmatrix.jl","expect.jl","Lupdate.jl","Rupdate.jl","transfermatrix.jl","applyMPO.jl","network.jl"]
 subdir = "MPO_MPS/"
 for w = 1:length(files)
   include(libpath*subdir*files[w])
