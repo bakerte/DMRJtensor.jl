@@ -51,13 +51,13 @@ for w = 1:length(files)
 end
 
 
-files = ["mult.jl","div.jl","star.jl","slash.jl","conj.jl","copy.jl","eltype.jl","emptyTensor.jl","get_tensors.jl","getindex.jl","lastindex.jl","length.jl","setindex.jl","size.jl","paulidecomposition.jl"]
+files = ["mult.jl","div.jl","star.jl","slash.jl","conj.jl","copy.jl","eltype.jl","emptyTensor.jl","get_tensors.jl","getindex.jl","lastindex.jl","length.jl","setindex.jl","size.jl"]
 subdir = "methods/"
 for w = 1:length(files)
   include(libpath*subdir*files[w])
 end
 
-files = ["MPS.jl","randMPS.jl","makeMPS.jl","makeqMPS.jl","fullpsi.jl","nameMPS.jl","largeMPS.jl","move.jl","SvN.jl"]
+files = ["MPS.jl","randMPS.jl","makeMPS.jl","makeqMPS.jl","fullpsi.jl","nameMPS.jl","largeMPS.jl","move.jl","SvN.jl","paulidecomposition.jl"]
 subdir = "MPS/"
 for w = 1:length(files)
   include(libpath*subdir*files[w])
