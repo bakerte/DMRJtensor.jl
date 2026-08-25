@@ -45,11 +45,16 @@ const libdir = @__DIR__
 
 const libpath = libdir*"/../lib/"
 
-files = ["imports.jl","banner.jl","types.jl","models.jl","network.jl","exports.jl"]
+files = ["imports.jl","banner.jl","types.jl","exports.jl"]
 for w = 1:length(files)
   include(libpath*files[w])
 end
 
+files = ["qubits.jl","spins.jl","fermions.jl"]
+subdir = "models/"
+for w = 1:length(files)
+  include(libpath*subdir*files[w])
+end
 
 files = ["mult.jl","div.jl","star.jl","slash.jl","conj.jl","copy.jl","eltype.jl","emptyTensor.jl","get_tensors.jl","getindex.jl","lastindex.jl","length.jl","setindex.jl","size.jl"]
 subdir = "methods/"
