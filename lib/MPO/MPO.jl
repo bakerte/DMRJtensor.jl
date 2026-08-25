@@ -30,7 +30,7 @@ end
 Converts `psi` (MPS) and `mpo` (MPO) to type given by `T`
 """
 function MPO(type::DataType,psi::MPS,mpo::MPO;regtens::Bool=false,oc::Integer=1)
-  return MPO(psi,regtens=regtens,oc=oc,type=type),MPO(mpo,regtens=regtens,oc=oc,type=type)
+  return MPO(psi,regtens=regtens,oc=oc,type=type),MPS(mpo,regtens=regtens,oc=oc,type=type)
 end
 
 """
