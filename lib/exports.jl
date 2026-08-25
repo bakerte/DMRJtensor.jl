@@ -56,3 +56,4 @@ export movecenter!
 export paulidecomposition
 
 export SvN,SvN!
+export svn,svn!
