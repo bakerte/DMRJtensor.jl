@@ -63,6 +63,7 @@ function environment(netvec::MPO)
   return environment(copy(netvec.H.net))
 end
 
+#=
 """
     V = environment(P)
 
@@ -73,6 +74,7 @@ See also: [`network`](@ref)
 function environment(netvec::network{W}) where W <: TensType
   return environment{W}(network(copy(netvec.net)))
 end
+=#
 
 """
     V = environment(P)
