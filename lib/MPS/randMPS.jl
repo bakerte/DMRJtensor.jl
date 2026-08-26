@@ -26,32 +26,46 @@ Generates random MPS with data type `T`, physical index size vector `physindvec`
 """
 function randMPS(T::DataType,physindvec::Array{W,1};oc::Integer=1,m::Integer=1) where W <: Integer
   Ns = length(physindvec)
-  vec = Array{Array{T,3},1}(undef,Ns)
-  if m == 1
-    for w = 1:Ns
-      vec[w] = zeros(1,physindvec[w],1)
-      state = rand(1:physindvec[w],1)[1]
-      vec[w][1,state,1] = 1
-    end
-    psi = MPS(vec,oc=oc)
-  else
-    Lsize,Rsize = 1,prod(w->physindvec[w],2:length(physindvec))
-    currLsize = 1
-    for w = 1:Ns
-      physindsize = physindvec[w]
-      currRsize = min(Rsize,m)
-      vec[w] = rand(T,currLsize,physindsize,currRsize)
-      vec[w] /= norm(vec[w])
-      currLsize = currRsize
-      Rsize = cld(Rsize,physindsize)
-    end
-    psi = MPS(vec,oc=oc)
-    move!(psi,1)
-    move!(psi,Ns)
-    move!(psi,1)
-    move!(psi,oc)
-    psi[oc] /= expect(psi)
+  vect = Array{Array{T,3},1}(undef,Ns)
+#  if m == 1
+#    for w = 1:Ns
+#      vec[w] = zeros(1,physindvec[w],1)
+#      state = rand(1:physindvec[w],1)[1]
+#      vec[w][1,state,1] = 1
+#    end
+#    psi = MPS(vec,oc=oc)
+#  else
+#  Lsize,Rsize = 1,prod(w->physindvec[w],2:length(physindvec))
+  Lsize = 1
+  for w = 1:cld(Ns,2)
+    physindsize = physindvec[w]
+    Rsize = min(physindsize*Lsize,m)
+    vect[w] = rand(T,Lsize,physindsize,Rsize)
+#      vect[w] /= norm(vec[w])
+    Lsize = Rsize
+#    Rsize = cld(Rsize,physindsize)
   end
+  saveLsize = Lsize
+  Rsize = 1
+  for w = Ns:-1:cld(Ns,2)+1
+    physindsize = physindvec[w]
+    Lsize = w == cld(Ns,2) + 1 ? saveLsize : min(physindsize*Rsize,m)
+#    if w == cld(Ns,2) + 1
+#      vect[w] = rand(T,,physindsize,Rsize)
+#    else
+    vect[w] = rand(T,Lsize,physindsize,Rsize)
+#    end
+#      vect[w] /= norm(vec[w])
+    Rsize = Lsize
+#    Rsize = cld(Rsize,physindsize)
+  end
+  psi = MPS(vect,oc=oc)
+#    move!(psi,1)
+  move!(psi,Ns)
+  move!(psi,1)
+  move!(psi,oc)
+  psi[oc] /= norm(psi[psi.oc]) #expect(psi)
+#  end
   return psi
 end
 
@@ -117,7 +131,6 @@ function randMPS(mpo::MPO;oc::Integer=1,m::Integer=1,datatype::DataType=eltype(m
   end
 end
 
-
 """
     psi = randMPS(Qlabel,Ns[,m=2,type=Float64,flux=...])
 
@@ -134,12 +147,15 @@ end
 generates a random MPS from `qnum`s on a given site stored in an array of vectors `Qlabel` for `Ns` sites (will repeat if `Ns` is longer than array); bond dimension `m`; `type` for the element types; and overall `flux` (default zero of type given in `Qlabel`)
 """
 function randMPS(Qlabels::Array{Array{Q,1},1},Ns::Integer;m::Integer=2,type::DataType=Float64,flux::Q=Q()) where Q <: Qnum
+  #=
   A = Array{tens{type},1}(undef,Ns)
   for i = 1:Ns
     lsize = i == 1 ? 1 : m
     rsize = i == Ns ? 1 : m
     A[i] = tens(rand(lsize,length(Qlabels[(i-1) % Ns + 1]),rsize))
   end
+  =#
+  A = randMPS(Ns,m=m,type=type)
 
   mps = makeqMPS(Qlabels,A,flux=flux)
   oc = mps.oc

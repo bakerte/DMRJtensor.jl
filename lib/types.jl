@@ -81,7 +81,7 @@ Contruct this through `MPS`. struct to hold regMPS tensors and orthogonality cen
 
 See also: [`MPS`](@ref)
 """
-mutable struct matrixproductstate{W} <: regMPS where W <: TensType
+mutable struct matrixproductstate{W <: TensType} <: regMPS
   A::network{W}
   oc::Integer
 end
@@ -96,7 +96,7 @@ Contruct this through `MPO`. Struct to hold MPO tensors
 
 See also: [`MPO`](@ref)
 """
-struct matrixproductoperator{W} <: regMPO where W <: TensType
+struct matrixproductoperator{W <: TensType} <: regMPO
   H::network{W}
 end
 
@@ -110,7 +110,7 @@ Construct this object through `Env`. Array that holds environment tensors
 
 See also: [`Env`](@ref)
 """
-struct environment{W} <: regEnv where W <: TensType
+struct environment{W <: TensType} <: regEnv
   V::network{W}
 end
 
@@ -175,7 +175,7 @@ Construct this container with `largeMPS`. struct to hold `largeMPS` tensors and 
 
 See also: [`largeMPS`](@ref)
 """
-mutable struct largematrixproductstate{W} <: largeMPS where W <: DataType
+mutable struct largematrixproductstate{W <: DataType} <: largeMPS
   A::Array{String,1}
   oc::intType
   type::W
@@ -192,7 +192,7 @@ Construct this container with `largeMPO`. struct to hold `largeMPO` tensors
 
 See also: [`largeMPO`](@ref)
 """
-struct largematrixproductoperator{W} <: largeMPO where W <: DataType
+struct largematrixproductoperator{W <: DataType} <: largeMPO
   H::Array{String,1}
   type::W
 end
@@ -208,7 +208,7 @@ Construct this container with `largeEnv`. struct to hold `largeEnv` tensors
 
 See also: [`largeEnv`](@ref)
 """
-struct largeenvironment{W} <: largeEnv where W <: DataType
+struct largeenvironment{W <: DataType} <: largeEnv
   V::Array{String,1}
   type::W
 end

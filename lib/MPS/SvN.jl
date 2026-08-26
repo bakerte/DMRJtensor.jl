@@ -15,6 +15,8 @@
 Computes the entropy `S` from an MPS `psi` gauged to site `psi.oc`
 
 Note: DMRjulia labels the bonds in the MPS to the right of the MPS's orthogonality centre. The default for any higher order terms is to take the first r/2+1 (rounded up) terms and generate the SVD with the remaining terms
+
+See also: [`SvN!`](@ref) [`svn`](@ref) [`svn!`](@ref)
 """
 function SvN(psi::MPS)
 #  if ndims(psi[psi.oc]) 
@@ -34,6 +36,8 @@ end
     S = SvN(psi,oc)
 
 Computes the entropy `S` from an MPS `psi` which is gauged to site `oc` (creating a copy of `psi`)
+
+See also: [`SvN!`](@ref) [`svn`](@ref) [`svn!`](@ref)
 """
 function SvN(psi::MPS,oc::Integer)
   newpsi = move(psi,oc)
@@ -44,8 +48,28 @@ end
     S = SvN!(psi,oc)
 
 Computes the entropy `S` from an MPS `psi` which is gauged to site `oc` (moves `psi` in-place)
+
+See also: [`SvN`](@ref) [`svn`](@ref) [`svn!`](@ref)
 """
 function SvN!(psi::MPS,oc::Integer)
   move!(psi,oc)
   return SvN(psi)
 end
+
+"""
+  svn
+
+Alias for `SvN`
+
+See also: [`SvN`](@ref) [`SvN!`](@ref)
+"""
+svn = SvN
+
+"""
+  svn!
+
+Alias for `SvN!`
+
+See also: [`SvN`](@ref) [`SvN!`](@ref)
+"""
+svn! = SvN!
