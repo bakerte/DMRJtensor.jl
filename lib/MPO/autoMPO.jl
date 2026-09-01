@@ -1192,7 +1192,7 @@ function compressMPO!(mpo::MPO,M::MPO...;sweeps::Integer=1000,cutoff::Float64=de
       #=Threads.@threads=# for w = 1:2:Ns-1
 #        println(w," ",w+1)
         double_mpo = mpo[w] * mpo[w+1] #contract(mpo[w],4,mpo[w+1],1)
-        U,D,V = svd(double_mpo,[[1,2,3],[4,5,6]],nozeros=true,cutoff=cutoff)
+        U,D,V = svd(double_mpo,[[1,2,3],[4,5,6]],nozeros=nozeros,cutoff=cutoff)
 
 #        scaleD = invDfactor(D)
         sqD = sqrt(D)
@@ -1204,7 +1204,7 @@ function compressMPO!(mpo::MPO,M::MPO...;sweeps::Integer=1000,cutoff::Float64=de
       #=Threads.@threads=# for w = Ns-1:-2:2
 #        println(w-1," ",w)
         double_mpo = mpo[w-1] * mpo[w] #contract(mpo[w-1],4,mpo[w],1)
-        U,D,V = svd(double_mpo,[[1,2,3],[4,5,6]],nozeros=true,cutoff=cutoff)
+        U,D,V = svd(double_mpo,[[1,2,3],[4,5,6]],nozeros=nozeros,cutoff=cutoff)
 
 #        scaleD = invDfactor(D)
         sqD = sqrt(D)
