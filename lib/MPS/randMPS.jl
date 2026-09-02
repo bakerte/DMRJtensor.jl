@@ -55,14 +55,33 @@ function randMPS(T::DataType,physindvec::Array{W,1};oc::Integer=1,m::Integer=1) 
 #    else
     vect[w] = rand(T,Lsize,physindsize,Rsize)
 #    end
-#      vect[w] /= norm(vec[w])
+    vect[w] /= norm(vect[w])
     Rsize = Lsize
 #    Rsize = cld(Rsize,physindsize)
   end
+
+  for w = 1:Ns
+    println(w," ",size(vect[w])," ",norm(vect[w]))
+  end
+
   psi = MPS(vect,oc=oc)
 #    move!(psi,1)
-  move!(psi,Ns)
-  move!(psi,1)
+
+  for w = psi.oc:Ns-1
+    psi[w],psi[w+1] = moveR!(psi[w],psi[w+1])
+    psi[w+1] /= norm(psi[w+1])
+  end
+  psi.oc = Ns
+
+#  move!(psi,Ns)
+#  move!(psi,1)
+
+  for w = Ns:-1:2
+    psi[w-1],psi[w] = moveL!(psi[w-1],psi[w])
+    psi[w-1] /= norm(psi[w-1])
+  end
+  psi.oc = 1
+
   move!(psi,oc)
   psi[oc] /= norm(psi[psi.oc]) #expect(psi)
 #  end
