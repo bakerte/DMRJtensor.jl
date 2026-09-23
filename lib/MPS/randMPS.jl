@@ -60,10 +60,6 @@ function randMPS(T::DataType,physindvec::Array{W,1};oc::Integer=1,m::Integer=1) 
 #    Rsize = cld(Rsize,physindsize)
   end
 
-  for w = 1:Ns
-    println(w," ",size(vect[w])," ",norm(vect[w]))
-  end
-
   psi = MPS(vect,oc=oc)
 #    move!(psi,1)
 
