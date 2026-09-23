@@ -62,7 +62,7 @@ for w = 1:length(files)
   include(libpath*subdir*files[w])
 end
 
-files = ["MPS.jl","randMPS.jl","makeMPS.jl","makeqMPS.jl","fullpsi.jl","nameMPS.jl","largeMPS.jl","move.jl","SvN.jl","paulidecomposition.jl"]
+files = ["MPS.jl","randMPS.jl","makeMPS.jl","makeqMPS.jl","fullpsi.jl","nameMPS.jl","largeMPS.jl","move.jl","SvN.jl"]
 subdir = "MPS/"
 for w = 1:length(files)
   include(libpath*subdir*files[w])
@@ -80,7 +80,7 @@ for w = 1:length(files)
   include(libpath*subdir*files[w])
 end
 
-files = ["boundaryMove.jl","correlation.jl","correlationmatrix.jl","expect.jl","Lupdate.jl","Rupdate.jl","transfermatrix.jl","applyMPO.jl","network.jl"]
+files = ["boundaryMove.jl","correlation.jl","correlationmatrix.jl","expect.jl","Lupdate.jl","Rupdate.jl","transfermatrix.jl","applyMPO.jl","network.jl","paulidecomposition.jl"]
 subdir = "MPO_MPS/"
 for w = 1:length(files)
   include(libpath*subdir*files[w])
