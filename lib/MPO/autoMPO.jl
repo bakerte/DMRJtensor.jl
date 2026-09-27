@@ -60,7 +60,9 @@ function mpoterm(Op1::TensType,i::Integer,other...)# where U <: Union{Tuple,Arra
   return mpoterm(1.,Op1,i,other...)
 end
 
-
+function mpoterm(p::Number)
+  return mpoterm(p,[],[],[])
+end
 
 
 
@@ -547,7 +549,18 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
     mpo += manympo
   end
   
-  return compressMPO!(mpo) #mpo
+#  out = compressMPO!(mpo) #mpo
+
+
+  constants = findall(w->length(terms[w]) == 0,1:length(terms))
+  if sum(constant) != 0
+    offset = 0
+    for a in constants
+      offset += terms[a].val
+    end
+    mpo += offset
+  end
+  return compressMPO!(mpo)
 end
 
 

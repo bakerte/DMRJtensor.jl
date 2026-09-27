@@ -13,7 +13,7 @@ function paulidecomposition(psi::Union{Array{W,1},Array{W,2},tens{W}};d::Integer
 #    Ns = round(Int64,log(d,length(psi)))
 #  end
 
-  println(length(psi)," ",Ns," ",d)
+#  println(length(psi)," ",Ns," ",d)
 
   p = spzeros(ComplexF64,0,0)
 
@@ -62,9 +62,9 @@ function paulidecomposition(psi::Union{Array{W,1},Array{W,2},tens{W}};d::Integer
       values[w] = psi'*paulistring*psi
     end
     values[w] /= 2^Ns
-#    if abs(values[w]) > 1E-12
-#      println(w," ",values[w]," ",weights[w]," ",pos)
-#    end
+    if abs(values[w]) > 1E-12
+      println(w," ",values[w]," ",weights[w]," ",pos)
+    end
   end
 
   if ndims(psi) == 2 && true #check

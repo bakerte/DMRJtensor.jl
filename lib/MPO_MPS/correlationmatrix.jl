@@ -25,21 +25,21 @@ function correlationmatrix(dualpsi::MPS, psi::MPS, Cc::TensType, Ca::TensType; t
   else
     FCc = Cc
   end
-  diffTensors = !(psi == dualpsi)
+#  diffTensors = !(psi == dualpsi)
   onsite = contract(Cc,2,Ca,1)
   for i = 1:length(psi)
     move!(psi,i)
-    if diffTensors
+#    if diffTensors
       move!(dualpsi,i)
-    end
+#    end
     TopTerm = contract([2,1,3],onsite,2,psi[i],2)
     rho[i,i] = contractc(TopTerm,dualpsi[i])
   end
   for i = 1:length(psi)-1
     move!(psi,i)
-    if diffTensors
+#    if diffTensors
       move!(dualpsi,i)
-    end
+#    end
     TopTerm = contract(FCc,2,psi[i],2)
     Lenv = contractc(TopTerm,(2,1),dualpsi[i],(1,2))
     for j = i+1:length(psi)
