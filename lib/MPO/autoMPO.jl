@@ -553,7 +553,7 @@ function MPO(terms::Vector{W};reverse::Bool=true,countreduce::intType=100,sweeps
 
 
   constants = findall(w->length(terms[w]) == 0,1:length(terms))
-  if sum(constant) != 0
+  if sum(constants) != 0
     offset = 0
     for a in constants
       offset += terms[a].val
